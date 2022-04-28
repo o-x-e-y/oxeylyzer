@@ -56,3 +56,8 @@ pub static EFFORT_MAP: [[f64; 3]; 10] = [
 	[2.4, 1.3, 2.7],
 	[3.0, 1.6, 3.3]
 ];
+
+pub fn time_this<F>(f: F)
+	where F: Fn() {
+		
+}

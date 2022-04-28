@@ -25,7 +25,7 @@ const fn is_roll(lh1: bool, lh2: bool, lh3: bool, c1: usize, c2: usize, c3: usiz
 }
 
 const fn get_roll(lh1: bool, lh2: bool, lh3: bool, c1: usize, c2: usize, c3: usize) -> TrigramPattern {
-	return if lh1 && lh2 && !lh3 {
+	if lh1 && lh2 && !lh3 {
 		particular_roll(c2, c1)
 	} else if !lh1 && lh2 && lh3 {
 		particular_roll(c3, c2)
@@ -71,8 +71,8 @@ const fn get_trigram_pattern(c1: usize, c2: usize, c3: usize) -> TrigramPattern 
 	let lh2 = lh(c2);
 	let lh3 = lh(c3);
 
-	return if is_alt(lh1, lh2, lh3) {
-		return if c1 == c3 {
+	if is_alt(lh1, lh2, lh3) {
+		if c1 == c3 {
 			TrigramPattern::AlternateSfs
 		} else {
 			TrigramPattern::Alternate

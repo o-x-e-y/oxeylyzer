@@ -1,10 +1,12 @@
 use crate::language_data::*;
+use crate::language_data::json::LanguageData;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use itertools::Itertools;
-use crate::analysis::EFFORT_MAP;
+use crate::analysis::{EFFORT_MAP, Pos, PosPair};
 use crate::trigram_patterns::*;
 use crate::generate::Layout;
+use std::ffi::OsStr;
 
 #[derive(Clone)]
 pub struct TrigramFreq {
@@ -42,13 +44,20 @@ impl std::fmt::Display for TrigramFreq {
 struct LayoutStats {
 	sfb: f64,
 	dsfb: f64,
-	trigram_data: TrigramFreq
+	trigram_data: TrigramFreq,
+	finger_speed: [f64; 8]
 }
 
 impl std::fmt::Display for LayoutStats {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-		write!(f, "Sfb:  {:.3}\nDsfb: {:.3}%\n{}\n",
-			   self.sfb * 100.0, self.dsfb * 100.0, self.trigram_data)
+		const BASE: String = String::new();
+		let mut fspeed: [String; 4] = [BASE; 4];
+		for i in 0..4 {
+			fspeed[i] = format!("{:.1} {:.1}", self.finger_speed[i], self.finger_speed[7-i]);
+		}
+		let fspeed_print = fspeed.join("\n");
+		write!(f, "Sfb:  {:.3}%\nDsfb: {:.3}%\n{}\n{}\n",
+			   self.sfb * 100.0, self.dsfb * 100.0, self.trigram_data, fspeed_print)
 	}
 }
 
@@ -88,7 +97,7 @@ impl PartialOrd<Self> for NameLayout {
 
 impl std::cmp::Ord for NameLayout {
 	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-		return if self.score > other.score {
+		if self.score > other.score {
 			std::cmp::Ordering::Less
 		} else if self.score == other.score {
 			std::cmp::Ordering::Equal
@@ -102,6 +111,8 @@ pub struct LayoutAnalysis {
 	layouts: Vec<NameLayout>,
 	stored: HashMap<String, usize>,
 	language_data: LanguageData,
+	col_distance: [f64; 6],
+	index_distance: [f64; 30]
 }
 
 impl LayoutAnalysis {
@@ -109,34 +120,62 @@ impl LayoutAnalysis {
 		let mut new_analysis = LayoutAnalysis {
 			layouts: Vec::new(),
 			stored: HashMap::new(),
-			language_data: LanguageData::new(language)
+			language_data: LanguageData::new(language),
+			col_distance: [1.0, 2.0, 1.0, 1.0, 2.0, 1.0],
+			index_distance: Self::get_index_distance(1.4)
+
 		};
 		new_analysis.layouts = new_analysis.import_layouts();
 		new_analysis
 	}
 
+	fn get_index_distance(lat_penalty: f64) -> [f64; 30] {
+		let mut res = [0.0; 30];
+		let mut i = 0;
+		for y1 in 0..3isize {
+			for x1 in 0..2isize {
+				for y2 in 0..3isize {
+					for x2 in 0..2isize {
+						if !(x1 == x2 && y1 == y2) {
+							let x_dist = ((x1-x2).abs() as f64)*lat_penalty;
+							let y_dist = (y1-y2).abs() as f64;
+							let distance = (x_dist.powi(2) + y_dist.powi(2)).sqrt();
+							res[i] = distance;
+							i += 1;
+						}
+					}
+				}
+			}
+		}
+		res
+	}
+
 	fn import_layouts(&mut self) -> Vec<NameLayout> {
 		use std::fs;
-		let paths = fs::read_dir("layouts").unwrap();
+		let paths = fs::read_dir("static/layouts").unwrap();
 		let mut res: Vec<NameLayout> = Vec::new();
+		let _extension = OsStr::new("kb");
 		for path in paths {
-			let path = path.unwrap();
-			let contents = fs::read_to_string(path.path()).unwrap();
-			let layout_str = contents
-				.replace("\r", "")
-				.replace("\n", "")
-				.replace(" ", "");
-			let name = path.path();
-			let name = name.to_str().unwrap().split('\\').collect::<Vec<&str>>();
-			let name = String::from(name[name.len()-1]);
-			let name = name.split('.').collect::<Vec<&str>>()[0].to_string();
-			let layout = Layout::from_str(layout_str.as_str());
-			let precision = self.language_data.trigrams.len();
-			let score = self.score(&layout, precision);
-			let stats = self.layout_stats(&layout, precision);
-			res.push(NameLayout::new(layout, name.clone(), stats, score));
+			let path = path.unwrap().path();
+			if let Some(_extension) = path.extension() {
+				let contents = fs::read_to_string(&path).unwrap();
+				let layout_str = contents
+					.replace('\r', "")
+					.replace('\n', "")
+					.replace(' ', "");
+				let name = path
+					.file_stem().unwrap()
+					.to_str()
+					.unwrap()
+					.to_string();
+				let layout = Layout::from_str(layout_str.as_str());
+				let precision = self.language_data.trigrams.len();
+				let score = self.score(& layout, precision);
+				let stats = self.layout_stats( & layout, precision);
+				res.push(NameLayout::new(layout, name, stats, score));
+			}
 		}
-		res.sort_unstable();
+		res.sort();
 		for (i, l) in res.iter().enumerate() {
 			let name = l.name.clone();
 			self.stored.insert(name, i);
@@ -144,10 +183,13 @@ impl LayoutAnalysis {
 		res
 	}
 
-	pub fn rank(&mut self) {
-		self.layouts.sort_unstable();
+	pub fn layouts(&self) -> std::slice::Iter<NameLayout> {
+		self.layouts.iter()
+	}
+
+	pub fn rank(&self) {
 		for layout in self.layouts.iter() {
-			println!("{:12 }{}", format!("{:.2}:", layout.score), layout.name);
+			println!("{:12 }{}", format!("{:.3}:", layout.score), layout.name);
 		}
 		println!();
 	}
@@ -157,7 +199,7 @@ impl LayoutAnalysis {
 			None => usize::MAX,
 			Some(n) => *n
 		};
-		return if index != usize::MAX {
+		if index != usize::MAX {
 			Some(self.layouts[index].clone())
 		} else {
 			None
@@ -166,14 +208,15 @@ impl LayoutAnalysis {
 
 	pub fn layout_by_name(&self, name: &str) -> Option<Layout> {
 		let name_layout = self.name_layout_by_name(name);
-		return match name_layout {
+		match name_layout {
 			Some(n) => Some(n.layout),
 			_ => None
 		}
 	}
 
 	pub fn analyze_name(&self, name: &str) {
-		let layout = self.name_layout_by_name(name).expect("layout does not exist");
+		let layout = self.name_layout_by_name(name)
+			.unwrap_or_else(|| panic!("layout {} does not exist", name));
 		self.analyze(&layout);
 	}
 
@@ -183,7 +226,7 @@ impl LayoutAnalysis {
 		let score = self.score(&layout, precision);
 		let stats = self.layout_stats(&layout, precision);
 		let name = layout_str[10..17].to_string();
-		let name_layout = NameLayout::new(layout, name.clone(), stats, score);
+		let name_layout = NameLayout::new(layout, name, stats, score);
 		// self.stored.insert(name, self.layouts.len());
 		// self.layouts.push(name_layout);
 		self.analyze(&name_layout);
@@ -202,6 +245,82 @@ impl LayoutAnalysis {
 		// }
 	}
 
+	pub fn compare_name(&self, name1: &str, name2: &str) {
+		let layouts: [NameLayout; 2] = [
+			self.name_layout_by_name(name1)
+				.unwrap_or_else(|| panic!("layout {} does not exist", name1)),
+			self.name_layout_by_name(name2)
+				.unwrap_or_else(|| panic!("layout {} does not exist", name2))
+		];
+		println!("\n{:29}{}", layouts[0].name, layouts[1].name);
+		for y in 0..3 {
+			for (n, layout) in layouts.iter().enumerate() {
+				for x in 0..10 {
+					print!("{} ", layout.layout.matrix[x][y]);
+					if x == 4 {
+						print!(" ")
+					}
+				}
+				if n == 0 {
+					print!("        ")
+				}
+			}
+			println!();
+		}
+		let ts1 = &layouts[0].stats.trigram_data;
+		let ts2 = &layouts[1].stats.trigram_data;
+		let fs1 = &layouts[0].stats.finger_speed;
+		let fs2 = &layouts[1].stats.finger_speed;
+		const BASE: String = String::new();
+		let mut fspeed: [String; 4] = [BASE; 4];
+		for i in 0..4 {
+			fspeed[i] = format!("{:<28} {:.1}, {:.1}",
+								format!("{:.1} {:.1}", fs1[i], fs2[7-i]), fs2[i], fs2[7-i]);
+		}
+		let fspeed_print = fspeed.join("\n");
+		println!(
+			concat!(
+			"Sfb:              {:.3}%     Sfb:              {:.3}%\n",
+			"Dsfb:             {:.3}%     Dsfb:             {:.3}%\n\n",
+			"Inrolls:          {:.2}%     Inrolls:          {:.2}%\n",
+			"Outrolls:         {:.2}%     Outrolls:         {:.2}%\n",
+			"Total Rolls:      {:.2}%     Total Rolls:      {:.2}%\n",
+			"Onehands:         {:.3}%     Onehands:         {:.3}%\n\n",
+			"Alternates:       {:.2}%     Alternates:       {:.2}%\n",
+			"Alternates (sfs): {:.2}%      Alternates (sfs): {:.2}%\n",
+			"Total Alternates: {:.2}%     Total Alternates: {:.2}%\n\n",
+			"Redirects:        {:.3}%     Redirects:        {:.2}%\n",
+			"Bad Redirects:    {:.3}%     Bad Redirects:    {:.2}%\n",
+			"Total Redirects:  {:.3}%     Total Redirects:  {:.2}%\n\n",
+			"Other:            {:.3}%     Other:            {:.2}%\n",
+			"Invalid:          {:.3}%     Invalid:          {:.2}%\n\n",
+			"{}\n\n",
+			"Score:            {:.3}     Score:            {:.3}\n"
+		),
+			layouts[0].stats.sfb*100.0, layouts[1].stats.sfb*100.0,
+			layouts[0].stats.dsfb*100.0, layouts[1].stats.dsfb*100.0,
+			ts1.inrolls*100.0, ts2.inrolls*100.0,
+			ts1.outrolls*100.0, ts2.outrolls*100.0,
+			(ts1.inrolls + ts1.outrolls)*100.0, (ts2.inrolls + ts2.outrolls)*100.0,
+			ts1.onehands*100.0, ts2.onehands*100.0,
+			ts1.alternates*100.0, ts2.alternates*100.0,
+			ts1.alternates_sfs*100.0, ts2.alternates_sfs*100.0,
+			(ts1.alternates + ts1.alternates_sfs)*100.0, (ts2.alternates + ts2.alternates_sfs)*100.0,
+			ts1.redirects*100.0, ts2.redirects*100.0,
+			ts1.bad_redirects*100.0, ts2.bad_redirects*100.0,
+			(ts1.redirects + ts1.bad_redirects)*100.0, (ts2.redirects + ts2.bad_redirects)*100.0,
+			ts1.other*100.0, ts2.other*100.0,
+			ts1.invalid*100.0, ts2.invalid*100.0,
+			fspeed_print,
+			layouts[0].score, layouts[1].score
+		);
+	}
+
+	pub fn finger_speed(&self, layout: &Layout) -> [f64; 8] {
+		let res = [0.0; 8];
+		res
+	}
+
 	pub fn effort(&self, layout: &Layout) -> f64 {
 		let mut res: f64 = 0.0;
 		for x in 0..10 {
@@ -214,19 +333,41 @@ impl LayoutAnalysis {
 
 	pub fn score(&self, layout: &Layout, trigram_precision: usize) -> f64 {
 		let mut score: f64 = 0.0;
-		let sfb = self.bigram_percent(&layout, &self.language_data.bigrams);
-		let dsfb = self.bigram_percent(&layout, &self.language_data.skipgrams);
-		let trigram_data = self.trigram_stats(&layout, trigram_precision);
-		score -= 1.5 * (self.effort(&layout) - 1.0);
-		score -= 10.0 * sfb;
-		score -= 3.0 * dsfb;
-		score += 1.2 * trigram_data.inrolls;
+		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
+		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
+		let trigram_data = self.trigram_stats(layout, trigram_precision);
+		score -= 1.4 * (self.effort(layout) - 0.9);
+		score -= 15.0 * sfb;
+		score -= 3.5 * dsfb;
+		score += 0.6 * trigram_data.inrolls;
 		score += 0.4 * trigram_data.outrolls;
-		score += 0.5 * trigram_data.onehands;
-		score += 0.95 * trigram_data.alternates;
+		score += 0.8 * trigram_data.onehands;
+		score += 0.6 * trigram_data.alternates;
 		score += 0.3 * trigram_data.alternates_sfs;
-		score -= 2.0 * trigram_data.redirects;
-		score -= 8.0 * trigram_data.bad_redirects;
+		score -= 1.0 * trigram_data.redirects;
+		score -= 5.0 * trigram_data.bad_redirects;
+		score
+	}
+
+	pub fn score_improve(&self, layout: &Layout, trigram_precision: usize, best_score: f64) -> f64 {
+		let mut score: f64 = 0.0;
+		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
+		// if sfb < best_score {
+		// 	println!("dropped due to sfb");
+		// 	return sfb;
+		// }
+		//let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
+		//let trigram_data = self.trigram_stats(layout, trigram_precision);
+		// score -= 1.4 * (self.effort(layout) - 0.9);
+		score -= 18.0 * sfb; // C:\Users\lucoe\RustProjects\layout_analyser\layouts\mommymak2.kb
+		// score -= 3.0 * dsfb;
+		// score += 0.6 * trigram_data.inrolls;
+		// score += 0.4 * trigram_data.outrolls;
+		// score += 1.0 * trigram_data.onehands;
+		// score += 0.6 * trigram_data.alternates;
+		// score += 0.3 * trigram_data.alternates_sfs;
+		// score -= 1.5 * trigram_data.redirects;
+		// score -= 6.0 * trigram_data.bad_redirects;
 		score
 	}
 
@@ -249,9 +390,14 @@ impl LayoutAnalysis {
 		finger
 			.permutations(2)
 			.for_each(|x| {
+				// for thing in &x {
+				// 	print!("{}", thing);
+				// }
+				// print!(" ");
 				let bi = ((*x[0] as u64) << 32) + *x[1] as u64;
 				sfb += data.get(&bi).unwrap_or(&0.0);
 			});
+		// println!();
 		sfb
 	}
 
@@ -259,7 +405,7 @@ impl LayoutAnalysis {
 		let mut freqs = TrigramFreq::new();
 		for (i, (trigram, freq)) in self.language_data.trigrams.iter().enumerate() {
 			if i == trigram_precision {
-				break;
+				return freqs
 			}
 			match layout.get_trigram_pattern(trigram) {
 				TrigramPattern::Alternate => freqs.alternates += freq,
@@ -277,10 +423,11 @@ impl LayoutAnalysis {
 	}
 
 	fn layout_stats(&self, layout: &Layout, trigram_precision: usize) -> LayoutStats {
-		let sfb = self.bigram_percent(&layout, &self.language_data.bigrams);
-		let dsfb = self.bigram_percent(&layout, &self.language_data.skipgrams);
-		let trigram_data = self.trigram_stats(&layout, trigram_precision);
-		LayoutStats{ sfb, dsfb, trigram_data }
+		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
+		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
+		let trigram_data = self.trigram_stats(layout, trigram_precision);
+		let finger_speed = self.finger_speed(layout);
+		LayoutStats{ sfb, dsfb, trigram_data, finger_speed }
 	}
 }
 
