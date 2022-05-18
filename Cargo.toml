@@ -11,9 +11,12 @@ edition = "2021"
 
 [dependencies]
 itertools = "0.10.3"
-json = "0.12.4"
 serde = {version = "1.0.136", features = ["derive"]}
 serde_json = "1.0.79"
 fastrand = "1.6.0"
 rayon = "1.5.1"
 adorn = "0.4.0"
+file-chunker = "0.1.1"
+anyhow = "1.0.57"
+unicode-normalization = "0.1.19"
+indexmap = {version = "1.8.1", features = ["serde"]}

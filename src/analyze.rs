@@ -1,9 +1,9 @@
 use crate::language_data::*;
-use crate::language_data::json::LanguageData;
+use crate::language_data::LanguageData;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use itertools::Itertools;
-use crate::analysis::{EFFORT_MAP, Pos, PosPair};
+use crate::analysis::EFFORT_MAP;
 use crate::trigram_patterns::*;
 use crate::generate::Layout;
 use std::ffi::OsStr;
@@ -316,7 +316,7 @@ impl LayoutAnalysis {
 		);
 	}
 
-	pub fn finger_speed(&self, layout: &Layout) -> [f64; 8] {
+	pub fn finger_speed(&self, _: &Layout) -> [f64; 8] {
 		let res = [0.0; 8];
 		res
 	}
@@ -338,36 +338,14 @@ impl LayoutAnalysis {
 		let trigram_data = self.trigram_stats(layout, trigram_precision);
 		score -= 1.4 * (self.effort(layout) - 0.9);
 		score -= 15.0 * sfb;
-		score -= 3.5 * dsfb;
+		score -= 3.0 * dsfb;
 		score += 0.6 * trigram_data.inrolls;
 		score += 0.4 * trigram_data.outrolls;
-		score += 0.8 * trigram_data.onehands;
+		score += 0.4 * trigram_data.onehands;
 		score += 0.6 * trigram_data.alternates;
 		score += 0.3 * trigram_data.alternates_sfs;
-		score -= 1.0 * trigram_data.redirects;
-		score -= 5.0 * trigram_data.bad_redirects;
-		score
-	}
-
-	pub fn score_improve(&self, layout: &Layout, trigram_precision: usize, best_score: f64) -> f64 {
-		let mut score: f64 = 0.0;
-		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
-		// if sfb < best_score {
-		// 	println!("dropped due to sfb");
-		// 	return sfb;
-		// }
-		//let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
-		//let trigram_data = self.trigram_stats(layout, trigram_precision);
-		// score -= 1.4 * (self.effort(layout) - 0.9);
-		score -= 18.0 * sfb; // C:\Users\lucoe\RustProjects\layout_analyser\layouts\mommymak2.kb
-		// score -= 3.0 * dsfb;
-		// score += 0.6 * trigram_data.inrolls;
-		// score += 0.4 * trigram_data.outrolls;
-		// score += 1.0 * trigram_data.onehands;
-		// score += 0.6 * trigram_data.alternates;
-		// score += 0.3 * trigram_data.alternates_sfs;
-		// score -= 1.5 * trigram_data.redirects;
-		// score -= 6.0 * trigram_data.bad_redirects;
+		score -= 1.5 * trigram_data.redirects;
+		score -= 7.5 * trigram_data.bad_redirects;
 		score
 	}
 

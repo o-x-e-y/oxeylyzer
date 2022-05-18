@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use crate::generate::Layout;
 
 pub static COL_TO_FINGER: [u8; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
 pub const LAYOUT_GENERATION_COUNT: usize = 1000;
@@ -56,8 +55,3 @@ pub static EFFORT_MAP: [[f64; 3]; 10] = [
 	[2.4, 1.3, 2.7],
 	[3.0, 1.6, 3.3]
 ];
-
-pub fn time_this<F>(f: F)
-	where F: Fn() {
-		
-}
