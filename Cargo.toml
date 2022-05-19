@@ -20,3 +20,4 @@ file-chunker = "0.1.1"
 anyhow = "1.0.57"
 unicode-normalization = "0.1.19"
 indexmap = {version = "1.8.1", features = ["serde"]}
+clap = {version = "3.1.18", features = ["derive"]}

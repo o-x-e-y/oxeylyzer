@@ -110,6 +110,18 @@ impl TranslatorBuilder {
         self
     }
 
+    pub fn letters(&mut self, letters: &str) -> &mut Self {
+        for letter in letters.chars() {
+            self.table[letter as usize] = Cow::from(letter.to_string());
+
+            let upper_string = String::from_iter(letter.to_uppercase());
+            
+            let new_upper = upper_string.chars().next().unwrap();
+            self.table[new_upper as usize] = Cow::from(letter.to_string());
+        }
+        self
+    }
+
     pub fn punct_lower(&mut self) -> &mut Self {
         self.to_another("{}?+_|\"<>:~", "[]/=-\\',.;`")
     }
@@ -152,16 +164,13 @@ impl TranslatorBuilder {
             Ok(self)
         } else if language == "albanian" {
             Ok(self
-                .keep_same("çë")
-                .to_another("ÇË", "çë"))
+                .letters("çë"))
         } else if language == "bokmal" || language == "nynorsk" {
             Ok(self
-                .keep_same("åøæ")
-                .to_another("ÅØÆ", "åøæ"))
+                .letters("åøæ"))
         } else if language == "czech" {
             Ok(self
-                .keep_same("ø")
-                .to_another("Ø", "ø")
+                .letters("ø")
                 .to_multiple(vec![
                     ('á', "*a"), ('č', "*c"), ('ď', "*d"), ('ě', "*e"), ('é', "*x"), ('í', "*i"),
                     ('ň', "*n"), ('ó', "*o"), ('ř', "*r"), ('š', "*s"), ('ť', "*t"), ('ů', "*u"),
@@ -171,16 +180,13 @@ impl TranslatorBuilder {
                 ]))
         } else if language == "dutch" {
             Ok(self
-                .keep_same("áèéçëíîó")
-                .to_another("ÁÈÉÇËÍÎÓ", "áèéçëíîó"))
+                .letters("áèéçëíîó"))
         } else if language == "german" {
             Ok(self
-                .keep_same("äöüß")
-                .to_another("ÄÖÜẞ", "äöüß"))
+                .letters("äöüß"))
         } else if language == "spanish" {
             Ok(self
-                .keep_same("ñ")
-                .to_another("Ñ", "ñ")
+                .letters("ñ")
                 .to_multiple(vec![
                     ('á', "*a"), ('é', "*e"), ('í', "*i"), ('ó', "*o"), ('ú', "*u"), ('ü', "*y"),
                     ('Á', "*a"), ('É', "*e"), ('Í', "*i"), ('Ó', "*o"), ('Ú', "*u"), ('Ü', "*y")
@@ -249,9 +255,10 @@ mod tests {
     #[test]
     fn test_multiple() {
         let translator = Translator::new()
-            .to_multiple(vec![('Ž', "*z"), ('ď', "*d")])
+            .to_multiple(vec![('Ž', "*z")])
+            .letters("aď")
             .build();
         
-        assert_eq!(translator.translate("ŽØ ď"), "*z  *d");
+        assert_eq!(translator.translate("ŽAaØ ď"), "*zaa  ď");
     }
 }

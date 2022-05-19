@@ -328,15 +328,6 @@ impl LayoutGeneration {
 				LayoutScore{layout, score}
 			}).collect_into_vec(&mut layouts);
 
-		// for i in 0..amount {
-		// 	let layout = self.generate();
-		// 	let score = self.analysis.score(&layout, 10000);
-		// 	layouts.push(LayoutScore{layout, score});
-		// 	// if i % (if amount < 20 {amount} else {amount / 20}) == 0 {
-		// 	// 	println!("i: {}", i);
-		// 	// }
-		// 	println!("i: {}", i);
-		// }
 		println!("generating {} layouts took: {} seconds", amount, start.elapsed().as_secs());
 		layouts.sort_unstable();
 		for i in 0..(if amount < 10 {amount} else {10}) {

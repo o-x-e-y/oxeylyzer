@@ -33,10 +33,11 @@ fn main() -> Result<()> {
 	l.compare_name("czech1", "czech2");
 	gen.generate_n(000);
 	
-	// let translator = Translator::new()
-	// 	.language("czech")?
-	// 	.build();
-	// load_data("test", translator)?;
+	let translator = Translator::new()
+		.language("czech")?
+		
+		.build();
+	load_data("czech", translator)?;
 
 	pause()
 }
