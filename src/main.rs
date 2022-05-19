@@ -26,18 +26,18 @@ fn pause() -> Result<()> {
 }
 
 fn main() -> Result<()> {
+	// let translator = Translator::new()
+	// 	.language("czech")?
+	// 	.letters("áíě")
+	// 	.build();
+	// load_data("czech", translator)?;
+
 	let lang = "czech";
 	let l = LayoutAnalysis::new(lang);
 	let gen = LayoutGeneration::new(lang);
 	l.rank();
-	l.compare_name("czech1", "czech2");
-	gen.generate_n(000);
-	
-	let translator = Translator::new()
-		.language("czech")?
-		
-		.build();
-	load_data("czech", translator)?;
+	l.compare_name("czech4", "czech5");
+	gen.generate_n(00);
 
 	pause()
 }

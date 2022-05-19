@@ -115,7 +115,7 @@ impl TranslatorBuilder {
             self.table[letter as usize] = Cow::from(letter.to_string());
 
             let upper_string = String::from_iter(letter.to_uppercase());
-            
+
             let new_upper = upper_string.chars().next().unwrap();
             self.table[new_upper as usize] = Cow::from(letter.to_string());
         }
@@ -174,9 +174,9 @@ impl TranslatorBuilder {
                 .to_multiple(vec![
                     ('á', "*a"), ('č', "*c"), ('ď', "*d"), ('ě', "*e"), ('é', "*x"), ('í', "*i"),
                     ('ň', "*n"), ('ó', "*o"), ('ř', "*r"), ('š', "*s"), ('ť', "*t"), ('ů', "*u"),
-                    ('ú', "*w"), ('ý', "*y"), ('ž', "*z"), ('Á', "*a"), ('Č', "*c"), ('Ď', "*d"),
+                    ('ú', "*b"), ('ý', "*y"), ('ž', "*z"), ('Á', "*a"), ('Č', "*c"), ('Ď', "*d"),
                     ('Ě', "*e"), ('É', "*x"), ('Í', "*i"), ('Ň', "*n"), ('Ó', "*o"), ('Ř', "*r"),
-                    ('Š', "*s"), ('Ť', "*t"), ('Ů', "*u"), ('Ú', "*w"), ('Ý', "*y"), ('Ž', "*z")
+                    ('Š', "*s"), ('Ť', "*t"), ('Ů', "*u"), ('Ú', "*b"), ('Ý', "*y"), ('Ž', "*z")
                 ]))
         } else if language == "dutch" {
             Ok(self

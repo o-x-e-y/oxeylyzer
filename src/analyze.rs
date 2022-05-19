@@ -342,8 +342,8 @@ impl LayoutAnalysis {
 		score += 0.6 * trigram_data.inrolls;
 		score += 0.4 * trigram_data.outrolls;
 		score += 0.4 * trigram_data.onehands;
-		score += 0.6 * trigram_data.alternates;
-		score += 0.3 * trigram_data.alternates_sfs;
+		score += 0.4 * trigram_data.alternates;
+		score += 0.15 * trigram_data.alternates_sfs;
 		score -= 1.5 * trigram_data.redirects;
 		score -= 7.5 * trigram_data.bad_redirects;
 		score

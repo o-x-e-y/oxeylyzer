@@ -127,7 +127,7 @@ impl Layout {
 			// ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n','o', 'p',
 			// 	'æ', 'r', 's', 't', 'u', 'v', 'w', 'ø', 'y', 'å', '\'', ',', '.', ';'];
 			['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n','o', 'p',
-				'*', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '\'', ',', '.', ';'];
+				'*', 'r', 's', 't', 'u', 'v', 'ě', 'x', 'y', 'z', 'á', ',', '.', 'í'];
 			// ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n','o', 'p',
 			// 	'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '\'', ',', '.', ';'];
 			fastrand::shuffle(&mut available_chars);
@@ -324,7 +324,7 @@ impl LayoutGeneration {
 				if i_current % (if amount < 20 {amount} else {amount / 20}) == 0 {
 					println!("{i_current}/{amount} done");
 				}
-				std::thread::sleep(std::time::Duration::from_secs(1));
+				// std::thread::sleep(std::time::Duration::from_secs(1));
 				LayoutScore{layout, score}
 			}).collect_into_vec(&mut layouts);
 
