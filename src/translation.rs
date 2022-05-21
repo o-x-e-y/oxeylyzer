@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::borrow::Cow;
 use anyhow::Result;
 
@@ -5,7 +6,8 @@ const USIZE_BOUND: usize = 0x110000;
 const SUPPORTED_CHARS: usize = 8500;
 
 pub struct Translator {
-    pub table: Vec<Cow<'static, str>>,
+    pub table: HashMap<char, Cow<'static, str>>,
+    pub(crate) ignore_unknown: bool,
     pub(crate) is_empty: bool,
     pub(crate) multiple_val: f64
 }
@@ -20,13 +22,41 @@ impl Default for Translator {
 
 impl Translator {
     pub fn new() -> TranslatorBuilder {
-        let mut table: Vec<Cow<'static, str>> = Vec::with_capacity(SUPPORTED_CHARS);
-        for _ in 0..SUPPORTED_CHARS {
-            table.push(Cow::from(" "));
-        }
         TranslatorBuilder {
-            table: table.try_into().unwrap()
+            table: HashMap::new(),
+            ignore_unknown: false
         }
+    }
+
+    pub fn language(language: &str) -> Result<Self> {
+        Ok(Self::new()
+            .language(language)?
+            .build())
+    }
+
+    pub fn language_or_default(language: &str) -> Self {
+        if let Ok(t) = Self::language(language) {
+            t
+        } else {
+            Self::default()
+        }
+    }
+
+    pub fn language_or_passthrough(language: &str) -> Self {
+        if let Ok(t) = Self::language(language) {
+            t
+        } else {
+            Self::passthrough()
+        }
+    }
+
+    pub fn passthrough() -> Self {
+        Translator::new()
+            .passthrough()
+            .ascii_lower()
+            .normalize_punct()
+            .keep_unknown()
+            .build()
     }
 
     pub fn translate<'a>(&self, s: &'a str) -> Cow<'a, str> {
@@ -42,12 +72,21 @@ impl Translator {
             res = String::with_capacity(length as usize);
         }
 
-        for c in s.chars() {
-            let n = c as usize;
-            if n < SUPPORTED_CHARS {
-                res.push_str(self.table[c as usize].as_ref());
-            } else {
-                res.push(' ');
+        if self.ignore_unknown {
+            for c in s.chars() {
+                if let Some(replacement) = self.table.get(&c) {
+                    res.push_str(replacement);
+                } else {
+                    res.push(c);
+                }
+            }
+        } else {
+            for c in s.chars() {
+                if let Some(replacement) = self.table.get(&c) {
+                    res.push_str(replacement);
+                } else  {
+                    res.push(' ');
+                }
             }
         }
 
@@ -57,34 +96,40 @@ impl Translator {
 }
 
 pub struct TranslatorBuilder {
-    table: Vec<Cow<'static, str>>
+    table: HashMap<char, Cow<'static, str>>,
+    ignore_unknown: bool
 }
 
 impl TranslatorBuilder {
+    pub fn keep_unknown(&mut self) -> &mut Self {
+        self.ignore_unknown = false;
+        self
+    }
+
     pub fn to_nothing(&mut self, to_nothing: &str) -> &mut Self {
         for c in to_nothing.chars() {
-            self.table[c as usize] = Cow::from("");
+            self.table.insert(c, Cow::from(""));
         }
         self
     }
 
     pub fn to_space(&mut self, to_string: &str) -> &mut Self {
         for c in to_string.chars() {
-            self.table[c as usize] = Cow::from(" ");
+            self.table.insert(c, Cow::from(" "));
         }
         self
     }
 
     pub fn to_one(&mut self, from: &str, to: char) -> &mut Self {
         for c in from.chars() {
-            self.table[c as usize] = Cow::from(to.to_string());
+            self.table.insert(c, Cow::from(to.to_string()));
         }
         self
     }
 
     pub fn keep_same(&mut self, keep: &str) -> &mut Self {
         for c in keep.chars() {
-            self.table[c as usize] = Cow::from(String::from(c));
+            self.table.insert(c, Cow::from(c.to_string()));
         }
         self
     }
@@ -93,42 +138,59 @@ impl TranslatorBuilder {
         assert_eq!(from.chars().count(), to.chars().count());
 
         for (s, d) in from.chars().zip(to.chars()) {
-            self.table[s as usize] = Cow::from(d.to_string());
+            self.table.insert(s, Cow::from(d.to_string()));
         }
         self
     }
 
     pub fn one_multiple(&mut self, from: char, to: &'static str) -> &mut Self {
-        self.table[from as usize] = Cow::from(to);
+        self.table.insert(from, Cow::from(to));
         self
     }
 
     pub fn to_multiple(&mut self, trans: Vec<(char, &'static str)>) -> &mut Self {
         for (s, d) in trans {
-            self.table[s as usize] = Cow::from(d);
+            self.table.insert(s, Cow::from(d));
         }
         self
     }
 
     pub fn letters(&mut self, letters: &str) -> &mut Self {
         for letter in letters.chars() {
-            self.table[letter as usize] = Cow::from(letter.to_string());
+            self.table.insert(letter, Cow::from(letter.to_string()));
 
             let upper_string = String::from_iter(letter.to_uppercase());
 
             let new_upper = upper_string.chars().next().unwrap();
-            self.table[new_upper as usize] = Cow::from(letter.to_string());
+            self.table.insert(new_upper, Cow::from(letter.to_string()));
         }
         self
     }
 
-    pub fn punct_lower(&mut self) -> &mut Self {
-        self.to_another("{}?+_|\"<>:~", "[]/=-\\',.;`")
+    pub fn passthrough(&mut self) -> &mut Self {
+        let mut letters = String::new();
+        for i in 128u32..256 {
+            let c = char::from_u32(i).unwrap();
+            if c.is_alphabetic() {
+                letters.push(c);
+            }
+        }
+
+        self
+            .letters(letters.as_str())
+            .alphabet_lower()
+            .punct_lower()
+            .normalize_punct()
     }
 
-    pub fn letters_lower(&mut self) -> &mut Self {
-        self.to_another("ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-                          "abcdefghijklmnopqrstuvwxyz")
+    pub fn punct_lower(&mut self) -> &mut Self {
+        self
+            .keep_same("[]/=-\\',.;`")
+            .to_another("{}?+_|\"<>:~", "[]/=-\\',.;`")
+    }
+
+    pub fn alphabet_lower(&mut self) -> &mut Self {
+        self.letters("abcdefghijklmnopqrstuvwxyz")
     }
 
     pub fn number_symbols_lower(&mut self) -> &mut Self {
@@ -138,29 +200,25 @@ impl TranslatorBuilder {
     pub fn ascii_lower(&mut self) -> &mut Self {
         self
             .punct_lower()
-            .letters_lower()
+            .alphabet_lower()
     }
 
-    pub fn keep_numbers(&mut self) -> &mut Self {
-        self.keep_same("1234567890")
-    }
-
-    pub fn keep_default(&mut self) -> &mut Self {
-        self.keep_same("abcdefghijklmnopqrstuvwxyz.,';[]/=-\\`")
+    pub fn normalize_punct(&mut self) -> &mut Self {
+        self
+            .to_another("«´»÷‘“”’–ʹ͵","'''/''''-''")
+            .one_multiple('…', "...")
     }
 
     pub fn default_formatting(&mut self) -> &mut Self {
         self
-            .keep_default()
             .ascii_lower()
-            .one_multiple('…', "...")
-            .to_another("«´»÷‘“”’–ʹ͵","'''/''''-''")
+            .normalize_punct()
     }
 
     pub fn language(&mut self, language: &str) -> Result<&mut Self> {
         self.default_formatting();
         let language = language.to_lowercase();
-        if language == "english" || language == "toki_pona" {
+        if language == "english" || language == "toki_pona" || language == "indonesian" {
             Ok(self)
         } else if language == "albanian" {
             Ok(self
@@ -181,6 +239,14 @@ impl TranslatorBuilder {
         } else if language == "dutch" {
             Ok(self
                 .letters("áèéçëíîó"))
+        } else if language == "french" {
+            Ok(self
+                .to_multiple(vec![
+                    ('à', "*a"), ('ç', "*c"), ('è', "*e"), ('ê', "*v"), ('ï', "*i"), ('î', "*y"),
+                    ('ô', "*o"), ('û', "*u"), ('À', "*a"), ('Ç', "*c"), ('È', "*e"), ('Ê', "*v"),
+                    ('Ï', "*i"), ('Î', "*y"), ('Ô', "*o"), ('Û', "*u")
+                ])
+                .letters("é"))
         } else if language == "german" {
             Ok(self
                 .letters("äöüß"))
@@ -196,20 +262,12 @@ impl TranslatorBuilder {
         }
     }
 
-    pub fn language_or_default(&mut self, language: &str) -> &mut Self {
-        if self.language(language).is_ok() {
-            self
-        } else {
-            self.default_formatting()
-        }
-    }
-
     fn check_multiple_val(&self) -> f64 {
         // assume a 2.5% occurence of every 1 -> n translation to be safe
         // subtract from total length with a factor of 0.1 in case of a 1 -> 0 translation
 
         let mut res = 0.0;
-        for trans in self.table.iter() {
+        for (_, trans) in self.table.iter() {
             if trans.len() > 0 {
                 res += trans.len() as f64 - 1.0;
             } else {
@@ -222,6 +280,7 @@ impl TranslatorBuilder {
     pub fn build(&mut self) -> Translator {
         Translator {
             is_empty: self.table.len() == 0,
+            ignore_unknown: self.ignore_unknown,
             multiple_val: self.check_multiple_val(),
             table: std::mem::take(&mut self.table)
         }
@@ -250,6 +309,16 @@ mod tests {
         assert_eq!(translator.translate("žø"), "  ");
         assert_eq!(translator.translate("…"), "...");
         assert_eq!(translator.translate("«´»÷‘“”’–ʹ͵"), "'''/''''-''");
+    }
+
+    #[test]
+    fn test_keep_all() {
+        let translator = Translator::new()
+            .keep_unknown()
+            .build();
+        
+        assert_eq!(translator.translate("ŽAamong us"), "ŽAamong us");
+        assert_eq!(translator.translate(NUMS), NUMS);
     }
 
     #[test]

@@ -56,8 +56,8 @@ impl std::fmt::Display for LayoutStats {
 			fspeed[i] = format!("{:.1} {:.1}", self.finger_speed[i], self.finger_speed[7-i]);
 		}
 		let fspeed_print = fspeed.join("\n");
-		write!(f, "Sfb:  {:.3}%\nDsfb: {:.3}%\n{}\n{}\n",
-			   self.sfb * 100.0, self.dsfb * 100.0, self.trigram_data, fspeed_print)
+		write!(f, "Sfb:  {:.3}%\nDsfb: {:.3}%\n{}",
+			   self.sfb * 100.0, self.dsfb * 100.0, self.trigram_data)
 	}
 }
 
@@ -271,13 +271,13 @@ impl LayoutAnalysis {
 		let ts2 = &layouts[1].stats.trigram_data;
 		let fs1 = &layouts[0].stats.finger_speed;
 		let fs2 = &layouts[1].stats.finger_speed;
-		const BASE: String = String::new();
-		let mut fspeed: [String; 4] = [BASE; 4];
-		for i in 0..4 {
-			fspeed[i] = format!("{:<28} {:.1}, {:.1}",
-								format!("{:.1} {:.1}", fs1[i], fs2[7-i]), fs2[i], fs2[7-i]);
-		}
-		let fspeed_print = fspeed.join("\n");
+		// const BASE: String = String::new();
+		// let mut fspeed: [String; 4] = [BASE; 4];
+		// for i in 0..4 {
+		// 	fspeed[i] = format!("{:<28} {:.1}, {:.1}",
+		// 						format!("{:.1} {:.1}", fs1[i], fs2[7-i]), fs2[i], fs2[7-i]);
+		// }
+		// let fspeed_print = fspeed.join("\n");
 		println!(
 			concat!(
 			"Sfb:              {:.3}%     Sfb:              {:.3}%\n",
@@ -294,7 +294,7 @@ impl LayoutAnalysis {
 			"Total Redirects:  {:.3}%     Total Redirects:  {:.2}%\n\n",
 			"Other:            {:.3}%     Other:            {:.2}%\n",
 			"Invalid:          {:.3}%     Invalid:          {:.2}%\n\n",
-			"{}\n\n",
+			//"{}\n\n",
 			"Score:            {:.3}     Score:            {:.3}\n"
 		),
 			layouts[0].stats.sfb*100.0, layouts[1].stats.sfb*100.0,
@@ -311,7 +311,7 @@ impl LayoutAnalysis {
 			(ts1.redirects + ts1.bad_redirects)*100.0, (ts2.redirects + ts2.bad_redirects)*100.0,
 			ts1.other*100.0, ts2.other*100.0,
 			ts1.invalid*100.0, ts2.invalid*100.0,
-			fspeed_print,
+			//fspeed_print,
 			layouts[0].score, layouts[1].score
 		);
 	}

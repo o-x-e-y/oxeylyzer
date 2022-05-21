@@ -2,6 +2,7 @@ use crate::translation::Translator;
 use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::fs::{File, read_dir};
+use std::time::Instant;
 
 use rayon::prelude::*;
 use file_chunker::FileChunker;
@@ -11,30 +12,39 @@ use serde::{Serialize, Deserialize};
 
 const TWO_MB: u64 = 1024 * 1024 * 2;
 
-pub fn load_language_default(language: &str) {
+pub fn load_raw(language: &str) {
     let translator = Translator::new()
-		.language_or_default(language)
-		.build();
-	load_data(language, translator).unwrap();
+        .passthrough()
+        .build();
+    load_data(language, translator).unwrap();
+}
+
+pub fn load_default(language: &str) {
+    let start = Instant::now();
+    let translator = Translator::language_or_passthrough(language);
+    println!("\nBuilding the translator for {} took {}ms", language, (Instant::now() - start).as_millis());
+	if let Err(_) = load_data(language, translator) {
+        println!("{} failed to update", language);
+    }
 }
 
 pub fn load_all_default() -> Result<()> {
-    let start_total = std::time::Instant::now();
+    let start_total = Instant::now();
 
     std::fs::read_dir(format!("static/text/"))?
         .filter_map(Result::ok)
         .for_each(|language_dir| {
 			let language = language_dir.path().display().to_string().replace("\\", "/");
 			let language = language.split("/").last().unwrap();
-			load_language_default(language);
+			load_default(language);
         }
     );
-    println!("loading all languages took {}ms", (std::time::Instant::now() - start_total).as_millis());
+    println!("loading all languages took {}ms", (Instant::now() - start_total).as_millis());
     Ok(())
 }
 
 pub fn load_data(language: &str, translator: Translator) -> Result<TextData> {
-    let start_total = std::time::Instant::now();
+    let start_total = Instant::now();
 
     let all_trigrams = read_dir(format!("static/text/{language}/"))?
         .filter_map(Result::ok)
@@ -48,7 +58,7 @@ pub fn load_data(language: &str, translator: Translator) -> Result<TextData> {
     
     let res = TextData::from((all_trigrams, translator, language));
     res.save()?;
-    println!("loading {} took {}ms", language, (std::time::Instant::now() - start_total).as_millis());
+    println!("loading {} took {}ms", language, (Instant::now() - start_total).as_millis());
     Ok(res)
 }
 

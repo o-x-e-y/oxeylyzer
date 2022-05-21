@@ -10,6 +10,7 @@ pub mod analyze;
 pub mod generate;
 pub mod translation;
 pub mod ngrams;
+pub mod repl;
 
 use analyze::*;
 use anyhow::Result;
@@ -25,21 +26,25 @@ fn pause() -> Result<()> {
 	Ok(())
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<(), String> {
 	// let translator = Translator::new()
 	// 	.language("czech")?
 	// 	.letters("áíě")
 	// 	.build();
 	// load_data("czech", translator)?;
+	repl::Repl::run()
+	
+	// let lang = "english";
+	// // load_default(lang);
 
-	let lang = "czech";
-	let l = LayoutAnalysis::new(lang);
-	let gen = LayoutGeneration::new(lang);
-	l.rank();
-	l.compare_name("czech4", "czech5");
-	gen.generate_n(00);
+	// let l = LayoutAnalysis::new(lang);
+	// let gen = LayoutGeneration::new(lang);
+	// l.rank();
+	// l.compare_name("wtf", "whorf");
+	// l.compare_name("whorf_rsnt", "whorf_nsrt");
+	// gen.generate_n(000);
 
-	pause()
+	// pause()
 }
 
 

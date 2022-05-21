@@ -106,11 +106,7 @@ impl Layout {
 		}
 		// a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 = 0b111)
 		let combination = ((a as usize) << 6) | ((b as usize) << 3) | c as usize;
-		let thing = TRIGRAM_COMBINATIONS[combination];
-		if thing == TrigramPattern::Other && (a != b && b != c) {
-			println!("inroll: {}{}{}: {} {} {}", trigram[0], trigram[1], trigram[2], a, b, c);
-		}
-		thing
+		TRIGRAM_COMBINATIONS[combination]
 	}
 
 	pub fn is_valid_layout(layout: &str) -> bool {
@@ -118,25 +114,14 @@ impl Layout {
 		layout.chars().count() == 30 && chars.len() == 30
 	}
 
-	pub fn random() -> Layout {
-		let mut available_chars =
-			// ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n','o', 'p',
-			// 	'q', 'r', 's', 't', 'u', 'v', 'x', 'y', 'z', 'ë', 'ç', '.', ',', '\''];
-			// ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n','o', 'p',
-			// 	'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'ü', 'ä', 'ö', '.', ','];
-			// ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n','o', 'p',
-			// 	'æ', 'r', 's', 't', 'u', 'v', 'w', 'ø', 'y', 'å', '\'', ',', '.', ';'];
-			['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n','o', 'p',
-				'*', 'r', 's', 't', 'u', 'v', 'ě', 'x', 'y', 'z', 'á', ',', '.', 'í'];
-			// ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n','o', 'p',
-			// 	'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '\'', ',', '.', ';'];
-			fastrand::shuffle(&mut available_chars);
-		let layout_str = available_chars.iter().collect::<String>();
+	pub fn random(mut available_chars: [char; 30]) -> Layout {
+		fastrand::shuffle(&mut available_chars);
+		let layout_str = String::from_iter(available_chars);
 		Layout::from_str(layout_str.as_str())
 	}
 
 	pub fn random_pinned() {
-
+		
 	}
 }
 
@@ -155,19 +140,33 @@ impl std::fmt::Display for Layout {
 }
 
 pub struct LayoutGeneration {
+	pub available_chars: [char; 30],
 	pub analysis: LayoutAnalysis,
 	pub improved_layout: Layout,
 	cols: [usize; 6]
 }
 
 impl LayoutGeneration {
-
 	pub fn new(language: &str) -> Self {
 		Self {
 			analysis: LayoutAnalysis::new(language),
 			improved_layout: Layout::new(),
+			available_chars: Self::available_chars(language),
 			cols: [0, 1, 2, 7, 8, 9],
 		}
+	}
+
+	fn available_chars(language: &str) -> [char; 30] {
+		let chars = match language {
+			"albanian" =>           "abcdefghijklmnopqrstuvxyzëç.,'",
+			"bokmal" | "nynorsk" => "abcdefghijklmnopærstuvwøyå',.;",
+			"czech" =>              "abcdefghijklmnop*rstuvěxyzá,.í",
+			"french" =>             "abcdefghijklmnopqrstuvéxyz',.*",
+			"german" =>             "abcdefghijklmnoprstuvwxyzüäö.,",
+			"spanish" =>            "abcdefghij*lmnopqrstuvñxyz',.;",
+			_ =>                    "abcdefghijklmnopqrstuvwxyz',.;"
+		};
+		chars.chars().collect::<Vec<char>>().try_into().unwrap()
 	}
 
 	pub fn optimize_cols(&self, layout: &mut Layout, trigram_precision: usize, score: Option<f64>) -> f64 {
@@ -224,7 +223,7 @@ impl LayoutGeneration {
 	}
 
 	pub fn generate(&self) -> Layout {
-		let layout = Layout::random();
+		let layout = Layout::random(self.available_chars);
 		self.optimize(layout, 1000, &POSSIBLE_SWAPS)
 	}
 

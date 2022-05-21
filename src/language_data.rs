@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-pub type CharacterData = HashMap<char, f64>;
-pub type BigramData = HashMap<u64, f64>;
-pub type TrigramData = Vec<([char; 3], f64)>;
-
 use std::fs::File;
 use std::io::prelude::*;
 use serde::Deserialize;
 use serde_json;
+
+pub type CharacterData = HashMap<char, f64>;
+pub type BigramData = HashMap<u64, f64>;
+pub type TrigramData = Vec<([char; 3], f64)>;
 
 #[derive(Deserialize)]
 struct LanguageDataInter {
