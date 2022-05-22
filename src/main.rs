@@ -13,9 +13,6 @@ pub mod translation;
 pub mod ngrams;
 pub mod repl;
 
-use analyze::*;
-use anyhow::Result;
-
 fn main() -> Result<(), String> {
 	repl::Repl::run()
 }

@@ -1,16 +1,10 @@
-#![feature(let_chains)]
-
 use crate::language_data::*;
 use crate::language_data::LanguageData;
-use std::collections::HashMap;
 use std::fmt::Formatter;
 use itertools::Itertools;
 use crate::analysis::EFFORT_MAP;
 use crate::trigram_patterns::*;
 use crate::generate::Layout;
-use std::ffi::OsStr;
-use std::fs::File;
-use std::io::Read;
 
 use anyhow::Result;
 use indexmap::IndexMap;
