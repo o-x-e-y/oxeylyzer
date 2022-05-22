@@ -4,7 +4,7 @@ pub enum TrigramPattern {
 	AlternateSfs,
 	Inroll,
 	Outroll,
-	OneHand,
+	Onehand,
 	Redirect,
 	BadRedirect,
 	Other,
@@ -61,7 +61,7 @@ const fn get_one_hand(c1: usize, c2: usize, c3: usize) -> TrigramPattern {
 		return TrigramPattern::Redirect
 	}
 	if (c1 > c2 && c2 > c3) || (c1 < c2 && c2 < c3) {
-		return TrigramPattern::OneHand
+		return TrigramPattern::Onehand
 	}
 	TrigramPattern::Other
 }

@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use crate::analysis::*;
 use crate::trigram_patterns::{TRIGRAM_COMBINATIONS, TrigramPattern};
-use crate::{LayoutAnalysis, TrigramFreq};
+use crate::{LayoutAnalysis, TrigramStats};
 
 #[derive(Default, Clone)]
 pub struct Layout {
@@ -371,7 +371,7 @@ impl std::cmp::Ord for LayoutScore {
 pub struct PerCharStats {
 	sfbs: HashMap<char, f64>,
 	dsfbs: HashMap<char, f64>,
-	trigrams: HashMap<char, TrigramFreq>
+	trigrams: HashMap<char, TrigramStats>
 }
 
 impl PerCharStats {
