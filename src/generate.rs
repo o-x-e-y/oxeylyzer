@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use crate::analysis::*;
 use crate::trigram_patterns::{TRIGRAM_COMBINATIONS, TrigramPattern};
-use crate::{LayoutAnalysis, TrigramStats};
+use crate::analyze::{LayoutAnalysis, TrigramStats};
 
 #[derive(Default, Clone)]
 pub struct Layout {
