@@ -1,11 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::Formatter;
 use std::iter::FromIterator;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use crate::analysis::*;
 use crate::trigram_patterns::{TRIGRAM_COMBINATIONS, TrigramPattern};
-use crate::analyze::{LayoutAnalysis, TrigramStats};
+use crate::analyze::LayoutAnalysis;
 
 pub type CharToFinger = HashMap<char, u8>;
 pub type Matrix = [char; 30];
@@ -134,13 +133,13 @@ impl Layout {
 }
 
 impl std::fmt::Display for Layout {
-	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let mut res = String::with_capacity(63);
 		for (i, c) in self.matrix.iter().enumerate() {
 			if i % 10 == 0 {
 				res.push('\n');
 			}
-			if (i + 6) % 10 == 0 {
+			if (i + 5) % 10 == 0 {
 				res.push(' ');
 			}
 			res.push(*c);
@@ -238,43 +237,6 @@ impl LayoutGeneration {
 		self.optimize(layout, 1000, &POSSIBLE_SWAPS)
 	}
 
-	pub fn generate_n_pinned(&self, amount: usize, pinned_chars: &str, base_name: &str) {
-		if amount == 0 {
-			return;
-		}
-		let mut layouts: Vec<LayoutScore> = Vec::with_capacity(amount);
-		let possible_swaps = POSSIBLE_SWAPS; // self.exclude_chars(pinned_chars, base_name).as_slice();
-		let start = std::time::Instant::now();
-		let i: AtomicUsize = AtomicUsize::new(0);
-		(0..amount).into_par_iter()
-			.map(|_| -> LayoutScore {
-				let layout = self.generate();
-				let score = self.analysis.score(&layout, usize::MAX);
-				i.fetch_add(1, Ordering::SeqCst);
-				let i_current = i.load(Ordering::SeqCst);
-				if i_current % (if amount < 20 {amount} else {amount / 20}) == 0 {
-					println!("{i_current}/{amount} done");
-				}
-				LayoutScore{layout, score}
-			}).collect_into_vec(&mut layouts);
-
-		// for i in 0..amount {
-		// 	let layout = self.generate();
-		// 	let score = self.analysis.score(&layout, 10000);
-		// 	layouts.push(LayoutScore{layout, score});
-		// 	// if i % (if amount < 20 {amount} else {amount / 20}) == 0 {
-		// 	// 	println!("i: {}", i);
-		// 	// }
-		// 	println!("i: {}", i);
-		// }
-		println!("generating {} layouts took: {} seconds", amount, start.elapsed().as_secs());
-		layouts.sort_unstable();
-		for i in 0..(if amount < 10 {amount} else {10}) {
-			println!("{}\nscore: {:.5}", layouts[i].layout, layouts[i].score);
-		}
-		println!("worst layout:\n{}\n{}", layouts[layouts.len()-1].layout, layouts[layouts.len()-1].score)
-	}
-
 	pub fn optimize(&self, mut layout: Layout, trigram_precision: usize, possible_swaps: &[PosPair]) -> Layout {
 		let mut best_score = f64::MIN / 2.0;
 		let mut best_swap = &PosPair::new();
@@ -322,11 +284,11 @@ impl LayoutGeneration {
 		if amount == 0 {
 			return;
 		}
-		let mut layouts: Vec<LayoutScore> = Vec::with_capacity(amount);
+		let mut layouts: Vec<(Layout, f64)> = Vec::with_capacity(amount);
 		let start = std::time::Instant::now();
 		let i: AtomicUsize = AtomicUsize::new(0);
 		(0..amount).into_par_iter()
-			.map(|_| -> LayoutScore {
+			.map(|_| -> (Layout, f64) {
 				let layout = self.generate();
 				let score = self.analysis.score(&layout, usize::MAX);
 				i.fetch_add(1, Ordering::SeqCst);
@@ -334,69 +296,14 @@ impl LayoutGeneration {
 				if i_current % (if amount < 20 {amount} else {amount / 20}) == 0 {
 					println!("{i_current}/{amount} done");
 				}
-				// std::thread::sleep(std::time::Duration::from_secs(1));
-				LayoutScore{layout, score}
+				(layout, score)
 			}).collect_into_vec(&mut layouts);
 
 		println!("generating {} layouts took: {} seconds", amount, start.elapsed().as_secs());
-		layouts.sort_unstable();
-		for i in 0..(if amount < 10 {amount} else {10}) {
-			println!("{}\nscore: {:.5}", layouts[i].layout, layouts[i].score);
+		layouts.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+		for (layout, score) in layouts.iter().take(10) {
+			println!("{}\nscore: {:.5}", layout, score);
 		}
-		println!("worst layout:\n{}\n{}", layouts[layouts.len()-1].layout, layouts[layouts.len()-1].score)
-	}
-}
-
-#[derive(Default)]
-struct LayoutScore {
-	layout: Layout,
-	score: f64
-}
-
-impl std::cmp::Eq for LayoutScore {}
-
-impl std::cmp::PartialEq for LayoutScore {
-	fn eq(&self, other: &Self) -> bool {
-		self.score == other.score
-	}
-}
-
-impl PartialOrd<Self> for LayoutScore {
-	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		Some(self.cmp(other))
-	}
-}
-
-impl std::cmp::Ord for LayoutScore {
-	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-		return if self.score > other.score {
-			std::cmp::Ordering::Less
-		} else if self.score == other.score {
-			std::cmp::Ordering::Equal
-		} else {
-			std::cmp::Ordering::Greater
-		}
-	}
-}
-
-pub struct PerCharStats {
-	sfbs: HashMap<char, f64>,
-	dsfbs: HashMap<char, f64>,
-	trigrams: HashMap<char, TrigramStats>
-}
-
-impl PerCharStats {
-	pub fn new() -> PerCharStats {
-		PerCharStats {
-			sfbs: HashMap::new(),
-			dsfbs: HashMap::new(),
-			trigrams: HashMap::new()
-		}
-	}
-
-	pub fn from_layout(layout: Layout) {
-		for c in layout.matrix {
-			println!("{}", layout.char_to_finger.get(&c).unwrap());
-		}
+		println!("worst layout:\n{}\n{}", layouts[layouts.len()-1].0, layouts[layouts.len()-1].1)
 	}
 }

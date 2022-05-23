@@ -1,6 +1,5 @@
 use crate::language_data::*;
 use crate::language_data::LanguageData;
-use std::fmt::Formatter;
 use itertools::Itertools;
 use crate::analysis::EFFORT_MAP;
 use crate::trigram_patterns::*;
@@ -9,7 +8,7 @@ use crate::generate::Layout;
 use anyhow::Result;
 use indexmap::IndexMap;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct TrigramStats {
 	alternates: f64,
 	alternates_sfs: f64,
@@ -22,24 +21,8 @@ pub struct TrigramStats {
 	invalid: f64
 }
 
-impl TrigramStats {
-	pub fn new() -> TrigramStats {
-		TrigramStats {
-			alternates: 0.0,
-			alternates_sfs: 0.0,
-			inrolls: 0.0,
-			outrolls: 0.0,
-			onehands: 0.0,
-			redirects: 0.0,
-			bad_redirects: 0.0,
-			other: 0.0,
-			invalid: 0.0
-		}
-	}
-}
-
 impl std::fmt::Display for TrigramStats {
-	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "\nInrolls: {:.3}%\nOutrolls: {:.3}%\nTotal Rolls: {:.3}%\nOnehands: {:.3}%\n\n\
 		Alternates: {:.3}%\nAlternates (sfs): {:.3}%\nTotal Alternates: {:.3}%\n\nRedirects: {:.3}%\n\
 		Bad Redirects: {:.3}%\nTotal Redirects: {:.3}%\n\nOther: {:.3}%\nInvalid: {:.3}%",
@@ -59,7 +42,7 @@ struct LayoutStats {
 }
 
 impl std::fmt::Display for LayoutStats {
-	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		// const BASE: String = String::new();
 		// let mut fspeed: [String; 4] = [BASE; 4];
 		// for i in 0..4 {
@@ -367,7 +350,7 @@ impl LayoutAnalysis {
 	}
 
 	pub fn trigram_stats(&self, layout: &Layout, trigram_precision: usize) -> TrigramStats {
-		let mut freqs = TrigramStats::new();
+		let mut freqs = TrigramStats::default();
 		for (i, (trigram, freq)) in self.language_data.trigrams.iter().enumerate() {
 			if i == trigram_precision {
 				return freqs
