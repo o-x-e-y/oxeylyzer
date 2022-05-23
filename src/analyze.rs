@@ -196,18 +196,20 @@ impl LayoutAnalysis {
 	}
 
 	fn placeholder_name(&self, layout: &Layout, maybe_str: Option<String>) -> Result<String, ()> {
-		if let Some(layout_str) = maybe_str {
-			for i in 1..1000usize {
-				let mut new_name = layout_str[10..14].to_string();
-				new_name.push_str(format!("{}", i).as_str());
-
-				if !self.layouts.contains_key(&new_name) {
-					return Ok(new_name);
-				}
-			}
+		let mut layout_str = String::new();
+		if let Some(l) = maybe_str {
+			layout_str = l;
 		} else {
-			let layout_str = Self::format_layout_str(format!("{}", layout));
-			
+			layout_str = Self::format_layout_str(format!("{}", layout));
+
+		}
+		for i in 1..1000usize {
+			let mut new_name = layout_str[10..14].to_string();
+			new_name.push_str(format!("{}", i).as_str());
+
+			if !self.layouts.contains_key(&new_name) {
+				return Ok(new_name);
+			}
 		}
 		Err(())
 	}
@@ -216,12 +218,16 @@ impl LayoutAnalysis {
 		let layout_str = Self::format_layout_str(layout_str.to_string());
 		let mut layout = Layout::from_str(layout_str.as_str());
 		layout.score = self.score(&layout, usize::MAX);
-		let placeholder_name = self.placeholder_name(&layout, );
+		let placeholder_name = self.placeholder_name(&layout, Some(layout_str));
 	}
 
-	pub fn save(&self, layout: Layout) {
+	pub fn save(&self, layout: Layout, name: String) -> Result<()> {
 		let f = std::fs::OpenOptions::new()
-			.open(path)
+			.write(true)
+            .create(true)
+            .truncate(true)
+			.open(format!("static/layouts/{}/{}.kb", self.language, name))?;
+		Ok(())
 	}
 
 	pub fn analyze(&self, layout: &Layout) {
@@ -338,12 +344,12 @@ impl LayoutAnalysis {
 		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
 		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
 		let trigram_data = self.trigram_stats(layout, trigram_precision);
-		score -= 1.4 * (self.effort(layout) - 0.9);
+		score -= 1.3 * (self.effort(layout) - 0.7);
 		score -= 15.0 * sfb;
-		score -= 3.0 * dsfb;
-		score += 0.6 * trigram_data.inrolls;
-		score += 0.4 * trigram_data.outrolls;
-		score += 0.4 * trigram_data.onehands;
+		score -= 2.5 * dsfb;
+		score += 0.8 * trigram_data.inrolls;
+		score += 0.65 * trigram_data.outrolls;
+		score += 0.5 * trigram_data.onehands;
 		score += 0.5 * trigram_data.alternates;
 		score += 0.25 * trigram_data.alternates_sfs;
 		score -= 1.5 * trigram_data.redirects;
