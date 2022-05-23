@@ -1,10 +1,5 @@
-use std::collections::HashMap;
-
 pub static COL_TO_FINGER: [u8; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
 pub const LAYOUT_GENERATION_COUNT: usize = 1000;
-
-pub type LCharToFinger = HashMap<char, u8>;
-pub type LMatrix = [[char; 3]; 10];
 
 #[derive(Debug, Copy, Clone)]
 pub struct Pos {
@@ -43,15 +38,8 @@ const fn get_possible_swaps() -> [PosPair; 435] {
 	res
 }
 
-pub static EFFORT_MAP: [[f64; 3]; 10] = [
-	[3.3, 1.6, 3.1],
-	[2.5, 1.3, 2.7],
-	[2.1, 1.1, 2.4],
-	[2.3, 1.0, 1.8],
-	[2.6, 2.9, 3.7],
-	[3.4, 2.9, 2.2],
-	[2.2, 1.0, 1.8],
-	[2.0, 1.1, 2.4],
-	[2.4, 1.3, 2.7],
-	[3.0, 1.6, 3.3]
+pub static EFFORT_MAP: [f64; 30] = [
+	3.3, 2.5, 2.1, 2.3, 2.6, 3.4, 2.2, 2.0, 2.4, 3.0,
+	1.6, 1.3, 1.1, 1.0, 2.9, 2.9, 1.0, 1.1, 1.3, 1.6,
+	3.1, 2.7, 2.4, 1.8, 3.7, 2.2, 1.8, 2.4, 2.7, 3.3
 ];

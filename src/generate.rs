@@ -7,18 +7,21 @@ use crate::analysis::*;
 use crate::trigram_patterns::{TRIGRAM_COMBINATIONS, TrigramPattern};
 use crate::analyze::{LayoutAnalysis, TrigramStats};
 
+pub type CharToFinger = HashMap<char, u8>;
+pub type Matrix = [char; 30];
+
 #[derive(Default, Clone)]
 pub struct Layout {
-	pub matrix: LMatrix,
-	pub char_to_finger: LCharToFinger,
+	pub matrix: Matrix,
+	pub char_to_finger: CharToFinger,
 	pub score: f64
 }
 
 impl Layout {
 	pub fn new() -> Layout {
 		Layout {
-			matrix: [['.'; 3]; 10],
-			char_to_finger: LCharToFinger::new(),
+			matrix: ['.'; 30],
+			char_to_finger: CharToFinger::new(),
 			score: 0.0
 		}
 	}
@@ -30,19 +33,19 @@ impl Layout {
 		let mut new_layout = Layout::new();
 
 		for (i, c) in layout.chars().enumerate() {
-			new_layout.matrix[i%10][i/10] = c;
+			new_layout.matrix[i] = c;
 			new_layout.char_to_finger.insert(c, COL_TO_FINGER[i%10]);
 		}
 		new_layout
 	}
 
-	pub fn char(&self, x: usize, y: usize) -> char {
-		assert![x < 10 && y < 3];
-		self.matrix[x][y]
+	pub fn char(&mut self, x: usize, y: usize) -> char {
+		assert!(x < 10 && y < 3);
+		self.matrix[x + 10*y]
 	}
 
 	pub fn char_by_index(&self, i: usize) -> char {
-		self.matrix[i%10][i/10]
+		self.matrix[i]
 	}
 
 	pub fn swap(&mut self, x1: usize, y1: usize, x2: usize, y2: usize) -> bool {
@@ -51,8 +54,8 @@ impl Layout {
 			let char1 = self.char(x1, y1);
 			let char2 = self.char(x2, y2);
 
-			self.matrix[x1][y1] = char2;
-			self.matrix[x2][y2] = char1;
+			self.matrix[x1 + 10*y1] = char2;
+			self.matrix[x2 + 10*y2] = char1;
 			self.char_to_finger.insert(char1, COL_TO_FINGER[x2]);
 			self.char_to_finger.insert(char2, COL_TO_FINGER[x1]);
 
@@ -66,8 +69,8 @@ impl Layout {
 		let char1 = self.char(x1, y1);
 		let char2 = self.char(x2, y2);
 
-		self.matrix[x1][y1] = char2;
-		self.matrix[x2][y2] = char1;
+		self.matrix[x1 + 10*y1] = char2;
+		self.matrix[x2 + 10*y2] = char1;
 		self.char_to_finger.insert(char1, COL_TO_FINGER[x2]);
 		self.char_to_finger.insert(char2, COL_TO_FINGER[x1]);
 	}
@@ -96,7 +99,7 @@ impl Layout {
 		let start_pos = index*2 + 3;
 		for i in 0..2 {
 			for j in 0..3 {
-				new_index[2*j + i] = self.matrix[start_pos + i][j];
+				new_index[2*j + i] = self.matrix[start_pos + i + 10*j];
 			}
 		}
 		new_index
@@ -133,15 +136,15 @@ impl Layout {
 impl std::fmt::Display for Layout {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		let mut res = String::with_capacity(63);
-		for y in 0..3 {
-			res.push('\n');
-			for x in 0..10 {
-				res.push(self.char(x, y));
-				res.push(' ');
-				if (x + 6) % 10 == 0 {
-					res.push(' ');
-				}
+		for (i, c) in self.matrix.iter().enumerate() {
+			if i % 10 == 0 {
+				res.push('\n');
 			}
+			if (i + 6) % 10 == 0 {
+				res.push(' ');
+			}
+			res.push(*c);
+			res.push(' ');
 		}
 		write![f, "{}", res]
 	}
@@ -208,27 +211,27 @@ impl LayoutGeneration {
 		}
 	}
 
-	pub fn exclude_chars(&self, excluded: &str, layout_name: &str) -> Vec<PosPair> {
-		let layout = self.analysis.layout_by_name(layout_name)
-			.unwrap_or_else(|| panic!("layout {} does not exist", layout_name));
+	// pub fn exclude_chars(&self, excluded: &str, layout_name: &str) -> Vec<PosPair> {
+	// 	let layout = self.analysis.layout_by_name(layout_name)
+	// 		.unwrap_or_else(|| panic!("layout {} does not exist", layout_name));
 
-		let i_to_char = |index: usize, layout: &Layout| -> char {
-			layout.char(index % 10, index / 10)
-		};
-		let i_to_pos = |index: usize| -> Pos {
-			Pos{x: index % 10, y: index / 10}
-		};
+	// 	let i_to_char = |index: usize, layout: &Layout| -> char {
+	// 		layout.char(index % 10, index / 10)
+	// 	};
+	// 	let i_to_pos = |index: usize| -> Pos {
+	// 		Pos{x: index % 10, y: index / 10}
+	// 	};
 
-		let mut res: Vec<PosPair> = Vec::new();
-		for pos1 in 0..30 {
-			for pos2 in (pos1 + 1)..30 {
-				if !excluded.contains(i_to_char(pos1, &layout)) {
-					res.push(PosPair(i_to_pos(pos1),i_to_pos(pos2)))
-				}
-			}
-		}
-		res
-	}
+	// 	let mut res: Vec<PosPair> = Vec::new();
+	// 	for pos1 in 0..30 {
+	// 		for pos2 in (pos1 + 1)..30 {
+	// 			if !excluded.contains(i_to_char(pos1, &layout)) {
+	// 				res.push(PosPair(i_to_pos(pos1),i_to_pos(pos2)))
+	// 			}
+	// 		}
+	// 	}
+	// 	res
+	// }
 
 	pub fn generate(&self) -> Layout {
 		let layout = Layout::random(self.available_chars);
@@ -240,7 +243,7 @@ impl LayoutGeneration {
 			return;
 		}
 		let mut layouts: Vec<LayoutScore> = Vec::with_capacity(amount);
-		let possible_swaps = self.exclude_chars(pinned_chars, base_name).as_slice();
+		let possible_swaps = POSSIBLE_SWAPS; // self.exclude_chars(pinned_chars, base_name).as_slice();
 		let start = std::time::Instant::now();
 		let i: AtomicUsize = AtomicUsize::new(0);
 		(0..amount).into_par_iter()
@@ -392,10 +395,8 @@ impl PerCharStats {
 	}
 
 	pub fn from_layout(layout: Layout) {
-		for col in layout.matrix {
-			for char in col {
-				println!("{}", layout.char_to_finger.get(&char).unwrap());
-			}
+		for c in layout.matrix {
+			println!("{}", layout.char_to_finger.get(&c).unwrap());
 		}
 	}
 }

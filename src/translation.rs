@@ -2,9 +2,6 @@ use std::collections::HashMap;
 use std::borrow::Cow;
 use anyhow::Result;
 
-const USIZE_BOUND: usize = 0x110000;
-const SUPPORTED_CHARS: usize = 8500;
-
 pub struct Translator {
     pub table: HashMap<char, Cow<'static, str>>,
     pub(crate) ignore_unknown: bool,

@@ -76,6 +76,7 @@ impl std::fmt::Display for LayoutStats {
 pub struct LayoutAnalysis {
 	layouts: IndexMap<String, Layout>,
 	language_data: LanguageData,
+	sfb_indices: [(usize, usize); 48]
 	// col_distance: [f64; 6],
 	// index_distance: [f64; 30]
 }
@@ -85,6 +86,7 @@ impl LayoutAnalysis {
 		let mut new_analysis = LayoutAnalysis {
 			layouts: IndexMap::new(),
 			language_data: LanguageData::new(language),
+			sfb_indices: Self::get_sfb_indices()
 			// col_distance: [1.0, 2.0, 1.0, 1.0, 2.0, 1.0],
 			// index_distance: Self::get_index_distance(1.4)
 
@@ -92,6 +94,23 @@ impl LayoutAnalysis {
 		new_analysis.layouts = new_analysis.import_layouts().unwrap();
 		new_analysis
 	}
+
+	fn get_sfb_indices() -> [(usize, usize); 48] {
+        let mut res: Vec<(usize, usize)> = Vec::new();
+        for i in [0, 1, 2, 7, 8, 9] {
+            let chars = [i, i+10, i+20];
+            for c in chars.iter().combinations(2) {
+                res.push((*c[0], *c[1]));
+            }
+        }
+        for i in [0, 2] {
+            let chars = [3+i, 13+i, 23+i, 4+i, 14+i, 24+i];
+            for c in chars.iter().combinations(2) {
+                res.push((*c[0], *c[1]));
+            }
+        }
+        res.try_into().unwrap()
+    }
 
 	fn get_index_distance(lat_penalty: f64) -> [f64; 30] {
 		let mut res = [0.0; 30];
@@ -197,7 +216,7 @@ impl LayoutAnalysis {
 		layout.score = self.score(&layout, usize::MAX);
 
 		for i in 1..100usize {
-			let mut new_name = layout_str[10..14].to_string();;
+			let mut new_name = layout_str[10..14].to_string();
 			new_name.push_str(format!("{}", i).as_str());
 
 			if !self.layouts.contains_key(&new_name) {
@@ -243,7 +262,7 @@ impl LayoutAnalysis {
 		for y in 0..3 {
 			for (n, layout) in [l1, l2].into_iter().enumerate() {
 				for x in 0..10 {
-					print!("{} ", layout.matrix[x][y]);
+					print!("{} ", layout.matrix[x + 10*y]);
 					if x == 4 {
 						print!(" ")
 					}
@@ -312,10 +331,8 @@ impl LayoutAnalysis {
 
 	pub fn effort(&self, layout: &Layout) -> f64 {
 		let mut res: f64 = 0.0;
-		for x in 0..10 {
-			for (y, c) in layout.matrix[x].iter().enumerate() {
-				res += EFFORT_MAP[x][y] * self.language_data.characters.get(c).unwrap_or(&0.0);
-			}
+		for (c, e) in layout.matrix.iter().zip(EFFORT_MAP) {
+			res += e * self.language_data.characters.get(c).unwrap_or(&0.0);
 		}
 		res
 	}
@@ -339,33 +356,14 @@ impl LayoutAnalysis {
 	}
 
 	pub fn bigram_percent(&self, layout: &Layout, data: &BigramData) -> f64 {
-		let mut sfb: f64 = 0.0;
-		for i in 0..3 {
-			sfb += self._sfb_for_finger_iter(layout.matrix[i].iter(), data);
+		let mut res = 0.0;
+		for (i1, i2) in self.sfb_indices {
+			let c1 = layout.matrix[i1];
+			let c2 = layout.matrix[i2];
+			res += data.get(&[c1, c2]).unwrap_or(&0.0);
+			res += data.get(&[c2, c1]).unwrap_or(&0.0);
 		}
-		for i in 0..2 {
-			sfb += self._sfb_for_finger_iter(layout.get_index(i).iter(), data);
-		}
-		for i in 7..10 {
-			sfb += self._sfb_for_finger_iter(layout.matrix[i].iter(), data);
-		}
-		sfb
-	}
-
-	fn _sfb_for_finger_iter<'a>(&self, finger: impl Iterator<Item=&'a char>, data: &BigramData) -> f64 {
-		let mut sfb = 0.0;
-		finger
-			.permutations(2)
-			.for_each(|x| {
-				// for thing in &x {
-				// 	print!("{}", thing);
-				// }
-				// print!(" ");
-				let bi = ((*x[0] as u64) << 32) + *x[1] as u64;
-				sfb += data.get(&bi).unwrap_or(&0.0);
-			});
-		// println!();
-		sfb
+		res
 	}
 
 	pub fn trigram_stats(&self, layout: &Layout, trigram_precision: usize) -> TrigramStats {

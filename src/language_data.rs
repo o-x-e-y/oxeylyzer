@@ -6,7 +6,7 @@ use serde::Deserialize;
 use serde_json;
 
 pub type CharacterData = HashMap<char, f64>;
-pub type BigramData = HashMap<u64, f64>;
+pub type BigramData = HashMap<[char; 2], f64>;
 pub type TrigramData = Vec<([char; 3], f64)>;
 
 #[derive(Deserialize)]
@@ -24,7 +24,7 @@ impl LanguageDataInter {
 		let mut res = BigramData::new();
 		for (bigram, freq) in data {
 			let bigram_vec = bigram.chars().collect::<Vec<char>>();
-			let new_bigram = ((bigram_vec[0] as u64) << 32) + bigram_vec[1] as u64;
+			let new_bigram = [bigram_vec[0], bigram_vec[1]];
 			res.insert(new_bigram, freq);
 		}
 		res
