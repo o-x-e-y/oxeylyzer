@@ -1,6 +1,6 @@
 [profile.release]
 opt-level = 3
-# lto = "thin"
+lto = true
 
 [package]
 name = "layout_analyser"
@@ -23,3 +23,4 @@ unicode-normalization = "0.1.19"
 indexmap = {version = "1.8.1", features = ["serde"]}
 clap = {version = "3.1.18", features = ["cargo", "unstable-multicall"]}
 shlex = "1.1.0"
+fxhash = "0.2.1"

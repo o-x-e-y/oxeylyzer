@@ -1,6 +1,11 @@
+use fxhash::FxHashMap;
+
+use crate::analyze::TrigramStats;
+use crate::generate::Layout;
+
 pub struct CachedLayout {
 	layout: Layout,
-	char_stats: HashMap<char, PerCharStats>
+	char_stats: FxHashMap<char, PerCharStats>
 }
 
 pub struct PerCharStats {

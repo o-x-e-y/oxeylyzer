@@ -1,12 +1,12 @@
-use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use fxhash::{FxHashMap, FxHashSet};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use crate::analysis::*;
 use crate::trigram_patterns::{TRIGRAM_COMBINATIONS, TrigramPattern};
 use crate::analyze::LayoutAnalysis;
 
-pub type CharToFinger = HashMap<char, u8>;
+pub type CharToFinger = FxHashMap<char, u8>;
 pub type Matrix = [char; 30];
 
 #[derive(Default, Clone)]
@@ -20,7 +20,7 @@ impl Layout {
 	pub fn new() -> Layout {
 		Layout {
 			matrix: ['.'; 30],
-			char_to_finger: CharToFinger::new(),
+			char_to_finger: CharToFinger::default(),
 			score: 0.0
 		}
 	}
@@ -117,7 +117,7 @@ impl Layout {
 	}
 
 	pub fn is_valid_layout(layout: &str) -> bool {
-		let chars: HashSet<char> = HashSet::from_iter(layout.chars());
+		let chars: FxHashSet<char> = FxHashSet::from_iter(layout.chars());
 		layout.chars().count() == 30 && chars.len() == 30
 	}
 
@@ -153,6 +153,7 @@ pub struct LayoutGeneration {
 	pub available_chars: [char; 30],
 	pub analysis: LayoutAnalysis,
 	pub improved_layout: Layout,
+	pub last_generated: Option<Vec<(Layout, f64)>>,
 	cols: [usize; 6]
 }
 
@@ -162,6 +163,7 @@ impl LayoutGeneration {
 			analysis: LayoutAnalysis::new(language),
 			improved_layout: Layout::new(),
 			available_chars: Self::available_chars(language),
+			last_generated: None,
 			cols: [0, 1, 2, 7, 8, 9],
 		}
 	}
@@ -280,7 +282,7 @@ impl LayoutGeneration {
 	// 	layout
 	// }
 
-	pub fn generate_n(&self, amount: usize) {
+	pub fn generate_n(&mut self, amount: usize) {
 		if amount == 0 {
 			return;
 		}
@@ -304,6 +306,7 @@ impl LayoutGeneration {
 		for (layout, score) in layouts.iter().take(10) {
 			println!("{}\nscore: {:.5}", layout, score);
 		}
-		println!("worst layout:\n{}\n{}", layouts[layouts.len()-1].0, layouts[layouts.len()-1].1)
+		println!("worst layout:\n{}\n{}", layouts[layouts.len()-1].0, layouts[layouts.len()-1].1);
+		self.last_generated = Some(layouts);
 	}
 }

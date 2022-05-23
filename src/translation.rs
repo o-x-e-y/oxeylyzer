@@ -232,7 +232,7 @@ impl TranslatorBuilder {
                     ('Ě', "*e"), ('É', "*x"), ('Í', "*i"), ('Ň', "*n"), ('Ó', "*o"), ('Ř', "*r"),
                     ('Š', "*s"), ('Ť', "*t"), ('Ů', "*u"), ('Ú', "*b"), ('Ý', "*y"), ('Ž', "*z")
                 ])
-                .letters("øáíě"))
+                .letters("áíě"))
         } else if language == "dutch" {
             Ok(self
                 .letters("áèéçëíîó"))

@@ -1,27 +1,28 @@
-use std::collections::HashMap;
+extern crate fxhash;
+use fxhash::FxHashMap;
 
 use std::fs::File;
 use std::io::prelude::*;
 use serde::Deserialize;
 use serde_json;
 
-pub type CharacterData = HashMap<char, f64>;
-pub type BigramData = HashMap<[char; 2], f64>;
+pub type CharacterData = FxHashMap<char, f64>;
+pub type BigramData = FxHashMap<[char; 2], f64>;
 pub type TrigramData = Vec<([char; 3], f64)>;
 
 #[derive(Deserialize)]
 struct LanguageDataInter {
-	pub characters: HashMap<char, f64>,
-	pub bigrams: HashMap<String, f64>,
-	pub skipgrams: HashMap<String, f64>,
-	pub trigrams: HashMap<String, f64>,
+	pub characters: FxHashMap<char, f64>,
+	pub bigrams: FxHashMap<String, f64>,
+	pub skipgrams: FxHashMap<String, f64>,
+	pub trigrams: FxHashMap<String, f64>,
 	#[serde(default)]
 	pub language: String
 }
 
 impl LanguageDataInter {
-	pub fn get_bigram_data(data: HashMap<String, f64>) -> BigramData {
-		let mut res = BigramData::new();
+	pub fn get_bigram_data(data: FxHashMap<String, f64>) -> BigramData {
+		let mut res = BigramData::default();
 		for (bigram, freq) in data {
 			let bigram_vec = bigram.chars().collect::<Vec<char>>();
 			let new_bigram = [bigram_vec[0], bigram_vec[1]];
@@ -30,7 +31,7 @@ impl LanguageDataInter {
 		res
 	}
 
-	pub fn get_trigram_data(data: HashMap<String, f64>) -> TrigramData {
+	pub fn get_trigram_data(data: FxHashMap<String, f64>) -> TrigramData {
 		let mut res = TrigramData::new();
 		for (trigram, freq) in data {
 			let trigram_vec = trigram.chars().collect::<Vec<char>>();

@@ -57,6 +57,7 @@ impl std::fmt::Display for LayoutStats {
 }
 
 pub struct LayoutAnalysis {
+	language: String,
 	layouts: IndexMap<String, Layout>,
 	language_data: LanguageData,
 	sfb_indices: [(usize, usize); 48]
@@ -67,6 +68,7 @@ pub struct LayoutAnalysis {
 impl LayoutAnalysis {
 	pub fn new(language: &str) -> LayoutAnalysis {
 		let mut new_analysis = LayoutAnalysis {
+			language: language.to_string(),
 			layouts: IndexMap::new(),
 			language_data: LanguageData::new(language),
 			sfb_indices: Self::get_sfb_indices()
@@ -74,7 +76,7 @@ impl LayoutAnalysis {
 			// index_distance: Self::get_index_distance(1.4)
 
 		};
-		new_analysis.layouts = new_analysis.import_layouts().unwrap();
+		new_analysis.layouts = new_analysis.load_layouts().unwrap();
 		new_analysis
 	}
 
@@ -141,10 +143,10 @@ impl LayoutAnalysis {
 			.replace(" ", "")
 	}
 
-	fn import_layouts(&mut self) -> Result<IndexMap<String, Layout>> {
+	fn load_layouts(&mut self) -> Result<IndexMap<String, Layout>> {
 		let mut res: IndexMap<String, Layout> = IndexMap::new();
 
-		let paths = std::fs::read_dir("static/layouts")?;
+		let paths = std::fs::read_dir(format!("static/layouts/{}", self.language))?;
 		for p in paths {
 			if let Ok(entry) = p &&
 			Self::is_kb_file(&entry) &&
@@ -193,22 +195,33 @@ impl LayoutAnalysis {
 		self.analyze(&l);
 	}
 
+	fn placeholder_name(&self, layout: &Layout, maybe_str: Option<String>) -> Result<String, ()> {
+		if let Some(layout_str) = maybe_str {
+			for i in 1..1000usize {
+				let mut new_name = layout_str[10..14].to_string();
+				new_name.push_str(format!("{}", i).as_str());
+
+				if !self.layouts.contains_key(&new_name) {
+					return Ok(new_name);
+				}
+			}
+		} else {
+			let layout_str = Self::format_layout_str(format!("{}", layout));
+			
+		}
+		Err(())
+	}
+
 	pub fn analyze_str(&mut self, layout_str: &str) {
 		let layout_str = Self::format_layout_str(layout_str.to_string());
 		let mut layout = Layout::from_str(layout_str.as_str());
 		layout.score = self.score(&layout, usize::MAX);
+		let placeholder_name = self.placeholder_name(&layout, );
+	}
 
-		for i in 1..100usize {
-			let mut new_name = layout_str[10..14].to_string();
-			new_name.push_str(format!("{}", i).as_str());
-
-			if !self.layouts.contains_key(&new_name) {
-				print!("{}", new_name);
-				self.analyze(&layout);
-				self.layouts.insert(new_name, layout);
-				return;
-			}
-		}
+	pub fn save(&self, layout: Layout) {
+		let f = std::fs::OpenOptions::new()
+			.open(path)
 	}
 
 	pub fn analyze(&self, layout: &Layout) {
