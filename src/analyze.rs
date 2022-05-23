@@ -54,7 +54,7 @@ impl std::fmt::Display for TrigramStats {
 struct LayoutStats {
 	sfb: f64,
 	dsfb: f64,
-	trigram_data: TrigramStats,
+	trigram_stats: TrigramStats,
 	// finger_speed: [f64; 8]
 }
 
@@ -68,38 +68,13 @@ impl std::fmt::Display for LayoutStats {
 		// let fspeed_print = fspeed.join("\n");
 		write!(
 			f, "Sfb:  {:.3}%\nDsfb: {:.3}%\n{}",
-			self.sfb * 100.0, self.dsfb * 100.0, self.trigram_data
+			self.sfb * 100.0, self.dsfb * 100.0, self.trigram_stats
 		)
 	}
 }
 
-#[derive(Clone)]
-pub struct LayoutDetailed {
-	layout: Layout,
-	name: String,
-	stats: LayoutStats,
-	pub(crate) score: f64
-}
-
-impl LayoutDetailed {
-	fn new(layout: Layout, name: String, stats: LayoutStats, score: f64) -> LayoutDetailed {
-		LayoutDetailed {
-			layout,
-			name,
-			stats,
-			score
-		}
-	}
-}
-
-impl std::fmt::Display for LayoutDetailed {
-	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}{}\n{}\nScore: {:.3}", self.name, self.layout, self.stats, self.score)
-	}
-}
-
 pub struct LayoutAnalysis {
-	layouts: IndexMap<String, LayoutDetailed>,
+	layouts: IndexMap<String, Layout>,
 	language_data: LanguageData,
 	// col_distance: [f64; 6],
 	// index_distance: [f64; 30]
@@ -149,7 +124,7 @@ impl LayoutAnalysis {
 	}
 
 	fn layout_name(entry: &std::fs::DirEntry) -> Option<String> {
-		if let Some(name_os) = entry.path().file_name() {
+		if let Some(name_os) = entry.path().file_stem() {
 			if let Some(name_str) = name_os.to_str() {
 				return Some(name_str.to_string())
 			}
@@ -157,26 +132,28 @@ impl LayoutAnalysis {
 		None
 	}
 
-	fn import_layouts(&mut self) -> Result<IndexMap<String, LayoutDetailed>> {
-		use std::fs;
-		let mut res: IndexMap<String, LayoutDetailed> = IndexMap::new();
+	fn format_layout_str(layout_str: String) -> String {
+		layout_str
+			.replace("\n", "")
+			.replace("\r", "")
+			.replace(" ", "")
+	}
 
-		let paths = fs::read_dir("static/layouts")?;
+	fn import_layouts(&mut self) -> Result<IndexMap<String, Layout>> {
+		let mut res: IndexMap<String, Layout> = IndexMap::new();
+
+		let paths = std::fs::read_dir("static/layouts")?;
 		for p in paths {
 			if let Ok(entry) = p &&
 			Self::is_kb_file(&entry) &&
 			let Some(name) = Self::layout_name(&entry) {
 				let content = std::fs::read_to_string(entry.path())?;
-				let layout_str = content
-					.replace("\n", "")
-					.replace("\r", "")
-					.replace(" ", "");
-				let layout = Layout::from_str(layout_str.as_str());
+				let layout_str = Self::format_layout_str(content);
 
-				let precision = self.language_data.trigrams.len();
-				let score = self.score(& layout, precision);
-				let stats = self.layout_stats( & layout, precision);
-				res.insert(name.clone(), LayoutDetailed::new(layout, name, stats, score));
+				let mut layout = Layout::from_str(layout_str.as_str());
+				layout.score = self.score(&layout, usize::MAX);
+
+				res.insert(name, layout);
 			}
 		}
 		res.sort_by(|_, a, _, b| {
@@ -185,43 +162,57 @@ impl LayoutAnalysis {
 		Ok(res)
 	}
 
+	fn get_layout_stats(&self, layout: &Layout) -> LayoutStats {
+		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
+		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
+		let trigram_stats = self.trigram_stats(layout, usize::MAX);
+		LayoutStats { sfb, dsfb, trigram_stats }
+	}
+
 	pub fn rank(&self) {
-		for layout in self.layouts.values() {
-			println!("{:12 }{}", format!("{:.3}:", layout.score), layout.name);
+		for (name, layout) in self.layouts.iter() {
+			println!("{:10}{}", format!("{:.3}:", layout.score), name);
 		}
 	}
 
-	pub fn detailed_layout_by_name(&self, name: &str) -> Option<&LayoutDetailed> {
+	pub fn layout_by_name(&self, name: &str) -> Option<&Layout> {
 		self.layouts.get(name)
 	}
 
-	pub fn layout_by_name(&self, name: &str) -> Option<Layout> {
-		let name_layout = self.detailed_layout_by_name(name);
-		match name_layout {
-			Some(n) => Some(n.layout.clone()),
-			_ => None
-		}
-	}
-
 	pub fn analyze_name(&self, name: &str) {
-		let layout = self.detailed_layout_by_name(name)
-			.unwrap_or_else(|| panic!("layout {} does not exist", name));
-		self.analyze(&layout);
+		let l = match self.layout_by_name(name) {
+  			Some(layout) => layout,
+  			None => {
+    			println!("layout {} does not exist!", name);
+    			return;
+  			}
+		};
+		print!("{}", name);
+		self.analyze(&l);
 	}
 
 	pub fn analyze_str(&mut self, layout_str: &str) {
-		let layout = Layout::from_str(layout_str);
-		let precision = self.language_data.trigrams.len();
-		let score = self.score(&layout, precision);
-		let stats = self.layout_stats(&layout, precision);
-		let name = layout_str[10..17].to_string();
-		let name_layout = LayoutDetailed::new(layout, name.clone(), stats, score);
-		self.analyze(&name_layout);
-		self.layouts.insert(name, name_layout);
+		let layout_str = Self::format_layout_str(layout_str.to_string());
+		let mut layout = Layout::from_str(layout_str.as_str());
+		layout.score = self.score(&layout, usize::MAX);
+
+		for i in 1..100usize {
+			let mut new_name = layout_str[10..14].to_string();;
+			new_name.push_str(format!("{}", i).as_str());
+
+			if !self.layouts.contains_key(&new_name) {
+				print!("{}", new_name);
+				self.analyze(&layout);
+				self.layouts.insert(new_name, layout);
+				return;
+			}
+		}
 	}
 
-	pub fn analyze(&self, layout: &LayoutDetailed) {
-		println!("{}", layout);
+	pub fn analyze(&self, layout: &Layout) {
+		let stats = self.get_layout_stats(layout);
+		
+		println!("{}\n{}\nScore: {:.3}", layout, stats, layout.score);
 		// let x = get_trigram_combinations2();
 		// for (i, combination) in x.iter().enumerate() {
 		// 	let c1 = i & 0b111;
@@ -234,17 +225,25 @@ impl LayoutAnalysis {
 	}
 
 	pub fn compare_name(&self, name1: &str, name2: &str) {
-		let layouts: [&LayoutDetailed; 2] = [
-			self.detailed_layout_by_name(name1)
-				.unwrap_or_else(|| panic!("layout {} does not exist", name1)),
-			self.detailed_layout_by_name(name2)
-				.unwrap_or_else(|| panic!("layout {} does not exist", name2))
-		];
-		println!("\n{:29}{}", layouts[0].name, layouts[1].name);
+		let l1 = match self.layout_by_name(name1) {
+  			Some(layout) => layout,
+  			None => {
+    			println!("layout {} does not exist!", name1);
+    			return;
+  			}
+		};
+		let l2 = match self.layout_by_name(name2) {
+  			Some(layout) => layout,
+  			None => {
+    			println!("layout {} does not exist!", name2);
+    			return;
+  			}
+		};
+		println!("\n{:29}{}", name1, name2);
 		for y in 0..3 {
-			for (n, layout) in layouts.iter().enumerate() {
+			for (n, layout) in [l1, l2].into_iter().enumerate() {
 				for x in 0..10 {
-					print!("{} ", layout.layout.matrix[x][y]);
+					print!("{} ", layout.matrix[x][y]);
 					if x == 4 {
 						print!(" ")
 					}
@@ -255,8 +254,10 @@ impl LayoutAnalysis {
 			}
 			println!();
 		}
-		let ts1 = &layouts[0].stats.trigram_data;
-		let ts2 = &layouts[1].stats.trigram_data;
+		let s1 = self.get_layout_stats(l1);
+		let s2 = self.get_layout_stats(l2);
+		let ts1 = s1.trigram_stats;
+		let ts2 = s2.trigram_stats;
 		// let fs1 = &layouts[0].stats.finger_speed;
 		// let fs2 = &layouts[1].stats.finger_speed;
 		// const BASE: String = String::new();
@@ -285,8 +286,8 @@ impl LayoutAnalysis {
 			//"{}\n\n",
 			"Score:            {:.3}     Score:            {:.3}\n"
 		),
-			layouts[0].stats.sfb*100.0, layouts[1].stats.sfb*100.0,
-			layouts[0].stats.dsfb*100.0, layouts[1].stats.dsfb*100.0,
+			s1.sfb*100.0, s2.sfb*100.0,
+			s1.dsfb*100.0, s2.dsfb*100.0,
 			ts1.inrolls*100.0, ts2.inrolls*100.0,
 			ts1.outrolls*100.0, ts2.outrolls*100.0,
 			(ts1.inrolls + ts1.outrolls)*100.0, (ts2.inrolls + ts2.outrolls)*100.0,
@@ -300,7 +301,7 @@ impl LayoutAnalysis {
 			ts1.other*100.0, ts2.other*100.0,
 			ts1.invalid*100.0, ts2.invalid*100.0,
 			//fspeed_print,
-			layouts[0].score, layouts[1].score
+			l1.score, l2.score
 		);
 	}
 
@@ -330,10 +331,10 @@ impl LayoutAnalysis {
 		score += 0.6 * trigram_data.inrolls;
 		score += 0.4 * trigram_data.outrolls;
 		score += 0.4 * trigram_data.onehands;
-		score += 0.4 * trigram_data.alternates;
-		score += 0.15 * trigram_data.alternates_sfs;
+		score += 0.5 * trigram_data.alternates;
+		score += 0.25 * trigram_data.alternates_sfs;
 		score -= 1.5 * trigram_data.redirects;
-		score -= 7.5 * trigram_data.bad_redirects;
+		score -= 5.0 * trigram_data.bad_redirects;
 		score
 	}
 
@@ -386,19 +387,6 @@ impl LayoutAnalysis {
 			}
 		}
 		freqs
-	}
-
-	fn layout_stats(&self, layout: &Layout, trigram_precision: usize) -> LayoutStats {
-		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
-		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
-		let trigram_data = self.trigram_stats(layout, trigram_precision);
-		// let finger_speed = self.finger_speed(layout);
-		LayoutStats {
-			sfb,
-			dsfb,
-			trigram_data,
-			// finger_speed
-		}
 	}
 }
 

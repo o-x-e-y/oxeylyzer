@@ -11,11 +11,16 @@ use crate::analyze::{LayoutAnalysis, TrigramStats};
 pub struct Layout {
 	pub matrix: LMatrix,
 	pub char_to_finger: LCharToFinger,
+	pub score: f64
 }
 
 impl Layout {
 	pub fn new() -> Layout {
-		Layout{ matrix: [['.'; 3]; 10], char_to_finger: LCharToFinger::new() }
+		Layout {
+			matrix: [['.'; 3]; 10],
+			char_to_finger: LCharToFinger::new(),
+			score: 0.0
+		}
 	}
 
 	pub fn from_str(layout: &str) -> Layout {
@@ -133,6 +138,9 @@ impl std::fmt::Display for Layout {
 			for x in 0..10 {
 				res.push(self.char(x, y));
 				res.push(' ');
+				if (x + 6) % 10 == 0 {
+					res.push(' ');
+				}
 			}
 		}
 		write![f, "{}", res]
