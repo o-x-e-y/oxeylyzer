@@ -1,6 +1,3 @@
-#![feature(iter_advance_by)]
-#![feature(const_eval_limit)]
-#![const_eval_limit = "100000000"]
 #![feature(let_chains)]
 
 pub mod language_data;

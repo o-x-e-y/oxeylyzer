@@ -1,7 +1,7 @@
 [profile.release]
 opt-level = 3
-lto = true
-target-cpu = "native"
+# lto = true
+# target-cpu = "native"
 
 [package]
 name = "layout_analyser"

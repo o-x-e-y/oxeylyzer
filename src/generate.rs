@@ -38,7 +38,11 @@ impl Layout {
 		new_layout
 	}
 
-	pub fn char(&mut self, x: usize, y: usize) -> char {
+	pub fn layout_str(&self) -> String {
+		self.matrix.iter().collect::<String>()
+	}
+
+	pub fn char(&self, x: usize, y: usize) -> char {
 		assert!(x < 10 && y < 3);
 		self.matrix[x + 10*y]
 	}
@@ -47,16 +51,16 @@ impl Layout {
 		self.matrix[i]
 	}
 
-	pub fn swap(&mut self, x1: usize, y1: usize, x2: usize, y2: usize) -> bool {
-		if x1 < 10 && x2 < 10 && y1 < 3 && y2 < 3 {
+	pub fn swap(&mut self, i1: usize, i2: usize) -> bool {
+		if i1 < 30 && i2 < 30 {
 
-			let char1 = self.char(x1, y1);
-			let char2 = self.char(x2, y2);
+			let char1 = self.matrix[i1];
+			let char2 = self.matrix[i2];
 
-			self.matrix[x1 + 10*y1] = char2;
-			self.matrix[x2 + 10*y2] = char1;
-			self.char_to_finger.insert(char1, COL_TO_FINGER[x2]);
-			self.char_to_finger.insert(char2, COL_TO_FINGER[x1]);
+			self.matrix[i1] = char2;
+			self.matrix[i2] = char1;
+			self.char_to_finger.insert(char1, COL_TO_FINGER[i2 % 10]);
+			self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
 
 			return true
 		}
@@ -64,28 +68,28 @@ impl Layout {
 		false
 	}
 
-	pub fn swap_no_bounds(&mut self, x1: usize, y1: usize, x2: usize, y2: usize) {
-		let char1 = self.char(x1, y1);
-		let char2 = self.char(x2, y2);
+	pub fn swap_no_bounds(&mut self, i1: usize, i2: usize) {
+		let char1 = self.matrix[i1];
+		let char2 = self.matrix[i2];
 
-		self.matrix[x1 + 10*y1] = char2;
-		self.matrix[x2 + 10*y2] = char1;
-		self.char_to_finger.insert(char1, COL_TO_FINGER[x2]);
-		self.char_to_finger.insert(char2, COL_TO_FINGER[x1]);
+		self.matrix[i1] = char2;
+		self.matrix[i2] = char1;
+		self.char_to_finger.insert(char1, COL_TO_FINGER[i2 % 10]);
+		self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
 	}
 
 	pub fn swap_pair(&mut self, pair: &PosPair) -> bool {
-		self.swap(pair.0.x, pair.0.y, pair.1.x, pair.1.y)
+		self.swap(pair.0, pair.1)
 	}
 
 	pub fn swap_pair_no_bounds(&mut self, pair: &PosPair) {
-		self.swap_no_bounds(pair.0.x, pair.0.y, pair.1.x, pair.1.y);
+		self.swap_no_bounds(pair.0, pair.1);
 	}
 
 	pub fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize) {
-		self.swap_no_bounds(col1, 0, col2, 0);
-		self.swap_no_bounds(col1, 1, col2, 1);
-		self.swap_no_bounds(col1, 2, col2, 2);
+		self.swap_no_bounds(col1, col2);
+		self.swap_no_bounds(col1 + 10, col2 + 10);
+		self.swap_no_bounds(col1 + 20, col2 + 20);
 	}
 
 	pub fn swap_indexes(&mut self) {
@@ -241,7 +245,7 @@ impl LayoutGeneration {
 
 	pub fn optimize(&self, mut layout: Layout, trigram_precision: usize, possible_swaps: &[PosPair]) -> Layout {
 		let mut best_score = f64::MIN / 2.0;
-		let mut best_swap = &PosPair::new();
+		let mut best_swap = PosPair::default();
 		let mut score = f64::MIN;
 		while best_score != score {
 			while best_score != score {
@@ -251,11 +255,11 @@ impl LayoutGeneration {
 					let current = self.analysis.score(&layout, trigram_precision);
 					if current > score {
 						score = current;
-						best_swap = swap;
+						best_swap = *swap;
 					}
 					layout.swap_pair_no_bounds(swap);
 				}
-				layout.swap_pair_no_bounds(best_swap);
+				layout.swap_pair_no_bounds(&best_swap);
 			}
 			score = self.optimize_cols(&mut layout, trigram_precision, Some(score));
 		}
@@ -308,5 +312,124 @@ impl LayoutGeneration {
 		}
 		println!("worst layout:\n{}\n{}", layouts[layouts.len()-1].0, layouts[layouts.len()-1].1);
 		self.last_generated = Some(layouts);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn layout_str() {
+		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		assert_eq!(
+			qwerty.matrix,
+			[
+				'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p',
+				'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';',
+				'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'
+			]
+		);
+		assert_eq!(qwerty.layout_str(), "qwertyuiopasdfghjkl;zxcvbnm,./".to_string());
+	}
+
+	#[test]
+	fn swap() {
+		let mut qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		qwerty.swap(10, 11);
+		assert_eq!(qwerty.layout_str(), "qwertyuiopsadfghjkl;zxcvbnm,./".to_owned());
+	}
+
+	#[test]
+	fn swap_no_bounds() {
+		let mut qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		qwerty.swap_no_bounds(9, 12);
+		assert_eq!(qwerty.layout_str(), "qwertyuiodaspfghjkl;zxcvbnm,./".to_string());
+	}
+
+	#[test]
+	fn swap_cols_no_bounds() {
+		let mut qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		qwerty.swap_cols_no_bounds(1, 9);
+		assert_eq!(
+			qwerty.layout_str(), "qpertyuiowa;dfghjklsz/cvbnm,.x".to_string()
+		);
+	}
+
+	#[test]
+	fn swap_pair() {
+		let mut qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let new_swap = PosPair::new(0, 29);
+		qwerty.swap_pair(&new_swap);
+		assert_eq!(qwerty.layout_str(), "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string());
+	}
+
+	#[test]
+	fn swap_pair_no_bounds() {
+		let mut qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let new_swap = PosPair::new(0, 29);
+		qwerty.swap_pair_no_bounds(&new_swap);
+		assert_eq!(qwerty.layout_str(), "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string());
+	}
+
+	#[test]
+	fn char_to_finger() {
+		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		assert_eq!(qwerty.char_to_finger.get(&'a'), Some(&0u8));
+		assert_eq!(qwerty.char_to_finger.get(&'w'), Some(&1u8));
+		assert_eq!(qwerty.char_to_finger.get(&'c'), Some(&2u8));
+
+		assert_eq!(qwerty.char_to_finger.get(&'r'), Some(&3u8));
+		assert_eq!(qwerty.char_to_finger.get(&'b'), Some(&3u8));
+
+		assert_eq!(qwerty.char_to_finger.get(&'h'), Some(&4u8));
+		assert_eq!(qwerty.char_to_finger.get(&'u'), Some(&4u8));
+
+		assert_eq!(qwerty.char_to_finger.get(&'i'), Some(&5u8));
+		assert_eq!(qwerty.char_to_finger.get(&'.'), Some(&6u8));
+		assert_eq!(qwerty.char_to_finger.get(&';'), Some(&7u8));
+	}
+
+	#[test]
+	fn char() {
+		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		assert_eq!(qwerty.char(4, 1), 'g');
+		assert_eq!(qwerty.char(9, 2), '/');
+		assert_eq!(qwerty.char(8, 1), 'l');
+	}
+
+	#[test]
+	fn char_by_index() {
+		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		assert_eq!(qwerty.char_by_index(10), 'a');
+		assert_eq!(qwerty.char_by_index(24), 'b');
+		assert_eq!(qwerty.char_by_index(22), 'c');
+	}
+
+	#[test]
+	fn get_trigram_pattern() {
+		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		assert_eq!(TrigramPattern::Alternate, qwerty.get_trigram_pattern(&['r', 'o', 'd']));
+		assert_eq!(TrigramPattern::AlternateSfs, qwerty.get_trigram_pattern(&['j', 'a', 'y']));
+
+		assert_eq!(TrigramPattern::Inroll, qwerty.get_trigram_pattern(&['w', 'o', 'u']));
+		assert_eq!(TrigramPattern::Outroll, qwerty.get_trigram_pattern(&['m', 'o', 't']));
+		assert_eq!(TrigramPattern::Onehand, qwerty.get_trigram_pattern(&['s', 'e', 'r']));
+
+		assert_eq!(TrigramPattern::Redirect, qwerty.get_trigram_pattern(&['y', 'o', 'u']));
+		assert_eq!(TrigramPattern::BadRedirect, qwerty.get_trigram_pattern(&['s', 'a', 'd']));
+
+		assert_eq!(TrigramPattern::Other, qwerty.get_trigram_pattern(&['s', 's', 'h']));
+		assert_eq!(TrigramPattern::Other, qwerty.get_trigram_pattern(&['s', 's', 's']));
+
+		assert_eq!(TrigramPattern::Invalid, qwerty.get_trigram_pattern(&['d', '\'', 'n']));
+		assert_eq!(TrigramPattern::Invalid, qwerty.get_trigram_pattern(&['\'', 'l', 'l']));
+		assert_eq!(TrigramPattern::Invalid, qwerty.get_trigram_pattern(&['l', 'l', ']']));
+	}
+
+	#[test]
+	fn thing() {
+		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		assert_eq!(qwerty.score, 0.0);
 	}
 }

@@ -344,7 +344,7 @@ impl LayoutAnalysis {
 		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
 		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
 		let trigram_data = self.trigram_stats(layout, trigram_precision);
-		score -= 1.3 * (self.effort(layout) - 0.7);
+		score -= 1.4 * (self.effort(layout) - 0.6);
 		score -= 15.0 * sfb;
 		score -= 2.5 * dsfb;
 		score += 0.8 * trigram_data.inrolls;
