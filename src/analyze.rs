@@ -25,26 +25,61 @@ pub struct TrigramStats {
 
 impl std::fmt::Display for TrigramStats {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, 
-			"\nInrolls: {:.3}%\nOutrolls: {:.3}%\nTotal Rolls: {:.3}%\nOnehands: {:.3}%\n\n\
-			Alternates: {:.3}%\nAlternates (sfs): {:.3}%\nTotal Alternates: {:.3}%\n\nRedirects: {:.3}%\n\
-			Bad Redirects: {:.3}%\nTotal Redirects: {:.3}%",
-			self.inrolls*100.0, self.outrolls*100.0, (self.inrolls + self.outrolls)*100.0,
-			self.onehands*100.0, self.alternates*100.0, self.alternates_sfs*100.0,
-			(self.alternates + self.alternates_sfs)*100.0, self.redirects*100.0,self.bad_redirects*100.0,
-			(self.redirects + self.bad_redirects)*100.0)
+		write!(
+			f,
+			"Inrolls: {:.3}%\n
+			Outrolls: {:.3}%\n
+			Total Rolls: {:.3}%\n
+			Onehands: {:.3}%\n\n\
+			Alternates: {:.3}%\n
+			Alternates (sfs): {:.3}%\n
+			Total Alternates: {:.3}%\n\n
+			Redirects: {:.3}%\n\
+			Bad Redirects: {:.3}%\n
+			Total Redirects: {:.3}%",
+			self.inrolls*100.0,
+			self.outrolls*100.0,
+			(self.inrolls + self.outrolls)*100.0,
+			self.onehands*100.0,
+			self.alternates*100.0,
+			self.alternates_sfs*100.0,
+			(self.alternates + self.alternates_sfs)*100.0,
+			self.redirects*100.0,
+			self.bad_redirects*100.0,
+			(self.redirects + self.bad_redirects)*100.0
+		)
 	}
 }
 
 impl std::fmt::Debug for TrigramStats {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "\nInrolls: {:.3}%\nOutrolls: {:.3}%\nTotal Rolls: {:.3}%\nOnehands: {:.3}%\n\n\
-		Alternates: {:.3}%\nAlternates (sfs): {:.3}%\nTotal Alternates: {:.3}%\n\nRedirects: {:.3}%\n\
-		Bad Redirects: {:.3}%\nTotal Redirects: {:.3}%\n\nOther: {:.3}%\nInvalid: {:.3}%",
-			   self.inrolls*100.0, self.outrolls*100.0, (self.inrolls + self.outrolls)*100.0,
-			   self.onehands*100.0, self.alternates*100.0, self.alternates_sfs*100.0,
-			   (self.alternates + self.alternates_sfs)*100.0, self.redirects*100.0,self.bad_redirects*100.0,
-			   (self.redirects + self.bad_redirects)*100.0, self.other*100.0, self.invalid*100.0)
+		write!(
+			f,
+			"Inrolls: {:.3}%\n
+			Outrolls: {:.3}%\n
+			Total Rolls: {:.3}%\n
+			Onehands: {:.3}%\n\n\
+			Alternates: {:.3}%\n
+			Alternates (sfs): {:.3}%\n
+			Total Alternates: {:.3}%\n\n
+			Redirects: {:.3}%\n\
+			Bad Redirects: {:.3}%\n
+			Total Redirects: {:.3}%\n\n
+			Other: {:.3}%\n
+			Invalid: {:.3}%",
+			self.inrolls*100.0,
+			self.outrolls*100.0,
+			(self.inrolls + self.outrolls)*100.0,
+			self.onehands*100.0,
+			self.alternates*100.0,
+			self.alternates_sfs*100.0,
+			(self.alternates + self.alternates_sfs)*100.0,
+			self.redirects*100.0,
+			self.bad_redirects*100.0,
+			(self.redirects + self.bad_redirects)*100.0,
+			self.other*100.0,
+			self.invalid*100.0
+		)
 	}
 }
 
@@ -65,7 +100,7 @@ impl std::fmt::Display for LayoutStats {
 		// }
 		// let fspeed_print = fspeed.join("\n");
 		write!(
-			f, "Sfb:  {:.3}%\nDsfb: {:.3}%\n{}",
+			f, "Sfb:  {:.3}%\nDsfb: {:.3}%\n\n{}",
 			self.sfb * 100.0, self.dsfb * 100.0, self.trigram_stats
 		)
 	}
@@ -368,16 +403,16 @@ impl LayoutAnalysis {
 		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
 		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
 		let trigram_data = self.trigram_stats(layout, trigram_precision);
-		score -= -1.4 * (self.effort(layout) - 0.6);
-		score -= -15.0 * sfb;
-		score -= -2.5 * dsfb;
-		score += -0.6 * trigram_data.inrolls;
-		score += -0.4 * trigram_data.outrolls;
-		score += -0.5 * trigram_data.onehands;
-		score += -0.5 * trigram_data.alternates;
-		score += -0.25 * trigram_data.alternates_sfs;
-		score -= -1.5 * trigram_data.redirects;
-		score -= -4.5 * trigram_data.bad_redirects;
+		score -= 1.4 * (self.effort(layout) - 0.6);
+		score -= 15.0 * sfb;
+		score -= 2.5 * dsfb;
+		score += 0.6 * trigram_data.inrolls;
+		score += 0.4 * trigram_data.outrolls;
+		score += 0.5 * trigram_data.onehands;
+		score += 0.5 * trigram_data.alternates;
+		score += 0.25 * trigram_data.alternates_sfs;
+		score -= 1.5 * trigram_data.redirects;
+		score -= 4.5 * trigram_data.bad_redirects;
 		score
 	}
 
