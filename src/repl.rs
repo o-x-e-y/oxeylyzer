@@ -65,10 +65,6 @@ impl Repl {
         }
     }
 
-    // fn pin(pin_m: &clap::ArgMatches) {
-
-    // }
-
     fn respond(&mut self, line: &str) -> Result<bool, String> {
         let args = shlex::split(line).ok_or("error: Invalid quoting")?;
         let matches = self.cli()
