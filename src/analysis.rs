@@ -19,6 +19,7 @@ const fn get_possible_swaps() -> [PosPair; 435] {
 	let mut res = [PosPair::default(); 435];
 	let mut i = 0;
 	let mut pos1 = 0;
+	
 	while pos1 < 30 {
 		let mut pos2 = pos1 + 1;
 		while pos2 < 30 {
