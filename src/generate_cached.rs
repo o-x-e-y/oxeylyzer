@@ -1,12 +1,8 @@
 use fxhash::FxHashMap;
 
+use crate::language_data::LanguageData;
 use crate::analyze::TrigramStats;
 use crate::generate::Layout;
-
-pub struct CachedLayout {
-	layout: Layout,
-	char_stats: FxHashMap<char, PerCharStats>
-}
 
 pub struct PerCharStats {
 	target: char,
@@ -17,8 +13,8 @@ pub struct PerCharStats {
 }
 
 impl PerCharStats {
-	pub fn new(t: char) -> PerCharStats {
-		PerCharStats {
+	pub fn new(t: char) -> Self {
+		Self {
 			target: t,
 			p_score: 0.0,
 			p_sfb: 0.0,
@@ -26,10 +22,24 @@ impl PerCharStats {
 			p_trigrams: TrigramStats::default()
 		}
 	}
+}
 
-	pub fn from_layout(layout: Layout) {
-		for c in layout.matrix {
-			println!("{}", layout.char_to_finger.get(&c).unwrap());
+#[derive(Default)]
+pub struct CachedLayout {
+	layout: Layout,
+	char_stats: FxHashMap<char, PerCharStats>
+}
+
+impl From<Layout> for CachedLayout {
+    fn from(l: Layout) -> Self {
+		for c in l.matrix {
+			println!("{}", l.char_to_finger.get(&c).unwrap());
 		}
-	}
+		Self::default()
+    }
+}
+
+pub struct AnalyzeCached {
+	data: LanguageData,
+	layout: CachedLayout,
 }

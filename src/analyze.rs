@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use crate::language_data::*;
 use crate::language_data::LanguageData;
 use itertools::Itertools;
@@ -84,14 +86,14 @@ impl LayoutAnalysis {
         let mut res: Vec<(usize, usize)> = Vec::new();
         for i in [0, 1, 2, 7, 8, 9] {
             let chars = [i, i+10, i+20];
-            for c in chars.iter().combinations(2) {
-                res.push((*c[0], *c[1]));
+            for c in chars.into_iter().combinations(2) {
+                res.push((c[0], c[1]));
             }
         }
         for i in [0, 2] {
             let chars = [3+i, 13+i, 23+i, 4+i, 14+i, 24+i];
-            for c in chars.iter().combinations(2) {
-                res.push((*c[0], *c[1]));
+            for c in chars.into_iter().combinations(2) {
+                res.push((c[0], c[1]));
             }
         }
         res.try_into().unwrap()
@@ -191,18 +193,16 @@ impl LayoutAnalysis {
     			return;
   			}
 		};
-		print!("{}", name);
+		println!("{}", name);
 		self.analyze(&l);
 	}
 
 	fn placeholder_name(&self, layout: &Layout, maybe_str: Option<String>) -> Result<String, ()> {
-		let mut layout_str = String::new();
-		if let Some(l) = maybe_str {
-			layout_str = l;
+		let layout_str = if let Some(l) = maybe_str {
+			l
 		} else {
-			layout_str = Self::format_layout_str(format!("{}", layout));
-
-		}
+			layout.layout_str()
+		};
 		for i in 1..1000usize {
 			let mut new_name = layout_str[10..14].to_string();
 			new_name.push_str(format!("{}", i).as_str());
@@ -216,17 +216,32 @@ impl LayoutAnalysis {
 
 	pub fn analyze_str(&mut self, layout_str: &str) {
 		let layout_str = Self::format_layout_str(layout_str.to_string());
-		let mut layout = Layout::from_str(layout_str.as_str());
-		layout.score = self.score(&layout, usize::MAX);
-		let placeholder_name = self.placeholder_name(&layout, Some(layout_str));
+		let layout = Layout::from_str(layout_str.as_str());
+		self.analyze(&layout);
 	}
 
-	pub fn save(&self, layout: Layout, name: String) -> Result<()> {
-		let f = std::fs::OpenOptions::new()
+	pub fn save(&mut self, mut layout: Layout, name: Option<String>) -> Result<()> {
+		let new_name = if let Some(n) = name {
+			n
+		} else {
+			self.placeholder_name(&layout, None).unwrap()
+		};
+		let mut f = std::fs::OpenOptions::new()
 			.write(true)
-            .create(true)
-            .truncate(true)
-			.open(format!("static/layouts/{}/{}.kb", self.language, name))?;
+			.create(true)
+			.truncate(true)
+			.open(format!("static/layouts/{}/{}.kb", self.language, new_name))?;
+		
+		let layout_formatted = layout.to_string();
+		println!("saved {}\n{}", new_name, layout_formatted);
+		f.write(layout_formatted.as_bytes()).unwrap();
+
+		layout.score = self.score(&layout, usize::MAX);
+		self.layouts.insert(new_name, layout);
+		self.layouts.sort_by(|_, a, _, b| {
+			b.score.partial_cmp(&a.score).unwrap()
+		});
+
 		Ok(())
 	}
 
@@ -347,13 +362,13 @@ impl LayoutAnalysis {
 		score -= 1.4 * (self.effort(layout) - 0.6);
 		score -= 15.0 * sfb;
 		score -= 2.5 * dsfb;
-		score += 0.8 * trigram_data.inrolls;
-		score += 0.65 * trigram_data.outrolls;
+		score += 0.6 * trigram_data.inrolls;
+		score += 0.4 * trigram_data.outrolls;
 		score += 0.5 * trigram_data.onehands;
 		score += 0.5 * trigram_data.alternates;
 		score += 0.25 * trigram_data.alternates_sfs;
 		score -= 1.5 * trigram_data.redirects;
-		score -= 5.0 * trigram_data.bad_redirects;
+		score -= 4.5 * trigram_data.bad_redirects;
 		score
 	}
 

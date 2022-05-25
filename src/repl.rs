@@ -1,6 +1,7 @@
 use std::io::Write;
 use clap::{arg, command, Command};
 use crate::generate::LayoutGeneration;
+use crate::generate::Layout;
 
 pub struct Repl {
     language: String,
@@ -37,6 +38,37 @@ impl Repl {
         Ok(())
     }
 
+    fn save(&mut self, save_m: &clap::ArgMatches) {
+        if let Some(temp_list) = &self.gen.temp_generated {
+            let n_str = save_m.value_of("NR").unwrap();
+            let n = isize::from_str_radix(n_str, 10).unwrap();
+            let n = if n >= 0
+            {
+                Some(n)
+            } else if n < 0 && n.abs() <= temp_list.len() as isize {
+                Some(temp_list.len() as isize - n)
+            } else {
+                None
+            };
+            if let Some(index) = n {
+                let layout = Layout::from_str(temp_list[index as usize].as_str());
+                if let Some(name) = save_m.value_of("NAME") {
+                    self.gen.analysis.save(layout, Some(name.to_string())).unwrap();
+                } else {
+                    self.gen.analysis.save(layout, None).unwrap();
+                }
+            } else {
+                println!("That's not a valid index!");
+            }  
+        } else {
+            println!("You haven't generated any layouts yet!");
+        }
+    }
+
+    // fn pin(pin_m: &clap::ArgMatches) {
+
+    // }
+
     fn respond(&mut self, line: &str) -> Result<bool, String> {
         let args = shlex::split(line).ok_or("error: Invalid quoting")?;
         let matches = self.cli()
@@ -44,8 +76,8 @@ impl Repl {
             .map_err(|e| e.to_string())?;
         match matches.subcommand() {
             Some(("generate", new_m)) => {
-                println!("generating {} layouts...", new_m.value_of("COUNT").unwrap());
                 let count_str = new_m.value_of("COUNT").unwrap();
+                println!("generating {} layouts...", count_str);
                 let count = usize::from_str_radix(count_str, 10).map_err(|e| e.to_string())?;
                 self.gen.generate_n(count);
             }
@@ -70,6 +102,9 @@ impl Repl {
                     },
                     None => println!("Current language: {}", self.language)
                 }
+            }
+            Some(("save", save_m)) => {
+                self.save(save_m);
             }
             Some(("quit", _new_m)) => {
                 println!("Exiting anlyzer...");
@@ -102,12 +137,6 @@ impl Repl {
             .subcommand_value_name("APPLET")
             .subcommand_help_heading("APPLETS")
             .help_template(PARSER_TEMPLATE)
-            .subcommand(
-                command!("quit")
-                    .alias("exit")
-                    .about("Quit the repl")
-                    .help_template(APPLET_TEMPLATE),
-            )
             .subcommand(
                 command!("rank")
                     .alias("r")
@@ -149,15 +178,29 @@ impl Repl {
             .subcommand(
                 command!("generate")
                     .alias("gen")
-                    .alias("g")
                     .arg(
-                        arg!([COUNT])
-                        .default_value("100")
+                        arg!(<COUNT>)
                     )
                     .help_template(APPLET_TEMPLATE)
                     .about("Generate a number of layouts and take the best 10")
             )
-            
+            .subcommand(
+                command!("save")
+                .arg(
+                    arg!(<NR>)
+                )
+                .arg(
+                    arg!([NAME])
+                )
+                .help_template(APPLET_TEMPLATE)
+                .about("Save the top <NR> result that was generated. Starts from 1, takes negative values")
+            )
+            .subcommand(
+                command!("quit")
+                    .alias("exit")
+                    .about("Quit the repl")
+                    .help_template(APPLET_TEMPLATE),
+            )
     }
 }
 

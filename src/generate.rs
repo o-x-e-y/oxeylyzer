@@ -2,6 +2,7 @@ use std::iter::FromIterator;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use fxhash::{FxHashMap, FxHashSet};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use crate::analysis::*;
 use crate::trigram_patterns::{TRIGRAM_COMBINATIONS, TrigramPattern};
 use crate::analyze::LayoutAnalysis;
@@ -140,7 +141,7 @@ impl std::fmt::Display for Layout {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let mut res = String::with_capacity(63);
 		for (i, c) in self.matrix.iter().enumerate() {
-			if i % 10 == 0 {
+			if i % 10 == 0 && i > 0 {
 				res.push('\n');
 			}
 			if (i + 5) % 10 == 0 {
@@ -157,7 +158,7 @@ pub struct LayoutGeneration {
 	pub available_chars: [char; 30],
 	pub analysis: LayoutAnalysis,
 	pub improved_layout: Layout,
-	pub last_generated: Option<Vec<(Layout, f64)>>,
+	pub temp_generated: Option<Vec<String>>,
 	cols: [usize; 6]
 }
 
@@ -167,7 +168,7 @@ impl LayoutGeneration {
 			analysis: LayoutAnalysis::new(language),
 			improved_layout: Layout::new(),
 			available_chars: Self::available_chars(language),
-			last_generated: None,
+			temp_generated: None,
 			cols: [0, 1, 2, 7, 8, 9],
 		}
 	}
@@ -292,16 +293,18 @@ impl LayoutGeneration {
 		}
 		let mut layouts: Vec<(Layout, f64)> = Vec::with_capacity(amount);
 		let start = std::time::Instant::now();
-		let i: AtomicUsize = AtomicUsize::new(0);
-		(0..amount).into_par_iter()
+		
+		let pb = ProgressBar::new(amount as u64);
+		pb.set_style(ProgressStyle::default_bar()
+			.template("[{elapsed_precise}] [{bar:40.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
+			.progress_chars("=>-"));
+
+		(0..amount)
+			.into_par_iter()
+			.progress_with(pb)
 			.map(|_| -> (Layout, f64) {
 				let layout = self.generate();
 				let score = self.analysis.score(&layout, usize::MAX);
-				i.fetch_add(1, Ordering::SeqCst);
-				let i_current = i.load(Ordering::SeqCst);
-				if i_current % (if amount < 20 {amount} else {amount / 20}) == 0 {
-					println!("{i_current}/{amount} done");
-				}
 				(layout, score)
 			}).collect_into_vec(&mut layouts);
 
@@ -311,7 +314,11 @@ impl LayoutGeneration {
 			println!("{}\nscore: {:.5}", layout, score);
 		}
 		println!("worst layout:\n{}\n{}", layouts[layouts.len()-1].0, layouts[layouts.len()-1].1);
-		self.last_generated = Some(layouts);
+		let temp_generated = layouts
+			.into_iter()
+			.map(|(x, _)| x.layout_str())
+			.collect::<Vec<String>>();
+		self.temp_generated = Some(temp_generated);
 	}
 }
 
