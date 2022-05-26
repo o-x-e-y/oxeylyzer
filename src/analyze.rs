@@ -2,10 +2,9 @@ use std::io::Write;
 
 use crate::language_data::*;
 use crate::language_data::LanguageData;
-use itertools::Itertools;
-use crate::analysis::EFFORT_MAP;
+use crate::analysis::{EFFORT_MAP, get_sfb_indices};
 use crate::trigram_patterns::*;
-use crate::generate::Layout;
+use crate::generate::{Layout, BasicLayout};
 
 use anyhow::Result;
 use indexmap::IndexMap;
@@ -108,7 +107,7 @@ impl std::fmt::Display for LayoutStats {
 
 pub struct LayoutAnalysis {
 	language: String,
-	layouts: IndexMap<String, Layout>,
+	layouts: IndexMap<String, BasicLayout>,
 	language_data: LanguageData,
 	sfb_indices: [(usize, usize); 48]
 	// col_distance: [f64; 6],
@@ -121,7 +120,7 @@ impl LayoutAnalysis {
 			language: language.to_string(),
 			layouts: IndexMap::new(),
 			language_data: LanguageData::new(language),
-			sfb_indices: Self::get_sfb_indices()
+			sfb_indices: get_sfb_indices()
 			// col_distance: [1.0, 2.0, 1.0, 1.0, 2.0, 1.0],
 			// index_distance: Self::get_index_distance(1.4)
 
@@ -129,23 +128,6 @@ impl LayoutAnalysis {
 		new_analysis.layouts = new_analysis.load_layouts().unwrap();
 		new_analysis
 	}
-
-	fn get_sfb_indices() -> [(usize, usize); 48] {
-        let mut res: Vec<(usize, usize)> = Vec::new();
-        for i in [0, 1, 2, 7, 8, 9] {
-            let chars = [i, i+10, i+20];
-            for c in chars.into_iter().combinations(2) {
-                res.push((c[0], c[1]));
-            }
-        }
-        for i in [0, 2] {
-            let chars = [3+i, 13+i, 23+i, 4+i, 14+i, 24+i];
-            for c in chars.into_iter().combinations(2) {
-                res.push((c[0], c[1]));
-            }
-        }
-        res.try_into().unwrap()
-    }
 
 	fn get_index_distance(lat_penalty: f64) -> [f64; 30] {
 		let mut res = [0.0; 30];
@@ -193,8 +175,8 @@ impl LayoutAnalysis {
 			.replace(" ", "")
 	}
 
-	fn load_layouts(&mut self) -> Result<IndexMap<String, Layout>> {
-		let mut res: IndexMap<String, Layout> = IndexMap::new();
+	fn load_layouts(&mut self) -> Result<IndexMap<String, BasicLayout>> {
+		let mut res: IndexMap<String, BasicLayout> = IndexMap::new();
 
 		let paths = std::fs::read_dir(format!("static/layouts/{}", self.language))?;
 		for p in paths {
@@ -204,7 +186,7 @@ impl LayoutAnalysis {
 				let content = std::fs::read_to_string(entry.path())?;
 				let layout_str = Self::format_layout_str(content);
 
-				let mut layout = Layout::from_str(layout_str.as_str());
+				let mut layout: BasicLayout = BasicLayout::try_from(layout_str.as_str()).unwrap();
 				layout.score = self.score(&layout, usize::MAX);
 
 				res.insert(name, layout);
@@ -216,7 +198,7 @@ impl LayoutAnalysis {
 		Ok(res)
 	}
 
-	fn get_layout_stats(&self, layout: &Layout) -> LayoutStats {
+	fn get_layout_stats(&self, layout: &BasicLayout) -> LayoutStats {
 		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
 		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
 		let trigram_stats = self.trigram_stats(layout, usize::MAX);
@@ -229,7 +211,7 @@ impl LayoutAnalysis {
 		}
 	}
 
-	pub fn layout_by_name(&self, name: &str) -> Option<&Layout> {
+	pub fn layout_by_name(&self, name: &str) -> Option<&BasicLayout> {
 		self.layouts.get(name)
 	}
 
@@ -245,7 +227,7 @@ impl LayoutAnalysis {
 		self.analyze(&l);
 	}
 
-	fn placeholder_name(&self, layout: &Layout) -> Result<String, ()> {
+	fn placeholder_name(&self, layout: &BasicLayout) -> Result<String, ()> {
 		for i in 1..1000usize {
     		let mut new_name = layout.matrix[10..14].iter().collect::<String>();
 			
@@ -260,11 +242,11 @@ impl LayoutAnalysis {
 
 	pub fn analyze_str(&mut self, layout_str: &str) {
 		let layout_str = Self::format_layout_str(layout_str.to_string());
-		let layout = Layout::from_str(layout_str.as_str());
+		let layout = BasicLayout::try_from(layout_str.as_str()).unwrap();
 		self.analyze(&layout);
 	}
 
-	pub fn save(&mut self, mut layout: Layout, name: Option<String>) -> Result<()> {
+	pub fn save(&mut self, mut layout: BasicLayout, name: Option<String>) -> Result<()> {
 		let new_name = if let Some(n) = name {
 			n.replace(" ", "_")
 		} else {
@@ -289,7 +271,7 @@ impl LayoutAnalysis {
 		Ok(())
 	}
 
-	pub fn analyze(&self, layout: &Layout) {
+	pub fn analyze(&self, layout: &BasicLayout) {
 		let stats = self.get_layout_stats(layout);
 		
 		println!("{}\n{}\nScore: {:.3}", layout, stats, layout.score);
@@ -385,12 +367,12 @@ impl LayoutAnalysis {
 		);
 	}
 
-	pub fn finger_speed(&self, _: &Layout) -> [f64; 8] {
+	pub fn finger_speed(&self, _: &BasicLayout) -> [f64; 8] {
 		let res = [0.0; 8];
 		res
 	}
 
-	pub fn effort(&self, layout: &Layout) -> f64 {
+	pub fn effort(&self, layout: &BasicLayout) -> f64 {
 		let mut res: f64 = 0.0;
 		for (c, e) in layout.matrix.iter().zip(EFFORT_MAP) {
 			res += e * self.language_data.characters.get(c).unwrap_or(&0.0);
@@ -398,7 +380,7 @@ impl LayoutAnalysis {
 		res
 	}
 
-	pub fn score(&self, layout: &Layout, trigram_precision: usize) -> f64 {
+	pub fn score(&self, layout: &BasicLayout, trigram_precision: usize) -> f64 {
 		let mut score: f64 = 0.0;
 		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
 		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
@@ -416,7 +398,7 @@ impl LayoutAnalysis {
 		score
 	}
 
-	pub fn bigram_percent(&self, layout: &Layout, data: &BigramData) -> f64 {
+	pub fn bigram_percent(&self, layout: &BasicLayout, data: &BigramData) -> f64 {
 		let mut res = 0.0;
 		for (i1, i2) in self.sfb_indices {
 			let c1 = layout.matrix[i1];
@@ -427,7 +409,7 @@ impl LayoutAnalysis {
 		res
 	}
 
-	pub fn trigram_stats(&self, layout: &Layout, trigram_precision: usize) -> TrigramStats {
+	pub fn trigram_stats(&self, layout: &BasicLayout, trigram_precision: usize) -> TrigramStats {
 		let mut freqs = TrigramStats::default();
 		for (i, (trigram, freq)) in self.language_data.trigrams.iter().enumerate() {
 			if i == trigram_precision {

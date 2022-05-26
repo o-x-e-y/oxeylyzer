@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 pub static COL_TO_FINGER: [u8; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
 
 #[derive(Copy, Clone)]
@@ -37,3 +39,20 @@ pub static EFFORT_MAP: [f64; 30] = [
 	1.7, 1.3, 1.1, 1.0, 2.6, 2.6, 1.0, 1.1, 1.3, 1.7,
 	3.1, 2.7, 2.4, 1.8, 3.7, 2.1, 1.8, 2.4, 2.7, 3.3
 ];
+
+pub fn get_sfb_indices() -> [(usize, usize); 48] {
+	let mut res: Vec<(usize, usize)> = Vec::new();
+	for i in [0, 1, 2, 7, 8, 9] {
+		let chars = [i, i+10, i+20];
+		for c in chars.into_iter().combinations(2) {
+			res.push((c[0], c[1]));
+		}
+	}
+	for i in [0, 2] {
+		let chars = [3+i, 13+i, 23+i, 4+i, 14+i, 24+i];
+		for c in chars.into_iter().combinations(2) {
+			res.push((c[0], c[1]));
+		}
+	}
+	res.try_into().unwrap()
+}

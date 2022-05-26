@@ -10,49 +10,82 @@ use crate::analyze::LayoutAnalysis;
 pub type CharToFinger = FxHashMap<char, u8>;
 pub type Matrix = [char; 30];
 
+pub trait Layout {
+	fn layout_str(&self) -> String;
+
+	fn char(&self, x: usize, y: usize) -> char;
+
+	fn char_by_index(&self, i: usize) -> char;
+
+	fn swap(&mut self, i1: usize, i2: usize) -> bool;
+
+	fn swap_no_bounds(&mut self, i1: usize, i2: usize);
+	fn swap_pair(&mut self, pair: &PosPair) -> bool;
+
+	fn swap_pair_no_bounds(&mut self, pair: &PosPair);
+
+	fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize);
+
+	fn swap_indexes(&mut self);
+
+	fn get_index(&self, index: usize) -> [char; 6];
+
+	fn get_trigram_pattern(&self, trigram: &[char; 3]) -> TrigramPattern;
+
+	fn random(available_chars: [char; 30]) -> Self;
+
+	fn random_pinned();
+}
+
 #[derive(Default, Clone)]
-pub struct Layout {
+pub struct BasicLayout {
 	pub matrix: Matrix,
 	pub char_to_finger: CharToFinger,
 	pub score: f64
 }
 
-impl Layout {
-	pub fn new() -> Layout {
-		Layout {
+impl BasicLayout {
+	pub fn new() -> BasicLayout {
+		BasicLayout {
 			matrix: ['.'; 30],
 			char_to_finger: CharToFinger::default(),
 			score: 0.0
 		}
 	}
+}
 
-	pub fn from_str(layout: &str) -> Layout {
-		if !Layout::is_valid_layout(layout) {
-			panic!("brother {} is not a valid layout nooooooo", layout)
-		}
-		let mut new_layout = Layout::new();
+impl TryFrom<&str> for BasicLayout {
+    type Error = anyhow::Error;
+
+    fn try_from(layout: &str) -> Result<Self, Self::Error> {
+		// if !BasicLayout::is_valid_layout(layout) {
+		// 	panic!("brother {} is not a valid layout nooooooo", layout)
+		// }
+		let mut new_layout = BasicLayout::new();
 
 		for (i, c) in layout.chars().enumerate() {
 			new_layout.matrix[i] = c;
 			new_layout.char_to_finger.insert(c, COL_TO_FINGER[i%10]);
 		}
-		new_layout
-	}
+		Ok(new_layout)
+    }
+}
 
-	pub fn layout_str(&self) -> String {
+impl Layout for BasicLayout {
+	fn layout_str(&self) -> String {
 		self.matrix.iter().collect::<String>()
 	}
 
-	pub fn char(&self, x: usize, y: usize) -> char {
+	fn char(&self, x: usize, y: usize) -> char {
 		assert!(x < 10 && y < 3);
 		self.matrix[x + 10*y]
 	}
 
-	pub fn char_by_index(&self, i: usize) -> char {
+	fn char_by_index(&self, i: usize) -> char {
 		self.matrix[i]
 	}
 
-	pub fn swap(&mut self, i1: usize, i2: usize) -> bool {
+	fn swap(&mut self, i1: usize, i2: usize) -> bool {
 		if i1 < 30 && i2 < 30 {
 
 			let char1 = self.matrix[i1];
@@ -69,7 +102,7 @@ impl Layout {
 		false
 	}
 
-	pub fn swap_no_bounds(&mut self, i1: usize, i2: usize) {
+	fn swap_no_bounds(&mut self, i1: usize, i2: usize) {
 		let char1 = self.matrix[i1];
 		let char2 = self.matrix[i2];
 
@@ -79,26 +112,26 @@ impl Layout {
 		self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
 	}
 
-	pub fn swap_pair(&mut self, pair: &PosPair) -> bool {
+	fn swap_pair(&mut self, pair: &PosPair) -> bool {
 		self.swap(pair.0, pair.1)
 	}
 
-	pub fn swap_pair_no_bounds(&mut self, pair: &PosPair) {
+	fn swap_pair_no_bounds(&mut self, pair: &PosPair) {
 		self.swap_no_bounds(pair.0, pair.1);
 	}
 
-	pub fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize) {
+	fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize) {
 		self.swap_no_bounds(col1, col2);
 		self.swap_no_bounds(col1 + 10, col2 + 10);
 		self.swap_no_bounds(col1 + 20, col2 + 20);
 	}
 
-	pub fn swap_indexes(&mut self) {
+	fn swap_indexes(&mut self) {
 		self.swap_cols_no_bounds(3, 6);
 		self.swap_cols_no_bounds(4, 5);
 	}
 
-	pub fn get_index(&self, index: usize) -> [char; 6] {
+	fn get_index(&self, index: usize) -> [char; 6] {
 		let mut new_index = [' '; 6];
 		let start_pos = index*2 + 3;
 		for i in 0..2 {
@@ -109,7 +142,7 @@ impl Layout {
 		new_index
 	}
 
-	pub fn get_trigram_pattern(&self, trigram: &[char; 3]) -> TrigramPattern {
+	fn get_trigram_pattern(&self, trigram: &[char; 3]) -> TrigramPattern {
 		let a = *self.char_to_finger.get(&trigram[0]).unwrap_or(&u8::MAX);
 		let b = *self.char_to_finger.get(&trigram[1]).unwrap_or(&u8::MAX);
 		let c = *self.char_to_finger.get(&trigram[2]).unwrap_or(&u8::MAX);
@@ -121,23 +154,23 @@ impl Layout {
 		TRIGRAM_COMBINATIONS[combination]
 	}
 
-	pub fn is_valid_layout(layout: &str) -> bool {
-		let chars: FxHashSet<char> = FxHashSet::from_iter(layout.chars());
-		layout.chars().count() == 30 && chars.len() == 30
-	}
+	// fn is_valid_layout(layout: &str) -> bool {
+	// 	let chars: FxHashSet<char> = FxHashSet::from_iter(layout.chars());
+	// 	layout.chars().count() == 30 && chars.len() == 30
+	// }
 
-	pub fn random(mut available_chars: [char; 30]) -> Layout {
+	fn random(mut available_chars: [char; 30]) -> BasicLayout {
 		fastrand::shuffle(&mut available_chars);
 		let layout_str = String::from_iter(available_chars);
-		Layout::from_str(layout_str.as_str())
+		BasicLayout::try_from(layout_str.as_str()).unwrap()
 	}
 
-	pub fn random_pinned() {
+	fn random_pinned() {
 		
 	}
 }
 
-impl std::fmt::Display for Layout {
+impl std::fmt::Display for BasicLayout {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let mut res = String::with_capacity(63);
 		for (i, c) in self.matrix.iter().enumerate() {
@@ -157,7 +190,7 @@ impl std::fmt::Display for Layout {
 pub struct LayoutGeneration {
 	pub available_chars: [char; 30],
 	pub analysis: LayoutAnalysis,
-	pub improved_layout: Layout,
+	pub improved_layout: BasicLayout,
 	pub temp_generated: Option<Vec<String>>,
 	cols: [usize; 6]
 }
@@ -166,7 +199,7 @@ impl LayoutGeneration {
 	pub fn new(language: &str) -> Self {
 		Self {
 			analysis: LayoutAnalysis::new(language),
-			improved_layout: Layout::new(),
+			improved_layout: BasicLayout::new(),
 			available_chars: Self::available_chars(language),
 			temp_generated: None,
 			cols: [0, 1, 2, 7, 8, 9],
@@ -186,7 +219,7 @@ impl LayoutGeneration {
 		chars.chars().collect::<Vec<char>>().try_into().unwrap()
 	}
 
-	pub fn optimize_cols(&self, layout: &mut Layout, trigram_precision: usize, score: Option<f64>) -> f64 {
+	pub fn optimize_cols(&self, layout: &mut BasicLayout, trigram_precision: usize, score: Option<f64>) -> f64 {
 		let mut best_score = score.unwrap_or(self.analysis.score(layout, trigram_precision));
 
 		let mut best = layout.clone();
@@ -198,7 +231,7 @@ impl LayoutGeneration {
 		best_score
 	}
 
-	fn col_perms(&self, layout: &mut Layout, best: &mut Layout, best_score: &mut f64, k: usize) {
+	fn col_perms(&self, layout: &mut BasicLayout, best: &mut BasicLayout, best_score: &mut f64, k: usize) {
 		if k == 1 {
 			let new_score = self.analysis.score(layout, 1000);
 			if new_score > *best_score {
@@ -239,12 +272,12 @@ impl LayoutGeneration {
 	// 	res
 	// }
 
-	pub fn generate(&self) -> Layout {
-		let layout = Layout::random(self.available_chars);
+	pub fn generate(&self) -> BasicLayout {
+		let layout = BasicLayout::random(self.available_chars);
 		self.optimize(layout, 1000, &POSSIBLE_SWAPS)
 	}
 
-	pub fn optimize(&self, mut layout: Layout, trigram_precision: usize, possible_swaps: &[PosPair]) -> Layout {
+	pub fn optimize(&self, mut layout: BasicLayout, trigram_precision: usize, possible_swaps: &[PosPair]) -> BasicLayout {
 		let mut best_score = f64::MIN / 2.0;
 		let mut best_swap = PosPair::default();
 		let mut score = f64::MIN;
@@ -291,7 +324,7 @@ impl LayoutGeneration {
 		if amount == 0 {
 			return;
 		}
-		let mut layouts: Vec<(Layout, f64)> = Vec::with_capacity(amount);
+		let mut layouts: Vec<(BasicLayout, f64)> = Vec::with_capacity(amount);
 		let start = std::time::Instant::now();
 		
 		let pb = ProgressBar::new(amount as u64);
@@ -302,7 +335,7 @@ impl LayoutGeneration {
 		(0..amount)
 			.into_par_iter()
 			.progress_with(pb)
-			.map(|_| -> (Layout, f64) {
+			.map(|_| -> (BasicLayout, f64) {
 				let layout = self.generate();
 				let score = self.analysis.score(&layout, usize::MAX);
 				(layout, score)
@@ -328,7 +361,7 @@ mod tests {
 
 	#[test]
 	fn layout_str() {
-		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		assert_eq!(
 			qwerty.matrix,
 			[
@@ -342,21 +375,21 @@ mod tests {
 
 	#[test]
 	fn swap() {
-		let mut qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let mut qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		qwerty.swap(10, 11);
 		assert_eq!(qwerty.layout_str(), "qwertyuiopsadfghjkl;zxcvbnm,./".to_owned());
 	}
 
 	#[test]
 	fn swap_no_bounds() {
-		let mut qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let mut qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		qwerty.swap_no_bounds(9, 12);
 		assert_eq!(qwerty.layout_str(), "qwertyuiodaspfghjkl;zxcvbnm,./".to_string());
 	}
 
 	#[test]
 	fn swap_cols_no_bounds() {
-		let mut qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let mut qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		qwerty.swap_cols_no_bounds(1, 9);
 		assert_eq!(
 			qwerty.layout_str(), "qpertyuiowa;dfghjklsz/cvbnm,.x".to_string()
@@ -365,7 +398,7 @@ mod tests {
 
 	#[test]
 	fn swap_pair() {
-		let mut qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let mut qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		let new_swap = PosPair::new(0, 29);
 		qwerty.swap_pair(&new_swap);
 		assert_eq!(qwerty.layout_str(), "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string());
@@ -373,7 +406,7 @@ mod tests {
 
 	#[test]
 	fn swap_pair_no_bounds() {
-		let mut qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let mut qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		let new_swap = PosPair::new(0, 29);
 		qwerty.swap_pair_no_bounds(&new_swap);
 		assert_eq!(qwerty.layout_str(), "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string());
@@ -381,7 +414,7 @@ mod tests {
 
 	#[test]
 	fn char_to_finger() {
-		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		assert_eq!(qwerty.char_to_finger.get(&'a'), Some(&0u8));
 		assert_eq!(qwerty.char_to_finger.get(&'w'), Some(&1u8));
 		assert_eq!(qwerty.char_to_finger.get(&'c'), Some(&2u8));
@@ -399,7 +432,7 @@ mod tests {
 
 	#[test]
 	fn char() {
-		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		assert_eq!(qwerty.char(4, 1), 'g');
 		assert_eq!(qwerty.char(9, 2), '/');
 		assert_eq!(qwerty.char(8, 1), 'l');
@@ -407,7 +440,7 @@ mod tests {
 
 	#[test]
 	fn char_by_index() {
-		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		assert_eq!(qwerty.char_by_index(10), 'a');
 		assert_eq!(qwerty.char_by_index(24), 'b');
 		assert_eq!(qwerty.char_by_index(22), 'c');
@@ -415,7 +448,7 @@ mod tests {
 
 	#[test]
 	fn get_trigram_pattern() {
-		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		assert_eq!(TrigramPattern::Alternate, qwerty.get_trigram_pattern(&['r', 'o', 'd']));
 		assert_eq!(TrigramPattern::AlternateSfs, qwerty.get_trigram_pattern(&['j', 'a', 'y']));
 
@@ -436,7 +469,7 @@ mod tests {
 
 	#[test]
 	fn thing() {
-		let qwerty = Layout::from_str("qwertyuiopasdfghjkl;zxcvbnm,./");
+		let qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		assert_eq!(qwerty.score, 0.0);
 	}
 }

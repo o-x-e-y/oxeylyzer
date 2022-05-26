@@ -1,7 +1,7 @@
 use std::io::Write;
 use clap::{arg, command, Command};
 use crate::generate::LayoutGeneration;
-use crate::generate::Layout;
+use crate::generate::BasicLayout;
 
 pub struct Repl {
     language: String,
@@ -51,7 +51,8 @@ impl Repl {
                 None
             };
             if let Some(index) = n {
-                let layout = Layout::from_str(temp_list[index as usize].as_str());
+                let layout =
+                    BasicLayout::try_from(temp_list[index as usize].as_str()).unwrap();
                 if let Some(name) = save_m.value_of("NAME") {
                     self.gen.analysis.save(layout, Some(name.to_string())).unwrap();
                 } else {
