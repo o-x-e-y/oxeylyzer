@@ -27,16 +27,16 @@ impl std::fmt::Display for TrigramStats {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(
 			f,
-			"Inrolls: {:.3}%\n
-			Outrolls: {:.3}%\n
-			Total Rolls: {:.3}%\n
-			Onehands: {:.3}%\n\n\
-			Alternates: {:.3}%\n
-			Alternates (sfs): {:.3}%\n
-			Total Alternates: {:.3}%\n\n
-			Redirects: {:.3}%\n\
-			Bad Redirects: {:.3}%\n
-			Total Redirects: {:.3}%",
+"Inrolls: {:.3}%
+Outrolls: {:.3}% 
+Total Rolls: {:.3}%
+Onehands: {:.3}%\n
+Alternates: {:.3}%
+Alternates (sfs): {:.3}%
+Total Alternates: {:.3}%\n
+Redirects: {:.3}%
+Bad Redirects: {:.3}%
+Total Redirects: {:.3}%",
 			self.inrolls*100.0,
 			self.outrolls*100.0,
 			(self.inrolls + self.outrolls)*100.0,
