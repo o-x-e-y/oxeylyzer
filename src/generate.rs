@@ -346,7 +346,6 @@ impl LayoutGeneration {
 		for (layout, score) in layouts.iter().take(10) {
 			println!("{}\nscore: {:.5}", layout, score);
 		}
-		println!("worst layout:\n{}\n{}", layouts[layouts.len()-1].0, layouts[layouts.len()-1].1);
 		let temp_generated = layouts
 			.into_iter()
 			.map(|(x, _)| x.layout_str())
