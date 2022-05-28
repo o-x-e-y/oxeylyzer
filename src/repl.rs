@@ -2,17 +2,25 @@ use std::io::Write;
 use clap::{arg, command, Command};
 use crate::generate::LayoutGeneration;
 use crate::generate::BasicLayout;
+use crate::analyze::{Config, Weights};
 
 pub struct Repl {
     language: String,
-    gen: LayoutGeneration
+    gen: LayoutGeneration,
+    weights: Weights
 }
 
 impl Repl {
     pub fn run() -> Result<(), String> {
+        let config = Config::new();
+
         let mut env = Self {
-            language: "english".to_string(),
-            gen: LayoutGeneration::new("english")
+            language: config.defaults.language.clone(),
+            gen: LayoutGeneration::new(
+                config.defaults.language.as_str(),
+                config.weights.clone()
+            ),
+            weights: config.weights
         };
 
         loop {
@@ -94,7 +102,7 @@ impl Repl {
                 match lang_m.value_of("LANGUAGE") {
                     Some(language) => {
                         self.language = language.to_string();
-                        self.gen = LayoutGeneration::new(language);
+                        self.gen = LayoutGeneration::new(language, self.weights.clone());
                         println!("Set language to {}", language);
                     },
                     None => println!("Current language: {}", self.language)

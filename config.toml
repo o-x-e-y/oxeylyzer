@@ -1,0 +1,14 @@
+[defaults]
+language = "english"
+
+[weights]
+heatmap = [1.4, 0.6]
+sfb = 15.0
+dsfb = 2.5
+inrolls = 0.6
+outrolls = 0.4
+onehands = 0.5
+alternates = 0.5
+alternates_sfs = 0.25
+redirects = 0.5
+bad_redirects = 4.5

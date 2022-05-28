@@ -192,13 +192,13 @@ pub struct LayoutGeneration {
 	pub analysis: LayoutAnalysis,
 	pub improved_layout: BasicLayout,
 	pub temp_generated: Option<Vec<String>>,
-	cols: [usize; 6]
+	cols: [usize; 6],
 }
 
 impl LayoutGeneration {
-	pub fn new(language: &str) -> Self {
+	pub fn new(language: &str, weights: crate::analyze::Weights) -> Self {
 		Self {
-			analysis: LayoutAnalysis::new(language),
+			analysis: LayoutAnalysis::new(language, weights),
 			improved_layout: BasicLayout::new(),
 			available_chars: Self::available_chars(language),
 			temp_generated: None,
@@ -211,9 +211,9 @@ impl LayoutGeneration {
 			"albanian" =>           "abcdefghijklmnopqrstuvxyzëç.,'",
 			"bokmal" | "nynorsk" => "abcdefghijklmnopærstuvwøyå',.;",
 			"czech" =>              "abcdefghijklmnop*rstuvěxyzá,.í",
-			"french" =>             "abcdefghijklmnopqrstuvéxyz',.*",
+			"french" =>             "abcdefghijélmnopqrstuvàxyz',.*",
 			"german" =>             "abcdefghijklmnoprstuvwxyzüäö.,",
-			"spanish" =>            "abcdefghij*lmnopqrstuvñxyz',.;",
+			"spanish" =>            "abcdefghijklmnopqrstuvwxyz',.*",
 			_ =>                    "abcdefghijklmnopqrstuvwxyz',.;"
 		};
 		chars.chars().collect::<Vec<char>>().try_into().unwrap()

@@ -8,6 +8,7 @@ use crate::generate::{Layout, BasicLayout};
 
 use anyhow::Result;
 use indexmap::IndexMap;
+use serde::Deserialize;
 
 #[derive(Clone, Default)]
 pub struct TrigramStats {
@@ -105,22 +106,76 @@ impl std::fmt::Display for LayoutStats {
 	}
 }
 
+#[derive(Deserialize)]
+pub struct Defaults {
+	pub language: String
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Weights {
+	heatmap: [f64; 2],
+	sfb: f64,
+	dsfb: f64,
+	inrolls: f64,
+	outrolls: f64,
+	onehands: f64,
+	alternates: f64,
+	alternates_sfs: f64,
+	redirects: f64,
+	bad_redirects: f64,
+}
+
+#[derive(Deserialize)]
+pub struct Config {
+	pub defaults: Defaults,
+	pub weights: Weights
+}
+
+impl Config {
+	pub fn new() -> Self {
+		let config_bytes = include_bytes!("../config.toml");
+		toml::from_slice(config_bytes).expect("Failed to parse config.toml. Values might be missing.")
+	}
+
+	pub fn default() -> Self {
+		Self {
+			defaults: Defaults {
+				language: "english".to_string()
+			},
+			weights: Weights {
+				heatmap: [1.4, 0.6],
+				sfb: 15.0,
+				dsfb: 2.5,
+				inrolls: 0.6,
+				outrolls: 0.4,
+				onehands: 0.5,
+				alternates: 0.5,
+				alternates_sfs: 0.25,
+				redirects: 0.5,
+				bad_redirects: 4.5
+			}
+		}
+	}
+}
+
 pub struct LayoutAnalysis {
 	language: String,
 	layouts: IndexMap<String, BasicLayout>,
 	language_data: LanguageData,
-	sfb_indices: [(usize, usize); 48]
+	sfb_indices: [(usize, usize); 48],
+	weights: Weights
 	// col_distance: [f64; 6],
 	// index_distance: [f64; 30]
 }
 
 impl LayoutAnalysis {
-	pub fn new(language: &str) -> LayoutAnalysis {
+	pub fn new(language: &str, weights: Weights) -> LayoutAnalysis {
 		let mut new_analysis = LayoutAnalysis {
 			language: language.to_string(),
 			layouts: IndexMap::new(),
 			language_data: LanguageData::new(language),
-			sfb_indices: get_sfb_indices()
+			sfb_indices: get_sfb_indices(),
+			weights: weights
 			// col_distance: [1.0, 2.0, 1.0, 1.0, 2.0, 1.0],
 			// index_distance: Self::get_index_distance(1.4)
 
@@ -385,16 +440,16 @@ impl LayoutAnalysis {
 		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
 		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
 		let trigram_data = self.trigram_stats(layout, trigram_precision);
-		score -= 1.4 * (self.effort(layout) - 0.6);
-		score -= 15.0 * sfb;
-		score -= 2.5 * dsfb;
-		score += 0.6 * trigram_data.inrolls;
-		score += 0.4 * trigram_data.outrolls;
-		score += 0.5 * trigram_data.onehands;
-		score += 0.5 * trigram_data.alternates;
-		score += 0.25 * trigram_data.alternates_sfs;
-		score -= 1.5 * trigram_data.redirects;
-		score -= 4.5 * trigram_data.bad_redirects;
+		score -= self.weights.heatmap[0] * (self.effort(layout) - self.weights.heatmap[1]);
+		score -= self.weights.sfb * sfb;
+		score -= self.weights.dsfb * dsfb;
+		score += self.weights.inrolls * trigram_data.inrolls;
+		score += self.weights.outrolls * trigram_data.outrolls;
+		score += self.weights.onehands * trigram_data.onehands;
+		score += self.weights.alternates * trigram_data.alternates;
+		score += self.weights.alternates_sfs * trigram_data.alternates_sfs;
+		score -= self.weights.redirects * trigram_data.redirects;
+		score -= self.weights.bad_redirects * trigram_data.bad_redirects;
 		score
 	}
 
