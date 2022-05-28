@@ -122,6 +122,9 @@ impl Repl {
                     }
                 }
             }
+            Some(("reload", _)) => {
+                self.gen = LayoutGeneration::new(self.language.as_str(), self.weights.clone());
+            }
             Some(("save", save_m)) => {
                 self.save(save_m);
             }
@@ -198,6 +201,12 @@ impl Repl {
                 command!("languages")
                 .help_template(APPLET_TEMPLATE)
                 .about("Show available languages")
+            )
+            .subcommand(
+                command!("reload")
+                .alias("r")
+                .help_template(APPLET_TEMPLATE)
+                .about("Reloads all data with the current language. Loses temporary layouts.")
             )
             .subcommand(
                 command!("generate")

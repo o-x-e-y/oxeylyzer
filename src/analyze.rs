@@ -136,7 +136,7 @@ impl Config {
 	pub fn new() -> Self {
 		let mut f = File::open("config.toml")
 			.expect("The config.toml is missing! Help!");
-			
+
 		let mut buf = Vec::new();
 		f.read_to_end(&mut buf)
 			.expect("Failed to read config.toml for some reason");
@@ -458,6 +458,16 @@ impl LayoutAnalysis {
 		score += self.weights.alternates_sfs * trigram_data.alternates_sfs;
 		score -= self.weights.redirects * trigram_data.redirects;
 		score -= self.weights.bad_redirects * trigram_data.bad_redirects;
+		// score -= 1.4 * (self.effort(layout) - 0.6);
+		// score -= 15.0 * sfb;
+		// score -= 2.5 * dsfb;
+		// score += 0.75 * trigram_data.inrolls;
+		// score += 0.6 * trigram_data.outrolls;
+		// score += 0.5 * trigram_data.onehands;
+		// score += 0.5 * trigram_data.alternates;
+		// score += 0.3 * trigram_data.alternates_sfs;
+		// score -= 0.5 * trigram_data.redirects;
+		// score -= 4.5 * trigram_data.bad_redirects;
 		score
 	}
 
