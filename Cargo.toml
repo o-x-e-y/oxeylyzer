@@ -3,7 +3,7 @@ cargo-features = ["profile-rustflags"]
 [profile.release]
 opt-level = 3
 lto = "fat"
-rustflags = ["-Z", "share-generics=y"]
+rustflags = ["-C", "target-cpu=native", "-Z", "share-generics=y"]
 
 [package]
 name = "layout_analyser"

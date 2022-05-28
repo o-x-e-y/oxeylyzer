@@ -1,4 +1,5 @@
-use std::io::Write;
+use std::io::{Write, Read};
+use std::fs::File;
 
 use crate::language_data::*;
 use crate::language_data::LanguageData;
@@ -133,8 +134,15 @@ pub struct Config {
 
 impl Config {
 	pub fn new() -> Self {
-		let config_bytes = include_bytes!("../config.toml");
-		toml::from_slice(config_bytes).expect("Failed to parse config.toml. Values might be missing.")
+		let mut f = File::open("config.toml")
+			.expect("The config.toml is missing! Help!");
+			
+		let mut buf = Vec::new();
+		f.read_to_end(&mut buf)
+			.expect("Failed to read config.toml for some reason");
+
+		toml::from_slice(buf.as_ref())
+			.expect("Failed to parse config.toml. Values might be missing.")
 	}
 
 	pub fn default() -> Self {

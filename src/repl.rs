@@ -86,7 +86,7 @@ impl Repl {
                 let count = usize::from_str_radix(count_str, 10).map_err(|e| e.to_string())?;
                 self.gen.generate_n(count);
             }
-            Some(("rank", _new_m)) => {
+            Some(("rank", _)) => {
                 self.gen.analysis.rank();
             }
             Some(("layout", new_m)) => {
@@ -108,10 +108,24 @@ impl Repl {
                     None => println!("Current language: {}", self.language)
                 }
             }
+            Some(("languages", _)) => {
+                for entry in std::fs::read_dir("static/language_data").unwrap() {
+                    if let Ok(p) = entry {
+                        println!(
+                            "{}",
+                            p
+                                .file_name()
+                                .to_string_lossy()
+                                .replace("_", " ")
+                                .replace(".json", "")
+                        );
+                    }
+                }
+            }
             Some(("save", save_m)) => {
                 self.save(save_m);
             }
-            Some(("quit", _new_m)) => {
+            Some(("quit", _)) => {
                 println!("Exiting anlyzer...");
                 return Ok(true);
             }
@@ -179,6 +193,11 @@ impl Repl {
                     )
                     .help_template(APPLET_TEMPLATE)
                     .about("Set a language to be used for analysis. Loads corpus when not present")
+            )
+            .subcommand(
+                command!("languages")
+                .help_template(APPLET_TEMPLATE)
+                .about("Show available languages")
             )
             .subcommand(
                 command!("generate")

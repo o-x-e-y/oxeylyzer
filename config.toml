@@ -1,12 +1,12 @@
 [defaults]
-language = "english"
+language = "dutch"
 
 [weights]
 heatmap = [1.4, 0.6]
 sfb = 15.0
 dsfb = 2.5
-inrolls = 99999999.6
-outrolls = 99999999.4
+inrolls = 0.75
+outrolls = 0.6
 onehands = 0.5
 alternates = 0.5
 alternates_sfs = 0.25
