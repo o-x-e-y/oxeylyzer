@@ -127,12 +127,13 @@ pub struct Weights {
 }
 
 #[derive(Deserialize)]
-pub struct Config {
+struct ConfigLoad {
+	pub pins: String,
 	pub defaults: Defaults,
 	pub weights: Weights
 }
 
-impl Config {
+impl ConfigLoad {
 	pub fn new() -> Self {
 		let mut f = File::open("config.toml")
 			.expect("The config.toml is missing! Help!");
@@ -141,8 +142,34 @@ impl Config {
 		f.read_to_end(&mut buf)
 			.expect("Failed to read config.toml for some reason");
 
-		toml::from_slice(buf.as_ref())
-			.expect("Failed to parse config.toml. Values might be missing.")
+		let mut res: Self = toml::from_slice(&buf)
+			.expect("Failed to parse config.toml. Values might be missing.");
+		res.pins = res.pins.trim().replace(' ', "").replace('\n', "");
+		res
+	}
+}
+
+pub struct Config {
+	pub pins: Vec<usize>,
+	pub defaults: Defaults,
+	pub weights: Weights
+}
+
+impl Config {
+	pub fn new() -> Self {
+		let load = ConfigLoad::new();
+		let mut pins = Vec::new();
+		for (i, c) in load.pins.chars().enumerate() {
+			if c == 'x' {
+				pins.push(i);
+			}
+		}
+		println!("{:?}", pins);
+		Self {
+			pins: pins,
+			defaults: load.defaults,
+			weights: load.weights
+		}
 	}
 
 	pub fn default() -> Self {
@@ -161,7 +188,8 @@ impl Config {
 				alternates_sfs: 0.25,
 				redirects: 0.5,
 				bad_redirects: 4.5
-			}
+			},
+			pins: Vec::new()
 		}
 	}
 }
@@ -179,15 +207,17 @@ pub struct LayoutAnalysis {
 impl LayoutAnalysis {
 	pub fn new(language: &str, weights: Weights) -> LayoutAnalysis {
 		let mut new_analysis = LayoutAnalysis {
-			language: language.to_string(),
+			language: String::new(),
 			layouts: IndexMap::new(),
 			language_data: LanguageData::new(language),
 			sfb_indices: get_sfb_indices(),
-			weights: weights
+			weights
 			// col_distance: [1.0, 2.0, 1.0, 1.0, 2.0, 1.0],
 			// index_distance: Self::get_index_distance(1.4)
-
 		};
+		new_analysis.language = new_analysis.language_data.language.clone();
+		
+		// println!("language: {}", new_analysis.language);
 		new_analysis.layouts = new_analysis.load_layouts().unwrap();
 		new_analysis
 	}

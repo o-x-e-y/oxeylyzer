@@ -7,7 +7,8 @@ use crate::analyze::{Config, Weights};
 pub struct Repl {
     language: String,
     gen: LayoutGeneration,
-    weights: Weights
+    weights: Weights,
+    pins: Vec<usize>
 }
 
 impl Repl {
@@ -20,7 +21,8 @@ impl Repl {
                 config.defaults.language.as_str(),
                 config.weights.clone()
             ),
-            weights: config.weights
+            weights: config.weights,
+            pins: config.pins
         };
 
         loop {
@@ -86,6 +88,15 @@ impl Repl {
                 let count = usize::from_str_radix(count_str, 10).map_err(|e| e.to_string())?;
                 self.gen.generate_n(count);
             }
+            Some(("improve", comp_m)) => {
+                let name = comp_m.value_of("LAYOUT_NAME").unwrap();
+                let amount_str = comp_m.value_of("AMOUNT").unwrap();
+                if let Ok(amount) = usize::from_str_radix(amount_str, 10) {
+                    if let Some(l) = self.gen.analysis.layout_by_name(name) {
+                        self.gen.generate_n_pins(amount, l.clone(), &self.pins);
+                    }
+                }
+            }
             Some(("rank", _)) => {
                 self.gen.analysis.rank();
             }
@@ -111,19 +122,20 @@ impl Repl {
             Some(("languages", _)) => {
                 for entry in std::fs::read_dir("static/language_data").unwrap() {
                     if let Ok(p) = entry {
-                        println!(
-                            "{}",
-                            p
-                                .file_name()
-                                .to_string_lossy()
-                                .replace("_", " ")
-                                .replace(".json", "")
-                        );
+                        let name = p
+                            .file_name()
+                            .to_string_lossy()
+                            .replace("_", " ")
+                            .replace(".json", "");
+                        if name != "test" {
+                            println!("{}", name);
+                        }
                     }
                 }
             }
             Some(("reload", _)) => {
-                self.gen = LayoutGeneration::new(self.language.as_str(), self.weights.clone());
+                let new_config = Config::new();
+                self.gen = LayoutGeneration::new(self.language.as_str(), new_config.weights);
             }
             Some(("save", save_m)) => {
                 self.save(save_m);
@@ -191,6 +203,8 @@ impl Repl {
             .subcommand(
                 command!("language")
                     .alias("lang")
+                    .alias("lanugage")
+                    .alias("langauge")
                     .arg(   
                         arg!([LANGUAGE])
                     )
@@ -216,6 +230,19 @@ impl Repl {
                     )
                     .help_template(APPLET_TEMPLATE)
                     .about("Generate a number of layouts and take the best 10")
+            )
+            .subcommand(
+                command!("improve")
+                    .alias("i")
+                    .alias("optimize")
+                    .arg(
+                        arg!(<LAYOUT_NAME>)
+                    )
+                    .arg(
+                        arg!(<AMOUNT>)
+                    )
+                    .help_template(APPLET_TEMPLATE)
+                    .about("Save the top <NR> result that was generated. Starts from 1, takes negative values")
             )
             .subcommand(
                 command!("save")

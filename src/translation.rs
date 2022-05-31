@@ -166,7 +166,7 @@ impl TranslatorBuilder {
 
     pub fn passthrough(&mut self) -> &mut Self {
         let mut letters = String::new();
-        for i in 128u32..512 {
+        for i in 128u32..1250 {
             if let Some(c) = char::from_u32(i)
             && c.is_alphabetic() {
                 letters.push(c);
@@ -215,15 +215,11 @@ impl TranslatorBuilder {
     pub fn language(&mut self, language: &str) -> Result<&mut Self> {
         self.default_formatting();
         let language = language.to_lowercase();
-        if language == "english" || language == "toki_pona" || language == "indonesian" {
-            Ok(self)
-        } else if language == "albanian" {
-            Ok(self
-                .letters("çë"))
-        } else if language == "bokmal" || language == "nynorsk" {
-            Ok(self
-                .letters("åøæ"))
-        } else if language == "czech" {
+        match language.as_str() {
+            "akl" | "english" | "english2" | "toki_pona" | "indonesian"=> Ok(self),
+            "albanian" => Ok(self.letters("çë")),
+            "bokmal" | "nynorsk" => Ok(self.letters("åøæ")),
+            "czech" => {
             Ok(self
                 .to_multiple(vec![
                     ('á', "*a"), ('č', "*c"), ('ď', "*d"), ('ě', "*e"), ('é', "*x"), ('í', "*i"),
@@ -233,36 +229,31 @@ impl TranslatorBuilder {
                     ('Š', "*s"), ('Ť', "*t"), ('Ů', "*u"), ('Ú', "*b"), ('Ý', "*y"), ('Ž', "*z")
                 ])
                 .letters("áíě"))
-        } else if language == "dutch" {
-            Ok(self
-                .letters("áèéçëíîó"))
-        } else if language == "french" {
+            },
+            "dutch" => Ok(self.letters("áèéçëíîó")),
+            "french" => {
             Ok(self
                 .to_multiple(vec![
-                    // ('à', "*a"), ('ç', "*c"), ('è', "*e"), ('ê', "*v"), ('ï', "*i"), ('î', "*y"),
-                    // ('ô', "*o"), ('û', "*u"), ('À', "*a"), ('Ç', "*c"), ('È', "*e"), ('Ê', "*v"),
-                    // ('Ï', "*i"), ('Î', "*y"), ('Ô', "*o"), ('Û', "*u")
                     ('ç', "*c"), ('Ç', "*c"), ('œ', "oe"), ('á', "*'a"), ('â', "*.a"), ('è', "*,e"),
                     ('ê', "*.e"), ('ì', "*.i"), ('í', "*'i"), ('î', "*.i"), ('ò', "*,o"), ('ó', "*'o"),
-                    ('ô', "*.o"), ('ù', "*,u"), ('ú', "*'u"), ('û', "*.u"), ('Á', "*'a"),
-                    ('Â', "*.a"), ('È', "*,e"), ('Ê', "*.e"), ('Ì', "*,i"), ('Í', "*'i"),
-                    ('Î', "*.i"), ('Ò', "*,o"), ('Ó', "*'o"), ('Ô', "*.o"), ('Ù', "*,u"), ('Ú', "*'u"),
-                    ('Û', "*.u"), ('ä', "*'a"), ('ë', "*'e"), ('ï', "*'i"), ('ö', "*'o"), ('ü', "*'u"),
-                    ('Ä', "*'a"), ('Ë', "*'e"), ('Ï', "*'i"), ('Ö', "*'o"), ('Ü', "*'u")
+                    ('ô', "*.o"), ('ù', "*,u"), ('ú', "*'u"), ('û', "*.u"), ('Á', "*'a"), ('Â', "*.a"),
+                    ('È', "*,e"), ('Ê', "*.e"), ('Ì', "*,i"), ('Í', "*'i"), ('Î', "*.i"), ('Ò', "*,o"),
+                    ('Ó', "*'o"), ('Ô', "*.o"), ('Ù', "*,u"), ('Ú', "*'u"), ('Û', "*.u"), ('ä', "*'a"),
+                    ('ë', "*'e"), ('ï', "*'i"), ('ö', "*'o"), ('ü', "*'u"), ('Ä', "*'a"), ('Ë', "*'e"),
+                    ('Ï', "*'i"), ('Ö', "*'o"), ('Ü', "*'u")
                 ])
                 .letters("éà"))
-        } else if language == "german" {
-            Ok(self
-                .letters("äöüß"))
-        } else if language == "spanish" {
+            },
+            "german" => Ok(self.letters("äöüß")),
+            "spanish" => {
             Ok(self
                 .to_multiple(vec![
                     ('á', "*a"), ('é', "*e"), ('í', "*i"), ('ó', "*o"), ('ú', "*u"), ('ü', "*y"),
                     ('Á', "*a"), ('É', "*e"), ('Í', "*i"), ('Ó', "*o"), ('Ú', "*u"), ('Ü', "*y"),
                     ('ñ', "*n"), ('Ñ', "*n")
                 ]))
-        } else {
-            Err(anyhow::format_err!("This language is not available. You'll have to make your own formatter, sorry!"))
+            },
+            _ => Err(anyhow::format_err!("This language is not available. You'll have to make your own formatter, sorry!"))
         }
     }
 

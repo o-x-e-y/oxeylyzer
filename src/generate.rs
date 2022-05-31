@@ -1,5 +1,3 @@
-use std::iter::FromIterator;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use fxhash::{FxHashMap, FxHashSet};
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
@@ -9,6 +7,16 @@ use crate::analyze::LayoutAnalysis;
 
 pub type CharToFinger = FxHashMap<char, u8>;
 pub type Matrix = [char; 30];
+
+#[inline]
+pub fn shuffle_pins<T>(slice: &mut [T], pins: &[usize]) {
+    let mapping: Vec<_> = (0..slice.len()).filter(|x| !pins.contains(x)).collect();
+
+	for (m, &swap1) in mapping.iter().enumerate() {
+        let swap2 = fastrand::usize(m..mapping.len());
+        slice.swap(swap1, mapping[swap2]);
+    }
+}
 
 pub trait Layout {
 	fn layout_str(&self) -> String;
@@ -20,6 +28,7 @@ pub trait Layout {
 	fn swap(&mut self, i1: usize, i2: usize) -> bool;
 
 	fn swap_no_bounds(&mut self, i1: usize, i2: usize);
+
 	fn swap_pair(&mut self, pair: &PosPair) -> bool;
 
 	fn swap_pair_no_bounds(&mut self, pair: &PosPair);
@@ -34,7 +43,7 @@ pub trait Layout {
 
 	fn random(available_chars: [char; 30]) -> Self;
 
-	fn random_pinned();
+	fn random_pins(layout_chars: [char; 30], pins: &[usize]) -> Self;
 }
 
 #[derive(Default, Clone)]
@@ -68,6 +77,18 @@ impl TryFrom<&str> for BasicLayout {
 			new_layout.char_to_finger.insert(c, COL_TO_FINGER[i%10]);
 		}
 		Ok(new_layout)
+    }
+}
+
+impl From<[char; 30]> for BasicLayout {
+    fn from(layout: [char; 30]) -> Self {
+        let mut new_layout = BasicLayout::new();
+
+		for (i, c) in layout.into_iter().enumerate() {
+			new_layout.matrix[i] = c;
+			new_layout.char_to_finger.insert(c, COL_TO_FINGER[i%10]);
+		}
+		new_layout
     }
 }
 
@@ -161,12 +182,12 @@ impl Layout for BasicLayout {
 
 	fn random(mut available_chars: [char; 30]) -> BasicLayout {
 		fastrand::shuffle(&mut available_chars);
-		let layout_str = String::from_iter(available_chars);
-		BasicLayout::try_from(layout_str.as_str()).unwrap()
+		BasicLayout::from(available_chars)
 	}
 
-	fn random_pinned() {
-		
+	fn random_pins(mut layout_chars: [char; 30], pins: &[usize]) -> BasicLayout {
+		shuffle_pins(&mut layout_chars, pins);
+		BasicLayout::from(layout_chars)
 	}
 }
 
@@ -200,23 +221,10 @@ impl LayoutGeneration {
 		Self {
 			analysis: LayoutAnalysis::new(language, weights),
 			improved_layout: BasicLayout::new(),
-			available_chars: Self::available_chars(language),
+			available_chars: crate::analysis::available_chars(language),
 			temp_generated: None,
 			cols: [0, 1, 2, 7, 8, 9],
 		}
-	}
-
-	fn available_chars(language: &str) -> [char; 30] {
-		let chars = match language {
-			"albanian" =>           "abcdefghijklmnopqrstuvxyzëç.,'",
-			"bokmal" | "nynorsk" => "abcdefghijklmnopærstuvwøyå',.;",
-			"czech" =>              "abcdefghijklmnop*rstuvěxyzá,.í",
-			"french" =>             "abcdefghijélmnopqrstuvàxyz',.*",
-			"german" =>             "abcdefghijklmnoprstuvwxyzüäö.,",
-			"spanish" =>            "abcdefghijklmnopqrstuvwxyz',.*",
-			_ =>                    "abcdefghijklmnopqrstuvwxyz',.;"
-		};
-		chars.chars().collect::<Vec<char>>().try_into().unwrap()
 	}
 
 	pub fn optimize_cols(&self, layout: &mut BasicLayout, trigram_precision: usize, score: Option<f64>) -> f64 {
@@ -250,34 +258,35 @@ impl LayoutGeneration {
 		}
 	}
 
-	// pub fn exclude_chars(&self, excluded: &str, layout_name: &str) -> Vec<PosPair> {
-	// 	let layout = self.analysis.layout_by_name(layout_name)
-	// 		.unwrap_or_else(|| panic!("layout {} does not exist", layout_name));
-
-	// 	let i_to_char = |index: usize, layout: &Layout| -> char {
-	// 		layout.char(index % 10, index / 10)
-	// 	};
-	// 	let i_to_pos = |index: usize| -> Pos {
-	// 		Pos{x: index % 10, y: index / 10}
-	// 	};
-
-	// 	let mut res: Vec<PosPair> = Vec::new();
-	// 	for pos1 in 0..30 {
-	// 		for pos2 in (pos1 + 1)..30 {
-	// 			if !excluded.contains(i_to_char(pos1, &layout)) {
-	// 				res.push(PosPair(i_to_pos(pos1),i_to_pos(pos2)))
-	// 			}
-	// 		}
-	// 	}
-	// 	res
-	// }
-
 	pub fn generate(&self) -> BasicLayout {
 		let layout = BasicLayout::random(self.available_chars);
-		self.optimize(layout, 1000, &POSSIBLE_SWAPS)
+		self.optimize_with_cols(layout, 1000, &POSSIBLE_SWAPS)
 	}
 
 	pub fn optimize(&self, mut layout: BasicLayout, trigram_precision: usize, possible_swaps: &[PosPair]) -> BasicLayout {
+		let mut best_score = f64::MIN / 2.0;
+		let mut best_swap = PosPair::default();
+		let mut score = f64::MIN;
+		// while best_score != score {
+			while best_score != score {
+				best_score = score;
+				for swap in possible_swaps.iter() {
+					layout.swap_pair_no_bounds(swap);
+					let current = self.analysis.score(&layout, trigram_precision);
+					if current > score {
+						score = current;
+						best_swap = *swap;
+					}
+					layout.swap_pair_no_bounds(swap);
+				}
+				layout.swap_pair_no_bounds(&best_swap);
+			}
+		// 	score = self.optimize_cols(&mut layout, trigram_precision, Some(score));
+		// }
+		layout
+	}
+
+	pub fn optimize_with_cols(&self, mut layout: BasicLayout, trigram_precision: usize, possible_swaps: &[PosPair]) -> BasicLayout {
 		let mut best_score = f64::MIN / 2.0;
 		let mut best_swap = PosPair::default();
 		let mut score = f64::MIN;
@@ -299,26 +308,6 @@ impl LayoutGeneration {
 		}
 		layout
 	}
-
-	// pub fn generate_annealing(&self) -> Layout {
-	// 	let layout = Layout::random();
-	// 	self.optimize_annealing(layout)
-	// }
-
-	// pub fn optimize_annealing(&self, layout: Layout) -> Layout {
-	// 	let mut temp = 1.0;
-	// 	let temp_diff = 0.9999;
-	// 	let alpha = |t: f64| -> f64 {
-	// 		t / (1.0 + 0.5*t)
-	// 	};
-
-	// 	for swaps in 2..=3 {
-	// 		for _ in 0..(3u32*(435u32).pow(swaps)) {
-				
-	// 		}
-	// 	}
-	// 	layout
-	// }
 
 	pub fn generate_n(&mut self, amount: usize) {
 		if amount == 0 {
@@ -342,6 +331,65 @@ impl LayoutGeneration {
 			}).collect_into_vec(&mut layouts);
 
 		println!("generating {} layouts took: {} seconds", amount, start.elapsed().as_secs());
+		layouts.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+		for (layout, score) in layouts.iter().take(10) {
+			println!("{}\nscore: {:.5}", layout, score);
+		}
+		let temp_generated = layouts
+			.into_iter()
+			.map(|(x, _)| x.layout_str())
+			.collect::<Vec<String>>();
+		self.temp_generated = Some(temp_generated);
+	}
+
+	fn pinned_swaps(pins: &[usize]) -> Vec<PosPair> {
+		let mut map = [false; 30];
+		for i in 0..30 {
+			if pins.contains(&i) {
+				map[i] = true;
+			}
+		}
+		let mut res = Vec::new();
+		for ps in POSSIBLE_SWAPS {
+			if !map[ps.0] && !map[ps.1] {
+				res.push(ps);
+			}
+		}
+		res
+	}
+
+	pub fn generate_pinned(&self, based_on: &BasicLayout, pins: &[usize], possible_swaps: Option<&[PosPair]>) -> BasicLayout {
+		let layout = BasicLayout::random_pins(based_on.matrix, pins);
+		if let Some(ps) = possible_swaps {
+			self.optimize(layout, 1000, ps)
+		} else {
+			self.optimize(layout, 1000, &Self::pinned_swaps(pins))
+		}
+	}
+
+	pub fn generate_n_pins(&mut self, amount: usize, based_on: BasicLayout, pins: &[usize]) {
+		if amount == 0 {
+			return;
+		}
+		let possible_swaps = Self::pinned_swaps(pins);
+		let mut layouts: Vec<(BasicLayout, f64)> = Vec::with_capacity(amount);
+		let start = std::time::Instant::now();
+		
+		let pb = ProgressBar::new(amount as u64);
+		pb.set_style(ProgressStyle::default_bar()
+			.template("[{elapsed_precise}] [{bar:40.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
+			.progress_chars("=>-"));
+
+		(0..amount)
+			.into_par_iter()
+			.progress_with(pb)
+			.map(|_| -> (BasicLayout, f64) {
+				let layout = self.generate_pinned(&based_on, pins, Some(&possible_swaps));
+				let score = self.analysis.score(&layout, usize::MAX);
+				(layout, score)
+			}).collect_into_vec(&mut layouts);
+
+		println!("optmizing {} variants took: {} seconds", amount, start.elapsed().as_secs());
 		layouts.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
 		for (layout, score) in layouts.iter().take(10) {
 			println!("{}\nscore: {:.5}", layout, score);

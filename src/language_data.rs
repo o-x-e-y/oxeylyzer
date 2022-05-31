@@ -1,5 +1,5 @@
-extern crate fxhash;
 use fxhash::FxHashMap;
+use indexmap::IndexMap;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -12,12 +12,12 @@ pub type TrigramData = Vec<([char; 3], f64)>;
 
 #[derive(Deserialize)]
 struct LanguageDataInter {
+	// #[serde(default)]
+	pub language: String,
 	pub characters: FxHashMap<char, f64>,
 	pub bigrams: FxHashMap<String, f64>,
 	pub skipgrams: FxHashMap<String, f64>,
-	pub trigrams: FxHashMap<String, f64>,
-	#[serde(default)]
-	pub language: String
+	pub trigrams: IndexMap<String, f64>
 }
 
 impl LanguageDataInter {
@@ -31,7 +31,7 @@ impl LanguageDataInter {
 		res
 	}
 
-	pub fn get_trigram_data(data: FxHashMap<String, f64>) -> TrigramData {
+	pub fn get_trigram_data(data: IndexMap<String, f64>) -> TrigramData {
 		let mut res = TrigramData::new();
 		for (trigram, freq) in data {
 			let trigram_vec = trigram.chars().collect::<Vec<char>>();
@@ -62,7 +62,9 @@ impl From<LanguageDataInter> for LanguageData {
 
 impl LanguageData {
 	pub fn new(language: &str) -> LanguageData {
-		LanguageData::read_language_data(String::from(language))
+		let res = LanguageData::read_language_data(String::from(language));
+		println!("language read: {}", res.language);
+		res
 	}
 
 	fn read_language_data(language: String) -> LanguageData {
@@ -71,8 +73,7 @@ impl LanguageData {
 		let mut contents = String::new();
 
 		file.read_to_string(&mut contents).expect("whoopsie");
-		let mut data: LanguageDataInter = serde_json::from_str(contents.as_str()).unwrap();
-		data.language = language.to_lowercase();
+		let data: LanguageDataInter = serde_json::from_str(contents.as_str()).unwrap();
 		LanguageData::from(data)
 	}
 }
