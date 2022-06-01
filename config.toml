@@ -1,20 +1,27 @@
 pins = """
-..... ...x.
-..... .xxxx
-..... .....
+..... ..xxx
+..... xxxxx
+..... xxxxx
 """
 
 [defaults]
 language = "english"
 
 [weights]
-heatmap = [1.4, 0.9]
+heatmap = [1.5, 0.9]
 sfb = 15.0
 dsfb = 2.5
-inrolls = 0.6
-outrolls = 0.45
+inrolls = 4.6
+outrolls = 4.45
 onehands = 0.6
 alternates = 0.7
 alternates_sfs = 0.35
 redirects = 1.0
 bad_redirects = 6.5
+
+[finger_strength]
+penalty = 1.0
+pinky = 9.0
+ring = 13.0
+middle = 19.0
+index = 18.0

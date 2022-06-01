@@ -48,31 +48,30 @@ impl Repl {
         Ok(())
     }
 
-    fn save(&mut self, save_m: &clap::ArgMatches) {
+    fn get_nth(&self, nr: usize) -> Option<BasicLayout> {
         if let Some(temp_list) = &self.gen.temp_generated {
-            let n_str = save_m.value_of("NR").unwrap();
-            let n = isize::from_str_radix(n_str, 10).unwrap();
-            let n = if n >= 0
-            {
-                Some(n)
-            } else if n < 0 && n.abs() <= temp_list.len() as isize {
-                Some(temp_list.len() as isize - n)
+            if nr < temp_list.len() {
+                Some(BasicLayout::try_from(temp_list[nr].as_str()).unwrap())
             } else {
+                println!("That's not a valid index!");
                 None
-            };
-            if let Some(index) = n {
-                let layout =
-                    BasicLayout::try_from(temp_list[index as usize].as_str()).unwrap();
+            }
+        } else {
+            println!("You haven't generated any layouts yet!");
+            None
+        }
+    }
+
+    fn save(&mut self, save_m: &clap::ArgMatches) {
+        let n_str = save_m.value_of("NR").unwrap();
+        if let Ok(nr) = usize::from_str_radix(n_str, 10) {
+            if let Some(layout) = self.get_nth(nr) {
                 if let Some(name) = save_m.value_of("NAME") {
                     self.gen.analysis.save(layout, Some(name.to_string())).unwrap();
                 } else {
                     self.gen.analysis.save(layout, None).unwrap();
                 }
-            } else {
-                println!("That's not a valid index!");
-            }  
-        } else {
-            println!("You haven't generated any layouts yet!");
+            }
         }
     }
 
@@ -101,8 +100,14 @@ impl Repl {
                 self.gen.analysis.rank();
             }
             Some(("layout", new_m)) => {
-                let name = new_m.value_of("LAYOUT_NAME").unwrap();
-                self.gen.analysis.analyze_name(name);
+                let name_or_nr = new_m.value_of("LAYOUT_NAME_OR_NR").unwrap();
+                if let Ok(nr) = usize::from_str_radix(name_or_nr, 10) {
+                    if let Some(layout) = self.get_nth(nr) {
+                        self.gen.analysis.analyze(&layout);
+                    }
+                } else {
+                    self.gen.analysis.analyze_name(name_or_nr);
+                }
             }
             Some(("compare", new_m)) => {
                 let layout1 = new_m.value_of("LAYOUT_1").unwrap();
@@ -136,6 +141,7 @@ impl Repl {
             Some(("reload", _)) => {
                 let new_config = Config::new();
                 self.gen = LayoutGeneration::new(self.language.as_str(), new_config.weights);
+                self.pins = new_config.pins;
             }
             Some(("save", save_m)) => {
                 self.save(save_m);
@@ -174,6 +180,7 @@ impl Repl {
             .subcommand(
                 command!("rank")
                     .alias("r")
+                    .alias("sort")
                     .about("Rank all layouts in set language by score")
                     .help_template(APPLET_TEMPLATE),
             )
@@ -183,7 +190,7 @@ impl Repl {
                     .alias("analyze")
                     .alias("a")
                     .arg(
-                        arg!(<LAYOUT_NAME>)
+                        arg!(<LAYOUT_NAME_OR_NR>)
                     )
                     .about("Show details of layout")
                     .help_template(APPLET_TEMPLATE)

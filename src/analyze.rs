@@ -127,10 +127,20 @@ pub struct Weights {
 }
 
 #[derive(Deserialize)]
+pub struct MaxFingerUse {
+	penalty: f64,
+	pinky: f64,
+	ring: f64,
+	middle: f64,
+	index: f64
+}
+
+#[derive(Deserialize)]
 struct ConfigLoad {
 	pub pins: String,
 	pub defaults: Defaults,
-	pub weights: Weights
+	pub weights: Weights,
+	pub finger_strength: MaxFingerUse
 }
 
 impl ConfigLoad {
@@ -152,7 +162,8 @@ impl ConfigLoad {
 pub struct Config {
 	pub pins: Vec<usize>,
 	pub defaults: Defaults,
-	pub weights: Weights
+	pub weights: Weights,
+	pub finger_strength: MaxFingerUse
 }
 
 impl Config {
@@ -164,11 +175,11 @@ impl Config {
 				pins.push(i);
 			}
 		}
-		println!("{:?}", pins);
 		Self {
-			pins: pins,
+			pins,
 			defaults: load.defaults,
-			weights: load.weights
+			weights: load.weights,
+			finger_strength: load.finger_strength
 		}
 	}
 
@@ -189,7 +200,14 @@ impl Config {
 				redirects: 0.5,
 				bad_redirects: 4.5
 			},
-			pins: Vec::new()
+			pins: Vec::new(),
+			finger_strength: MaxFingerUse {
+				penalty: 1.0,
+				pinky: 9.0,
+				ring: 13.0,
+				middle: 19.0,
+				index: 20.0
+			}
 		}
 	}
 }
