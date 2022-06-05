@@ -231,7 +231,8 @@ impl TranslatorBuilder {
                 .letters("áíě"))
             },
             "dutch" => Ok(self.letters("áèéçëíîó")),
-            "french" => {
+            "english_th" => Ok(self.letters("þ")),
+            "french" | "french_qu" => {
             Ok(self
                 .to_multiple(vec![
                     ('ç', "*c"), ('Ç', "*c"), ('œ', "oe"), ('á', "*'a"), ('â', "*.a"), ('è', "*,e"),

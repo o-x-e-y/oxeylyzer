@@ -59,13 +59,14 @@ pub fn get_sfb_indices() -> [(usize, usize); 48] {
 
 pub fn available_chars(language: &str) -> [char; 30] {
 	let chars = match language {
-		"albanian" =>           "abcdefghijklmnopqrstuvxyzëç.,'",
-		"bokmal" | "nynorsk" => "abcdefghijklmnopærstuvwøyå',.;",
-		"czech" =>              "abcdefghijklmnop*rstuvěxyzá,.í",
-		"french" =>             "abcdefghijélmnopqrstuvàxyz',.*",
-		"german" =>             "abcdefghijklmnoprstuvwxyzüäö.,",
-		"spanish" =>            "abcdefghijklmnopqrstuvwxyz',.*",
-		_ =>                    "abcdefghijklmnopqrstuvwxyz',.;"
+		"albanian" =>             "abcdefghijklmnopqrstuvxyzëç.,'",
+		"bokmal" | "nynorsk" =>   "abcdefghijklmnopærstuvwøyå',.;",
+		"czech" =>                "abcdefghijklmnop*rstuvěxyzá,.í",
+		"english_th" =>           "abcdefghijklmnopqrstuvwxyz',.þ",
+		"french" | "french_qu" => "abcdefghijélmnopqrstuvàxy-',.*",
+		"german" =>               "abcdefghijklmnoprstuvwxyzüäö.,",
+		"spanish" =>              "abcdefghijklmnopqrstuvwxyz',.*",
+		_ =>                      "abcdefghijklmnopqrstuvwxyz',.;"
 	};
 	chars.chars().collect::<Vec<char>>().try_into().unwrap()
 }
