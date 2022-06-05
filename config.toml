@@ -1,6 +1,6 @@
 pins = """
-..x.. .....
-..x.. ..... 
+..... .....
+..... ..... 
 ..... .....
 """
 
@@ -19,6 +19,7 @@ alternates_sfs = 0.35
 redirects = 1.5
 bad_redirects = 6.5
 
+# this doesn't do anything yet
 [finger_strength]
 penalty = 1.0
 pinky = 9.0
