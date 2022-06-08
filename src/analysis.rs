@@ -74,6 +74,7 @@ pub fn available_chars(language: &str) -> [char; 30] {
 		"bokmal" | "nynorsk" =>   "abcdefghijklmnopærstuvwøyå',.;",
 		"czech" =>                "abcdefghijklmnop*rstuvěxyzá,.í",
 		"dutch_repeat" =>         "abcdefghijklmnopqrstuvwxyz',.@",
+		"english_repeat" =>       "abcdefghijklmnopqrstuvwxyz',.@",
 		"english_th" =>           "abcdefghijklmnopqrstuvwxyz',.þ",
 		"finnish" =>              "abcdefghijklmnopärstuvwxyz',.ö",
 		"finnish_repeat" =>       "abcdefghijklmnopärstuvw@yz',.ö",

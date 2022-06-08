@@ -11,6 +11,7 @@ pub mod repl;
 pub mod generate_cached;
 
 fn main() -> Result<(), String> {
+	load_text::load_default("english_repeat");
 	repl::Repl::run()
 }
 

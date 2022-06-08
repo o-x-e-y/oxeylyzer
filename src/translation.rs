@@ -232,6 +232,7 @@ impl TranslatorBuilder {
             },
             "dutch" => Ok(self.letters("áèéçëíîó")),
             "dutch_repeat" => Ok(self.letters("áèéçëíîó@")),
+            "english_repeat" => Ok(self.keep_same("@")),
             "english_th" => Ok(self.letters("þ")),
             "finnish" => Ok(self
                 .letters("åäö")
