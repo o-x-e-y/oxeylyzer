@@ -1,4 +1,5 @@
 use fxhash::{FxHashMap, FxHashSet};
+use anyhow::Result;
 
 use crate::language_data::LanguageData;
 use crate::analyze::TrigramStats;
@@ -55,16 +56,17 @@ pub struct GenerateCached {
 }
 
 impl GenerateCached {
-	pub fn new(language: &str) -> Self {
+	pub fn new(language: &str) -> Result<Self> {
 		let available = crate::analysis::available_chars(language);
-		let data = LanguageData::new(language);
-		Self {
-			available_chars: available,
-			per_char_trigrams: Self::per_char_trigrams(&data, &available),
-			data: data,
-			layout: CachedLayout::from(BasicLayout::random(available)),
-			
-		}
+		let data = LanguageData::new(language)?;
+		Ok(
+			Self {
+				available_chars: available,
+				per_char_trigrams: Self::per_char_trigrams(&data, &available),
+				data: data,
+				layout: CachedLayout::from(BasicLayout::random(available)),
+			}
+		)
 	}
 
 	fn per_char_trigrams(data: &LanguageData, available_chars: &[char; 30]) -> CharTrigrams {

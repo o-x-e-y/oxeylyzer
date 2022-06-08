@@ -20,7 +20,7 @@ impl Repl {
             gen: LayoutGeneration::new(
                 config.defaults.language.as_str(),
                 config.weights.clone()
-            ),
+            ).expect(format!("Could not read language data for {}", config.defaults.language).as_str()),
             weights: config.weights,
             pins: config.pins
         };
@@ -115,11 +115,19 @@ impl Repl {
                 self.gen.analysis.compare_name(layout1, layout2);
             }
             Some(("language", lang_m)) => {
+                let config = Config::new();
+
                 match lang_m.value_of("LANGUAGE") {
                     Some(language) => {
-                        self.language = language.to_string();
-                        self.gen = LayoutGeneration::new(language, self.weights.clone());
-                        println!("Set language to {}", language);
+                        if let Ok(generator) = LayoutGeneration::new(
+                            language, config.weights
+                        ) {
+                            self.language = language.to_string();
+                            self.gen = generator;
+                            println!("Set language to {}", language);
+                        } else {
+                            println!("Could not load {}", language);
+                        }
                     },
                     None => println!("Current language: {}", self.language)
                 }
@@ -139,9 +147,16 @@ impl Repl {
                 }
             }
             Some(("reload", _)) => {
-                let new_config = Config::new();
-                self.gen = LayoutGeneration::new(self.language.as_str(), new_config.weights);
-                self.pins = new_config.pins;
+                let config = Config::new();
+
+                if let Ok(generator) = LayoutGeneration::new(
+                    self.language.as_str(), config.weights
+                ) {
+                    self.gen = generator;
+                self.pins = config.pins;
+                } else {
+                    println!("Could not load {}", self.language);
+                }
             }
             Some(("save", save_m)) => {
                 self.save(save_m);

@@ -232,6 +232,12 @@ impl TranslatorBuilder {
             },
             "dutch" => Ok(self.letters("áèéçëíîó")),
             "english_th" => Ok(self.letters("þ")),
+            "finnish" => Ok(self
+                .letters("åäö")
+            ),
+            "finnish_repeat" => Ok(self
+                .letters("åäö@")
+            ),
             "french" | "french_qu" => {
             Ok(self
                 .to_multiple(vec![
@@ -251,7 +257,7 @@ impl TranslatorBuilder {
                 .to_multiple(vec![
                     ('á', "*a"), ('é', "*e"), ('í', "*i"), ('ó', "*o"), ('ú', "*u"), ('ü', "*y"),
                     ('Á', "*a"), ('É', "*e"), ('Í', "*i"), ('Ó', "*o"), ('Ú', "*u"), ('Ü', "*y"),
-                    ('ñ', "*n"), ('Ñ', "*n")
+                    ('ñ', "*n"), ('Ñ', "*n")    
                 ]))
             },
             _ => Err(anyhow::format_err!("This language is not available. You'll have to make your own formatter, sorry!"))

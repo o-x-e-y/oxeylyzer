@@ -3,7 +3,7 @@ use std::fs::File;
 
 use crate::language_data::*;
 use crate::language_data::LanguageData;
-use crate::analysis::{EFFORT_MAP, get_sfb_indices};
+use crate::analysis::{EFFORT_MAP, get_sfb_indices, get_scissor_indices};
 use crate::trigram_patterns::*;
 use crate::generate::{Layout, BasicLayout};
 
@@ -88,6 +88,7 @@ impl std::fmt::Debug for TrigramStats {
 struct LayoutStats {
 	sfb: f64,
 	dsfb: f64,
+	scissors: f64,
 	trigram_stats: TrigramStats,
 	// finger_speed: [f64; 8]
 }
@@ -101,8 +102,8 @@ impl std::fmt::Display for LayoutStats {
 		// }
 		// let fspeed_print = fspeed.join("\n");
 		write!(
-			f, "Sfb:  {:.3}%\nDsfb: {:.3}%\n\n{}",
-			self.sfb * 100.0, self.dsfb * 100.0, self.trigram_stats
+			f, "Sfb:  {:.3}%\nDsfb: {:.3}%\nScissors: {:.3}%\n\n{}",
+			self.sfb * 100.0, self.dsfb * 100.0, self.scissors * 100.0, self.trigram_stats
 		)
 	}
 }
@@ -117,6 +118,7 @@ pub struct Weights {
 	heatmap: [f64; 2],
 	sfb: f64,
 	dsfb: f64,
+	scissors: f64,
 	inrolls: f64,
 	outrolls: f64,
 	onehands: f64,
@@ -192,6 +194,7 @@ impl Config {
 				heatmap: [1.4, 0.6],
 				sfb: 15.0,
 				dsfb: 2.5,
+				scissors: 5.0,
 				inrolls: 0.6,
 				outrolls: 0.4,
 				onehands: 0.5,
@@ -217,18 +220,20 @@ pub struct LayoutAnalysis {
 	layouts: IndexMap<String, BasicLayout>,
 	language_data: LanguageData,
 	sfb_indices: [(usize, usize); 48],
+	scissor_indices: [(usize, usize); 14],
 	weights: Weights
 	// col_distance: [f64; 6],
 	// index_distance: [f64; 30]
 }
 
 impl LayoutAnalysis {
-	pub fn new(language: &str, weights: Weights) -> LayoutAnalysis {
+	pub fn new(language: &str, weights: Weights) -> Result<LayoutAnalysis> { 
 		let mut new_analysis = LayoutAnalysis {
 			language: String::new(),
 			layouts: IndexMap::new(),
-			language_data: LanguageData::new(language),
+			language_data: LanguageData::new(language)?,
 			sfb_indices: get_sfb_indices(),
+			scissor_indices: get_scissor_indices(),
 			weights
 			// col_distance: [1.0, 2.0, 1.0, 1.0, 2.0, 1.0],
 			// index_distance: Self::get_index_distance(1.4)
@@ -236,8 +241,8 @@ impl LayoutAnalysis {
 		new_analysis.language = new_analysis.language_data.language.clone();
 		
 		// println!("language: {}", new_analysis.language);
-		new_analysis.layouts = new_analysis.load_layouts().unwrap();
-		new_analysis
+		new_analysis.layouts = new_analysis.load_layouts()?;
+		Ok(new_analysis)
 	}
 
 	fn get_index_distance(lat_penalty: f64) -> [f64; 30] {
@@ -289,31 +294,37 @@ impl LayoutAnalysis {
 	fn load_layouts(&mut self) -> Result<IndexMap<String, BasicLayout>> {
 		let mut res: IndexMap<String, BasicLayout> = IndexMap::new();
 
-		let paths = std::fs::read_dir(format!("static/layouts/{}", self.language))?;
-		for p in paths {
-			if let Ok(entry) = p &&
-			Self::is_kb_file(&entry) &&
-			let Some(name) = Self::layout_name(&entry) {
-				let content = std::fs::read_to_string(entry.path())?;
-				let layout_str = Self::format_layout_str(content);
+		if let Ok(paths) = std::fs::read_dir(format!("static/layouts/{}", self.language)) {
+			for p in paths {
+				if let Ok(entry) = p &&
+				Self::is_kb_file(&entry) &&
+				let Some(name) = Self::layout_name(&entry) {
+					let content = std::fs::read_to_string(entry.path())?;
+					let layout_str = Self::format_layout_str(content);
 
-				let mut layout: BasicLayout = BasicLayout::try_from(layout_str.as_str()).unwrap();
-				layout.score = self.score(&layout, usize::MAX);
-
-				res.insert(name, layout);
+					if let Ok(mut layout) = BasicLayout::try_from(layout_str.as_str()) {
+						layout.score = self.score(&layout, usize::MAX);
+						res.insert(name, layout);
+					} else {
+						println!("layout {} is not formatted correctly", name);
+					}
+				}
 			}
+			res.sort_by(|_, a, _, b| {
+				b.score.partial_cmp(&a.score).unwrap()
+			});
+		} else {
+			std::fs::create_dir(format!("static/layouts/{}", self.language))?;
 		}
-		res.sort_by(|_, a, _, b| {
-			b.score.partial_cmp(&a.score).unwrap()
-		});
 		Ok(res)
 	}
 
 	fn get_layout_stats(&self, layout: &BasicLayout) -> LayoutStats {
 		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
 		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
+		let scissors = self.scissor_percent(layout);
 		let trigram_stats = self.trigram_stats(layout, usize::MAX);
-		LayoutStats { sfb, dsfb, trigram_stats }
+		LayoutStats { sfb, dsfb, scissors, trigram_stats }
 	}
 
 	pub fn rank(&self) {
@@ -384,8 +395,12 @@ impl LayoutAnalysis {
 
 	pub fn analyze(&self, layout: &BasicLayout) {
 		let stats = self.get_layout_stats(layout);
-		
-		println!("{}\n{}\nScore: {:.3}", layout, stats, layout.score);
+		let score = if layout.score == 0.000 {
+			self.score(layout, usize::MAX)
+		} else {
+			layout.score
+		};
+		println!("{}\n{}\nScore: {:.3}", layout, stats, score);
 		// let x = get_trigram_combinations2();
 		// for (i, combination) in x.iter().enumerate() {
 		// 	let c1 = i & 0b111;
@@ -443,7 +458,8 @@ impl LayoutAnalysis {
 		println!(
 			concat!(
 			"Sfb:              {:.3}%     Sfb:              {:.3}%\n",
-			"Dsfb:             {:.3}%     Dsfb:             {:.3}%\n\n",
+			"Dsfb:             {:.3}%     Dsfb:             {:.3}%\n",
+			"Scissors          {:.3}%     Scissors:         {:.3}%\n\n",
 			"Inrolls:          {:.2}%     Inrolls:          {:.2}%\n",
 			"Outrolls:         {:.2}%     Outrolls:         {:.2}%\n",
 			"Total Rolls:      {:.2}%     Total Rolls:      {:.2}%\n",
@@ -461,6 +477,7 @@ impl LayoutAnalysis {
 		),
 			s1.sfb*100.0, s2.sfb*100.0,
 			s1.dsfb*100.0, s2.dsfb*100.0,
+			s1.scissors*100.0, s2.scissors*100.0,
 			ts1.inrolls*100.0, ts2.inrolls*100.0,
 			ts1.outrolls*100.0, ts2.outrolls*100.0,
 			(ts1.inrolls + ts1.outrolls)*100.0, (ts2.inrolls + ts2.outrolls)*100.0,
@@ -491,22 +508,15 @@ impl LayoutAnalysis {
 		res
 	}
 
-	pub fn score(&self, layout: &BasicLayout, trigram_precision: usize) -> f64 {
-		let mut score: f64 = 0.0;
-		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
-		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
-		let trigram_data = self.trigram_stats(layout, trigram_precision);
-		score -= self.weights.heatmap[0] * (self.effort(layout) - self.weights.heatmap[1]);
-		score -= self.weights.sfb * sfb;
-		score -= self.weights.dsfb * dsfb;
-		score += self.weights.inrolls * trigram_data.inrolls;
-		score += self.weights.outrolls * trigram_data.outrolls;
-		score += self.weights.onehands * trigram_data.onehands;
-		score += self.weights.alternates * trigram_data.alternates;
-		score += self.weights.alternates_sfs * trigram_data.alternates_sfs;
-		score -= self.weights.redirects * trigram_data.redirects;
-		score -= self.weights.bad_redirects * trigram_data.bad_redirects;
-		score
+	pub fn scissor_percent(&self, layout: &BasicLayout) -> f64 {
+		let mut res = 0.0;
+		for (i1, i2) in self.scissor_indices {
+			let c1 = layout.matrix[i1];
+			let c2 = layout.matrix[i2];
+			res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or(&0.0);
+			res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or(&0.0);
+		}
+		res
 	}
 
 	pub fn bigram_percent(&self, layout: &BasicLayout, data: &BigramData) -> f64 {
@@ -522,10 +532,7 @@ impl LayoutAnalysis {
 
 	pub fn trigram_stats(&self, layout: &BasicLayout, trigram_precision: usize) -> TrigramStats {
 		let mut freqs = TrigramStats::default();
-		for (i, (trigram, freq)) in self.language_data.trigrams.iter().enumerate() {
-			if i == trigram_precision {
-				return freqs
-			}
+		for (trigram, freq) in self.language_data.trigrams.iter().take(trigram_precision) {
 			match layout.get_trigram_pattern(trigram) {
 				TrigramPattern::Alternate => freqs.alternates += freq,
 				TrigramPattern::AlternateSfs => freqs.alternates_sfs += freq,
@@ -539,6 +546,28 @@ impl LayoutAnalysis {
 			}
 		}
 		freqs
+	}
+
+	pub fn score(&self, layout: &BasicLayout, trigram_precision: usize) -> f64 {
+		let mut score: f64 = 0.0;
+		let heatmap = self.effort(layout) - self.weights.heatmap[1];
+		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
+		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
+		let scissors = self.scissor_percent(layout);
+		let trigram_data = self.trigram_stats(layout, trigram_precision);
+
+		score -= self.weights.heatmap[0] * heatmap;
+		score -= self.weights.sfb * sfb;
+		score -= self.weights.dsfb * dsfb;
+		score -= self.weights.scissors * scissors;
+		score += self.weights.inrolls * trigram_data.inrolls;
+		score += self.weights.outrolls * trigram_data.outrolls;
+		score += self.weights.onehands * trigram_data.onehands;
+		score += self.weights.alternates * trigram_data.alternates;
+		score += self.weights.alternates_sfs * trigram_data.alternates_sfs;
+		score -= self.weights.redirects * trigram_data.redirects;
+		score -= self.weights.bad_redirects * trigram_data.bad_redirects;
+		score
 	}
 }
 

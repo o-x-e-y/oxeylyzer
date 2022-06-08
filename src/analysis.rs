@@ -57,12 +57,25 @@ pub fn get_sfb_indices() -> [(usize, usize); 48] {
 	res.try_into().unwrap()
 }
 
+pub fn get_scissor_indices() -> [(usize, usize); 14] {
+	let mut res: Vec<(usize, usize)> = Vec::new();
+	res.push((0, 11));
+	res.push((9, 18));
+	for i in [0, 1, 2, 6, 7, 8] {
+		res.push((i, i+21));
+		res.push((i+1, i+20));
+	}
+	res.try_into().unwrap()
+}
+
 pub fn available_chars(language: &str) -> [char; 30] {
 	let chars = match language {
 		"albanian" =>             "abcdefghijklmnopqrstuvxyzëç.,'",
 		"bokmal" | "nynorsk" =>   "abcdefghijklmnopærstuvwøyå',.;",
 		"czech" =>                "abcdefghijklmnop*rstuvěxyzá,.í",
 		"english_th" =>           "abcdefghijklmnopqrstuvwxyz',.þ",
+		"finnish" =>              "abcdefghijklmnopärstuvwxyzö',.",
+		"finnish_repeat" =>       "abcdefghijklmnopärstuvw@yzö',.",
 		"french" | "french_qu" => "abcdefghijélmnopqrstuvàxy-',.*",
 		"german" =>               "abcdefghijklmnoprstuvwxyzüäö.,",
 		"spanish" =>              "abcdefghijklmnopqrstuvwxyz',.*",

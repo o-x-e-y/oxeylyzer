@@ -1,6 +1,8 @@
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use anyhow::Result;
+
 use crate::analysis::*;
 use crate::trigram_patterns::{TRIGRAM_COMBINATIONS, TrigramPattern};
 use crate::analyze::LayoutAnalysis;
@@ -217,13 +219,19 @@ pub struct LayoutGeneration {
 }
 
 impl LayoutGeneration {
-	pub fn new(language: &str, weights: crate::analyze::Weights) -> Self {
-		Self {
-			analysis: LayoutAnalysis::new(language, weights),
-			improved_layout: BasicLayout::new(),
-			available_chars: crate::analysis::available_chars(language),
-			temp_generated: None,
-			cols: [0, 1, 2, 7, 8, 9],
+	pub fn new(language: &str, weights: crate::analyze::Weights) -> Result<Self> {
+		if let Ok(analyzer) = LayoutAnalysis::new(language, weights) {
+			Ok(
+				Self {
+					analysis: analyzer,
+					improved_layout: BasicLayout::new(),
+					available_chars: crate::analysis::available_chars(language),
+					temp_generated: None,
+					cols: [0, 1, 2, 7, 8, 9],
+				}
+			)
+		} else {
+			anyhow::bail!("Could not initalize analyzer.")
 		}
 	}
 

@@ -1,5 +1,6 @@
 use fxhash::FxHashMap;
 use indexmap::IndexMap;
+use anyhow::Result;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -61,19 +62,19 @@ impl From<LanguageDataInter> for LanguageData {
 }
 
 impl LanguageData {
-	pub fn new(language: &str) -> LanguageData {
-		let res = LanguageData::read_language_data(String::from(language));
+	pub fn new(language: &str) -> Result<LanguageData> {
+		let res = LanguageData::read_language_data(String::from(language))?;
 		println!("language read: {}", res.language);
-		res
+		Ok(res)
 	}
 
-	fn read_language_data(language: String) -> LanguageData {
+	fn read_language_data(language: String) -> Result<LanguageData> {
 		let file_path = format!("static/language_data/{}.json", language.to_lowercase());
-		let mut file = File::open(file_path).expect("couldn't read file!");
+		let mut file = File::open(file_path)?;
 		let mut contents = String::new();
 
-		file.read_to_string(&mut contents).expect("whoopsie");
-		let data: LanguageDataInter = serde_json::from_str(contents.as_str()).unwrap();
-		LanguageData::from(data)
+		file.read_to_string(&mut contents)?;
+		let data: LanguageDataInter = serde_json::from_str(contents.as_str())?;
+		Ok(LanguageData::from(data))
 	}
 }
