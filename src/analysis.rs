@@ -70,12 +70,13 @@ pub fn get_scissor_indices() -> [(usize, usize); 14] {
 
 pub fn available_chars(language: &str) -> [char; 30] {
 	let chars = match language {
-		"albanian" =>             "abcdefghijklmnopqrstuvxyzëç.,'",
+		"albanian" =>             "abcdefghijklmnopqrstuvëxyz',.ç",
 		"bokmal" | "nynorsk" =>   "abcdefghijklmnopærstuvwøyå',.;",
 		"czech" =>                "abcdefghijklmnop*rstuvěxyzá,.í",
+		"dutch_repeat" =>         "abcdefghijklmnopqrstuvwxyz',.@",
 		"english_th" =>           "abcdefghijklmnopqrstuvwxyz',.þ",
-		"finnish" =>              "abcdefghijklmnopärstuvwxyzö',.",
-		"finnish_repeat" =>       "abcdefghijklmnopärstuvw@yzö',.",
+		"finnish" =>              "abcdefghijklmnopärstuvwxyz',.ö",
+		"finnish_repeat" =>       "abcdefghijklmnopärstuvw@yz',.ö",
 		"french" | "french_qu" => "abcdefghijélmnopqrstuvàxy-',.*",
 		"german" =>               "abcdefghijklmnoprstuvwxyzüäö.,",
 		"spanish" =>              "abcdefghijklmnopqrstuvwxyz',.*",
