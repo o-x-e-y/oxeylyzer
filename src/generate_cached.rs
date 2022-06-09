@@ -1,9 +1,11 @@
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::FxHashMap;
 use anyhow::Result;
+use rayon::prelude::*;
 
-use crate::language_data::LanguageData;
+use crate::language_data::*;
 use crate::analyze::TrigramStats;
 use crate::generate::{Layout, BasicLayout};
+use crate::analysis::*;
 
 pub struct PerCharStats {
 	target: char,
@@ -14,9 +16,9 @@ pub struct PerCharStats {
 }
 
 impl PerCharStats {
-	pub fn new(t: char) -> Self {
+	pub fn new(target: char) -> Self {
 		Self {
-			target: t,
+			target,
 			p_score: 0.0,
 			p_sfb: 0.0,
 			p_dsfb: 0.0,
@@ -28,15 +30,15 @@ impl PerCharStats {
 #[derive(Default)]
 pub struct CachedLayout {
 	layout: BasicLayout,
-	char_stats: FxHashMap<char, PerCharStats>
+	char_score: [f64; 30]
 }
 
 impl From<BasicLayout> for CachedLayout {
     fn from(l: BasicLayout) -> Self {
-		for c in l.matrix {
-			println!("{}", l.char_to_finger.get(&c).unwrap());
+		Self {
+			layout: l,
+			char_score: [0.0; 30]
 		}
-		Self::default()
     }
 }
 
@@ -46,57 +48,47 @@ impl From<BasicLayout> for CachedLayout {
 // pub temp_generated: Option<Vec<String>>,
 // cols: [usize; 6],
 
-type CharTrigrams = FxHashMap<char, Vec<[char; 3]>>;
+type CharTrigrams = FxHashMap<char, TrigramData>;
+
+fn per_char_trigrams(n_trigrams: TrigramData, available_chars: &[char; 30]) -> CharTrigrams {
+	let mut thingy = Vec::new();
+	available_chars
+		.par_iter()
+		.map(|c| {
+			let per_char = n_trigrams
+				.iter()
+				.map(|(t, f)| (t.clone(), f.clone()))
+				.filter(|(t, _)| t.contains(c))
+				.collect::<Vec<([char; 3], f64)>>();
+			(*c, per_char)
+		})
+		.collect_into_vec(&mut thingy);
+	CharTrigrams::from_iter(thingy)
+}
 
 pub struct GenerateCached {
 	available_chars: [char; 30],
 	data: LanguageData,
 	layout: CachedLayout,
-	per_char_trigrams: CharTrigrams
+	pub char_trigrams: CharTrigrams
 }
 
 impl GenerateCached {
-	pub fn new(language: &str) -> Result<Self> {
-		let available = crate::analysis::available_chars(language);
-		let data = LanguageData::new(language)?;
+	pub fn new(language: &str, trigram_precision: usize) -> Result<Self> {
+		let available = available_chars(language);
+		let new_data = LanguageData::new(language)?;
+		let n_trigrams = new_data.trigrams.clone()
+			.into_iter()
+			.take(trigram_precision)
+			.collect::<TrigramData>();
+
 		Ok(
 			Self {
 				available_chars: available,
-				per_char_trigrams: Self::per_char_trigrams(&data, &available),
-				data: data,
+				char_trigrams: per_char_trigrams(n_trigrams, &available),
+				data: new_data,
 				layout: CachedLayout::from(BasicLayout::random(available)),
 			}
 		)
-	}
-
-	fn per_char_trigrams(data: &LanguageData, available_chars: &[char; 30]) -> CharTrigrams {
-		let chars = FxHashSet::from_iter(available_chars);
-		let has = |tri: &&[char; 3]| -> bool {
-			for c in tri.into_iter() {
-				if chars.contains(c) {
-					return true;
-				}
-			}
-			false
-		};
-
-		let mut res: CharTrigrams = FxHashMap::default();
-		data.trigrams
-			.iter()
-			.take(25)
-			.map(|(tri, _)| tri)
-			.filter(|tri| has(tri))
-			.for_each(|tri| {
-				println!("{:?}", tri);
-				// for c in tri {
-				// 	if let Some(entry) = res.get_mut(c) {
-				// 		entry.push(*tri);
-				// 	} else {
-				// 		res.insert(*c, vec![*tri]);
-				// 	}
-				// }
-			});
-		println!("{:#?}", res);
-		res
 	}
 }

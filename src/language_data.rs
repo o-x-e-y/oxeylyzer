@@ -35,9 +35,11 @@ impl LanguageDataInter {
 	pub fn get_trigram_data(data: IndexMap<String, f64>) -> TrigramData {
 		let mut res = TrigramData::new();
 		for (trigram, freq) in data {
-			let trigram_vec = trigram.chars().collect::<Vec<char>>();
-			let new_trigram = [trigram_vec[0], trigram_vec[1], trigram_vec[2]];
-			res.push((new_trigram, freq));
+			let tv = trigram.chars().collect::<Vec<char>>();
+			if tv[0] != tv[1] && tv[1] != tv[2] {
+				let new_trigram = [tv[0], tv[1], tv[2]];
+				res.push((new_trigram, freq));
+			}
 		}
 		res
 	}

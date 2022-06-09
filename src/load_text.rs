@@ -4,7 +4,7 @@ use std::iter::FromIterator;
 use std::fs::{File, read_dir};
 use std::time::Instant;
 
-use rayon::prelude::*;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use file_chunker::FileChunker;
 use anyhow::Result;
 use indexmap::IndexMap;

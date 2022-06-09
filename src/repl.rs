@@ -194,14 +194,12 @@ impl Repl {
             .help_template(PARSER_TEMPLATE)
             .subcommand(
                 command!("rank")
-                    .alias("r")
                     .alias("sort")
                     .about("Rank all layouts in set language by score")
                     .help_template(APPLET_TEMPLATE),
             )
             .subcommand(
                 command!("layout")
-                    .alias("l")
                     .alias("analyze")
                     .alias("a")
                     .arg(
@@ -224,6 +222,7 @@ impl Repl {
             )
             .subcommand(
                 command!("language")
+                    .alias("l")
                     .alias("lang")
                     .alias("lanugage")
                     .alias("langauge")
