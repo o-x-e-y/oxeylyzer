@@ -12,10 +12,9 @@ pub mod generate_cached;
 
 use generate_cached::*;
 
-// fn main() -> Result<(), String> {
-// 	load_text::load_default("english_repeat");
-// 	repl::Repl::run()
-// }
+fn main() -> Result<(), String> {
+	repl::Repl::run()
+}
 
 fn pause() -> Result<(), std::io::Error> {
     println!("\nPress any key to continue...");
@@ -24,12 +23,12 @@ fn pause() -> Result<(), std::io::Error> {
 	Ok(())
 }
 
-fn main() -> Result<(), std::io::Error> {
-	let x = GenerateCached::new("english", 1000).unwrap();
+// fn main() -> Result<(), std::io::Error> {
+// 	let x = GenerateCached::new("english", 1000).unwrap();
 	
 
-	pause()
-}
+// 	pause()
+// }
 
 
 

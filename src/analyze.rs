@@ -218,7 +218,7 @@ impl Config {
 pub struct LayoutAnalysis {
 	language: String,
 	layouts: IndexMap<String, BasicLayout>,
-	language_data: LanguageData,
+	pub language_data: LanguageData,
 	sfb_indices: [(usize, usize); 48],
 	scissor_indices: [(usize, usize); 14],
 	weights: Weights

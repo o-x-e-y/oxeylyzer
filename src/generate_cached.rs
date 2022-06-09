@@ -3,7 +3,7 @@ use anyhow::Result;
 use rayon::prelude::*;
 
 use crate::language_data::*;
-use crate::analyze::TrigramStats;
+use crate::analyze::{TrigramStats, LayoutAnalysis, Config};
 use crate::generate::{Layout, BasicLayout};
 use crate::analysis::*;
 
@@ -68,7 +68,7 @@ fn per_char_trigrams(n_trigrams: TrigramData, available_chars: &[char; 30]) -> C
 
 pub struct GenerateCached {
 	available_chars: [char; 30],
-	data: LanguageData,
+	analysis: LayoutAnalysis,
 	layout: CachedLayout,
 	pub char_trigrams: CharTrigrams
 }
@@ -76,8 +76,9 @@ pub struct GenerateCached {
 impl GenerateCached {
 	pub fn new(language: &str, trigram_precision: usize) -> Result<Self> {
 		let available = available_chars(language);
-		let new_data = LanguageData::new(language)?;
-		let n_trigrams = new_data.trigrams.clone()
+		let new_config = Config::new();
+		let analyzer = LayoutAnalysis::new(language, new_config.weights)?;
+		let n_trigrams = analyzer.language_data.trigrams.clone()
 			.into_iter()
 			.take(trigram_precision)
 			.collect::<TrigramData>();
@@ -86,7 +87,7 @@ impl GenerateCached {
 			Self {
 				available_chars: available,
 				char_trigrams: per_char_trigrams(n_trigrams, &available),
-				data: new_data,
+				analysis: analyzer,
 				layout: CachedLayout::from(BasicLayout::random(available)),
 			}
 		)
