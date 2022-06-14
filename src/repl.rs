@@ -238,6 +238,11 @@ impl Repl {
                 .about("Show available languages")
             )
             .subcommand(
+                command!("occ")
+                .help_template(APPLET_TEMPLATE) 
+                .about("Shows the % occurence of a certain ngram (out of 100%). -s for skipgrams")
+            )
+            .subcommand(
                 command!("reload")
                 .alias("r")
                 .help_template(APPLET_TEMPLATE)

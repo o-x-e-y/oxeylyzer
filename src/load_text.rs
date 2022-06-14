@@ -20,9 +20,7 @@ pub fn load_raw(language: &str) {
 }
 
 pub fn load_default(language: &str) {
-    let start = Instant::now();
     let translator = Translator::language_or_passthrough(language);
-    println!("\nBuilding the translator for {} took {}ms", language, (Instant::now() - start).as_millis());
 	if let Err(_) = load_data(language, translator) {
         println!("{} failed to update", language);
     }

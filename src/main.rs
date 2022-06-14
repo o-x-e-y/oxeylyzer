@@ -10,8 +10,6 @@ pub mod translation;
 pub mod repl;
 pub mod generate_cached;
 
-use generate_cached::*;
-
 fn main() -> Result<(), String> {
 	repl::Repl::run()
 }

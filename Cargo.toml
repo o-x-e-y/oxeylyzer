@@ -2,7 +2,7 @@ cargo-features = ["profile-rustflags"]
 
 [profile.release]
 opt-level = 3
-# lto = "fat"
+lto = "fat"
 rustflags = ["-C", "target-cpu=native", "-Z", "share-generics=y"]
 
 [package]
