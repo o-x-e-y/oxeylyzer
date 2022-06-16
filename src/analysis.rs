@@ -1,3 +1,5 @@
+use crate::language_data::TrigramData;
+
 use itertools::Itertools;
 
 pub static COL_TO_FINGER: [u8; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
@@ -35,9 +37,9 @@ const fn get_possible_swaps() -> [PosPair; 435] {
 }
 
 pub static EFFORT_MAP: [f64; 30] = [
-	3.5, 2.5, 2.1, 1.7, 2.5, 3.4, 2.2, 2.0, 2.4, 3.0,
-	1.7, 1.3, 1.1, 1.0, 2.6, 2.6, 1.0, 1.1, 1.3, 1.7,
-	3.1, 2.7, 2.4, 1.8, 3.7, 2.1, 1.8, 2.4, 2.7, 3.3
+	3.3, 2.3, 1.9, 1.5, 2.3, 3.2, 2.0, 1.8, 2.2, 2.8,
+	1.5, 1.1, 0.9, 0.8, 2.4, 2.4, 0.8, 0.9, 1.1, 1.5,
+	2.9, 2.5, 2.2, 1.6, 3.5, 1.9, 1.6, 2.2, 2.5, 3.1
 ];
 
 pub fn get_sfb_indices() -> [(usize, usize); 48] {
@@ -82,6 +84,7 @@ pub fn available_chars(language: &str) -> [char; 30] {
 		"czech" =>                "abcdefghijklmnop*rstuvěxyzá,.í",
 		"dutch_repeat" =>         "abcdefghijklmnopqrstuvwxyz',.@",
 		"english_repeat" =>       "abcdefghijklmnopqrstuvwxyz',.@",
+		"esperanto" =>            "abcdefghijklmnopŝrstuvĝĉŭz',.ĵ",
 		"english_th" =>           "abcdefghijklmnopqrstuvwxyz',.þ",
 		"finnish" =>              "abcdefghijklmnopärstuvwxyz',.ö",
 		"finnish_repeat" =>       "abcdefghijklmnopärstuvw@yz',.ö",

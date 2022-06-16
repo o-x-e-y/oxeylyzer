@@ -10,18 +10,20 @@ use crate::generate::{Layout, BasicLayout};
 use anyhow::Result;
 use indexmap::IndexMap;
 use serde::Deserialize;
+use ansi_rgb::Foreground;
+use rgb::RGB8;
 
 #[derive(Clone, Default)]
 pub struct TrigramStats {
-	alternates: f64,
-	alternates_sfs: f64,
-	inrolls: f64,
-	outrolls: f64,
-	onehands: f64,
-	redirects: f64,
-	bad_redirects: f64,
-	other: f64,
-	invalid: f64
+	pub alternates: f64,
+	pub alternates_sfs: f64,
+	pub inrolls: f64,
+	pub outrolls: f64,
+	pub onehands: f64,
+	pub redirects: f64,
+	pub bad_redirects: f64,
+	pub other: f64,
+	pub invalid: f64
 }
 
 impl std::fmt::Display for TrigramStats {
@@ -110,31 +112,32 @@ impl std::fmt::Display for LayoutStats {
 
 #[derive(Deserialize)]
 pub struct Defaults {
-	pub language: String
+	pub language: String,
+	trigram_precision: usize
 }
 
 #[derive(Deserialize, Clone)]
 pub struct Weights {
-	heatmap: [f64; 2],
-	sfb: f64,
-	dsfb: f64,
-	scissors: f64,
-	inrolls: f64,
-	outrolls: f64,
-	onehands: f64,
-	alternates: f64,
-	alternates_sfs: f64,
-	redirects: f64,
-	bad_redirects: f64,
+	pub heatmap: f64,
+	pub sfb: f64,
+	pub dsfb: f64,
+	pub scissors: f64,
+	pub inrolls: f64,
+	pub outrolls: f64,
+	pub onehands: f64,
+	pub alternates: f64,
+	pub alternates_sfs: f64,
+	pub redirects: f64,
+	pub bad_redirects: f64,
 }
 
 #[derive(Deserialize)]
 pub struct MaxFingerUse {
-	penalty: f64,
-	pinky: f64,
-	ring: f64,
-	middle: f64,
-	index: f64
+	pub penalty: f64,
+	pub pinky: f64,
+	pub ring: f64,
+	pub middle: f64,
+	pub index: f64
 }
 
 #[derive(Deserialize)]
@@ -188,15 +191,16 @@ impl Config {
 	pub fn default() -> Self {
 		Self {
 			defaults: Defaults {
-				language: "english".to_string()
+				language: "english".to_string(),
+				trigram_precision: 1000
 			},
 			weights: Weights {
-				heatmap: [1.4, 0.6],
+				heatmap: 1.5,
 				sfb: 15.0,
 				dsfb: 2.5,
 				scissors: 5.0,
-				inrolls: 0.6,
-				outrolls: 0.4,
+				inrolls: 1.5,
+				outrolls: 1.2,
 				onehands: 0.5,
 				alternates: 0.5,
 				alternates_sfs: 0.25,
@@ -212,6 +216,10 @@ impl Config {
 				index: 20.0
 			}
 		}
+	}
+
+	pub fn trigram_precision(&self) -> usize {
+		self.defaults.trigram_precision
 	}
 }
 
@@ -550,13 +558,13 @@ impl LayoutAnalysis {
 
 	pub fn score(&self, layout: &BasicLayout, trigram_precision: usize) -> f64 {
 		let mut score: f64 = 0.0;
-		let heatmap = self.effort(layout) - self.weights.heatmap[1];
+		let heatmap = self.effort(layout);
 		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
 		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
 		let scissors = self.scissor_percent(layout);
 		let trigram_data = self.trigram_stats(layout, trigram_precision);
 
-		score -= self.weights.heatmap[0] * heatmap;
+		score -= self.weights.heatmap * heatmap;
 		score -= self.weights.sfb * sfb;
 		score -= self.weights.dsfb * dsfb;
 		score -= self.weights.scissors * scissors;

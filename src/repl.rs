@@ -19,7 +19,8 @@ impl Repl {
             language: config.defaults.language.clone(),
             gen: LayoutGeneration::new(
                 config.defaults.language.as_str(),
-                config.weights.clone()
+                config.trigram_precision(),
+                config.weights.clone(),
             ).expect(format!("Could not read language data for {}", config.defaults.language).as_str()),
             weights: config.weights,
             pins: config.pins
@@ -120,7 +121,7 @@ impl Repl {
                 match lang_m.value_of("LANGUAGE") {
                     Some(language) => {
                         if let Ok(generator) = LayoutGeneration::new(
-                            language, config.weights
+                            language, config.trigram_precision(), config.weights
                         ) {
                             self.language = language.to_string();
                             self.gen = generator;
@@ -150,7 +151,7 @@ impl Repl {
                 let config = Config::new();
 
                 if let Ok(generator) = LayoutGeneration::new(
-                    self.language.as_str(), config.weights
+                    self.language.as_str(), config.trigram_precision(), config.weights
                 ) {
                     self.gen = generator;
                 self.pins = config.pins;

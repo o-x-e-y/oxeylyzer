@@ -6,6 +6,7 @@ use anyhow::Result;
 use crate::analysis::*;
 use crate::trigram_patterns::{TRIGRAM_COMBINATIONS, TrigramPattern};
 use crate::analyze::LayoutAnalysis;
+use crate::language_data::TrigramData;
 
 pub type CharToFinger = FxHashMap<char, u8>;
 pub type Matrix = [char; 30];
@@ -210,8 +211,12 @@ impl std::fmt::Display for BasicLayout {
 	}
 }
 
+type PerCharTrigrams = fxhash::FxHashMap<char, TrigramData>;
+
 pub struct LayoutGeneration {
 	pub available_chars: [char; 30],
+	pub per_char_trigrams: PerCharTrigrams,
+	pub weights: crate::analyze::Weights,
 	pub analysis: LayoutAnalysis,
 	pub improved_layout: BasicLayout,
 	pub temp_generated: Option<Vec<String>>,
@@ -219,13 +224,18 @@ pub struct LayoutGeneration {
 }
 
 impl LayoutGeneration {
-	pub fn new(language: &str, weights: crate::analyze::Weights) -> Result<Self> {
-		if let Ok(analyzer) = LayoutAnalysis::new(language, weights) {
+	pub fn new(language: &str, trigram_precision: usize, weights: crate::analyze::Weights) -> Result<Self> {
+		if let Ok(analyzer) = LayoutAnalysis::new(language, weights.clone()) {
+			let available_chars = crate::analysis::available_chars(language);
 			Ok(
 				Self {
+					per_char_trigrams: Self::per_char_trigrams(
+						&analyzer.language_data.trigrams, &available_chars, trigram_precision
+					),
+					weights: weights,
+					available_chars,
 					analysis: analyzer,
 					improved_layout: BasicLayout::new(),
-					available_chars: crate::analysis::available_chars(language),
 					temp_generated: None,
 					cols: [0, 1, 2, 7, 8, 9],
 				}
@@ -233,6 +243,60 @@ impl LayoutGeneration {
 		} else {
 			anyhow::bail!("Could not initalize analyzer.")
 		}
+	}
+
+	fn per_char_trigrams(
+		trigrams: &TrigramData, available_chars: &[char; 30], trigram_precision: usize
+	) -> PerCharTrigrams {
+		let mut n_trigrams = trigrams.clone();
+		n_trigrams.truncate(trigram_precision);
+		
+		let thingy: Vec<(char, Vec<([char; 3], f64)>)> = available_chars
+			.iter()
+			.map(|c| {
+				let per_char = n_trigrams
+					.iter()
+					.map(|(t, f)| (t.clone(), f.clone()))
+					.filter(|(t, _)| t.contains(c))
+					.collect::<Vec<([char; 3], f64)>>();
+				(*c, per_char)
+			})
+			.collect();
+		PerCharTrigrams::from_iter(thingy)
+	}
+
+	pub fn trigrams_char_score(&self, layout: &BasicLayout, pos: usize) -> f64 {
+		let mut freqs = crate::analyze::TrigramStats::default();
+		let c = layout.matrix[pos];
+		for (trigram, freq) in self.per_char_trigrams.get(&c).unwrap() {
+			match layout.get_trigram_pattern(trigram) {
+				TrigramPattern::Alternate => freqs.alternates += freq,
+				TrigramPattern::AlternateSfs => freqs.alternates_sfs += freq,
+				TrigramPattern::Inroll => freqs.inrolls += freq,
+				TrigramPattern::Outroll => freqs.outrolls += freq,
+				TrigramPattern::Onehand => freqs.onehands += freq,
+				TrigramPattern::Redirect => freqs.redirects += freq,
+				TrigramPattern::BadRedirect => freqs.bad_redirects += freq,
+				_ => {}
+			}
+		}
+		let mut score = 0.0;
+		score += self.weights.inrolls * freqs.inrolls;
+		score += self.weights.outrolls * freqs.outrolls;
+		score += self.weights.onehands * freqs.onehands;
+		score += self.weights.alternates * freqs.alternates;
+		score += self.weights.alternates_sfs * freqs.alternates_sfs;
+		score -= self.weights.redirects * freqs.redirects;
+		score -= self.weights.bad_redirects * freqs.bad_redirects;
+		score
+	}
+
+	pub fn score_whole_matrix(&self, layout: &BasicLayout) -> [f64; 30] {
+		let mut res = [0.0; 30];
+		for i in 0..30 {
+			res[i] = self.trigrams_char_score(layout, i);
+		}
+		res
 	}
 
 	pub fn optimize_cols(&self, layout: &mut BasicLayout, trigram_precision: usize, score: Option<f64>) -> f64 {
@@ -298,11 +362,22 @@ impl LayoutGeneration {
 		let mut best_score = f64::MIN / 2.0;
 		let mut best_swap = PosPair::default();
 		let mut score = f64::MIN;
+		let mut sfb_best = 0.0;
+		let mut dsfb_best = 0.0;
+		let mut matrix_scores = self.score_whole_matrix(&layout);
+		const i_to_col: [usize; 30] = [
+			0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
+			0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
+			0, 1, 2, 3, 3, 4, 4, 5, 6, 7
+		];
 		while best_score != score {
 			while best_score != score {
 				best_score = score;
 				for swap in possible_swaps.iter() {
 					layout.swap_pair_no_bounds(swap);
+					if i_to_col[swap.0] != i_to_col[swap.1] {
+						
+					}
 					let current = self.analysis.score(&layout, trigram_precision);
 					if current > score {
 						score = current;

@@ -6,14 +6,15 @@ xxxx. .....
 
 [defaults]
 language = "dutch"
+trigram_precision = 1000
 
 [weights]
-heatmap = [1.5, 0.9]
+heatmap = 0.7
 sfb = 15.0
 dsfb = 2.5
 scissors = 5.0
-inrolls = 1.5
-outrolls = 1.2
+inrolls = 3.6
+outrolls = 3.3
 onehands = 0.6
 alternates = 0.7
 alternates_sfs = 0.35
