@@ -401,6 +401,15 @@ impl LayoutAnalysis {
 		Ok(())
 	}
 
+	fn heatmap_heat(&self, c: &char) -> String {
+		let complement = 215.0 - *self.language_data.characters
+			.get(c)
+			.unwrap_or(&0.0) * 1720.0;
+		let complement = complement.max(0.0) as u8;
+		let heat = RGB8::new(215, complement, complement);
+		format!("{}", (*c).to_string().fg(heat))
+	}
+
 	pub fn analyze(&self, layout: &BasicLayout) {
 		let stats = self.get_layout_stats(layout);
 		let score = if layout.score == 0.000 {
@@ -408,7 +417,20 @@ impl LayoutAnalysis {
 		} else {
 			layout.score
 		};
-		println!("{}\n{}\nScore: {:.3}", layout, stats, score);
+
+		let mut layout_str = String::new();
+		for (i, c) in layout.matrix.iter().enumerate() {
+			if i % 10 == 0 && i > 0 {
+				layout_str.push('\n');
+			}
+			if (i + 5) % 10 == 0 {
+				layout_str.push(' ');
+			}
+			layout_str.push_str(self.heatmap_heat(c).as_str());
+			layout_str.push(' ');
+		}
+		
+		println!("{}\n{}\nScore: {:.3}", layout_str, stats, score);
 		// let x = get_trigram_combinations2();
 		// for (i, combination) in x.iter().enumerate() {
 		// 	let c1 = i & 0b111;
@@ -439,13 +461,13 @@ impl LayoutAnalysis {
 		for y in 0..3 {
 			for (n, layout) in [l1, l2].into_iter().enumerate() {
 				for x in 0..10 {
-					print!("{} ", layout.matrix[x + 10*y]);
+					print!("{} ", self.heatmap_heat(&layout.matrix[x + 10*y]));
 					if x == 4 {
-						print!(" ")
+						print!(" ");
 					}
 				}
 				if n == 0 {
-					print!("        ")
+					print!("        ");
 				}
 			}
 			println!();
