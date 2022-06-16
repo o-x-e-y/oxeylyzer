@@ -10,8 +10,7 @@ use crate::generate::{Layout, BasicLayout};
 use anyhow::Result;
 use indexmap::IndexMap;
 use serde::Deserialize;
-use ansi_rgb::Foreground;
-use rgb::RGB8;
+use ansi_rgb::{rgb, Colorable};
 
 #[derive(Clone, Default)]
 pub struct TrigramStats {
@@ -406,7 +405,7 @@ impl LayoutAnalysis {
 			.get(c)
 			.unwrap_or(&0.0) * 1720.0;
 		let complement = complement.max(0.0) as u8;
-		let heat = RGB8::new(215, complement, complement);
+		let heat = rgb(215, complement, complement);
 		format!("{}", (*c).to_string().fg(heat))
 	}
 

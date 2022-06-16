@@ -28,5 +28,4 @@ shlex = "1.1.0"
 fxhash = "0.2.1"
 indicatif = {version = "0.16.2", features = ["rayon"]}
 toml = "0.5.9"
-ansi_rgb = "0.2.0"
-rgb = { version = "0.8", default-features = false }
+ansi_rgb = { git = "https://github.com/O-X-E-Y/ansi_rgb" }
