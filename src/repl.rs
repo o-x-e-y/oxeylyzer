@@ -273,6 +273,7 @@ impl Repl {
             )
             .subcommand(
                 command!("save")
+                .alias("s")
                 .arg(
                     arg!(<NR>)
                 )

@@ -128,9 +128,10 @@ pub struct Weights {
 	pub alternates_sfs: f64,
 	pub redirects: f64,
 	pub bad_redirects: f64,
+	pub max_finger_use: MaxFingerUse
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct MaxFingerUse {
 	pub penalty: f64,
 	pub pinky: f64,
@@ -143,8 +144,7 @@ pub struct MaxFingerUse {
 struct ConfigLoad {
 	pub pins: String,
 	pub defaults: Defaults,
-	pub weights: Weights,
-	pub finger_strength: MaxFingerUse
+	pub weights: Weights
 }
 
 impl ConfigLoad {
@@ -166,13 +166,19 @@ impl ConfigLoad {
 pub struct Config {
 	pub pins: Vec<usize>,
 	pub defaults: Defaults,
-	pub weights: Weights,
-	pub finger_strength: MaxFingerUse
+	pub weights: Weights
 }
 
 impl Config {
 	pub fn new() -> Self {
-		let load = ConfigLoad::new();
+		let mut load = ConfigLoad::new();
+		load.weights.max_finger_use = MaxFingerUse {
+			penalty: load.weights.max_finger_use.penalty,
+			pinky: load.weights.max_finger_use.pinky / 100.0,
+			ring: load.weights.max_finger_use.ring / 100.0,
+			middle: load.weights.max_finger_use.middle / 100.0,
+			index: load.weights.max_finger_use.index / 100.0,
+		};
 		let mut pins = Vec::new();
 		for (i, c) in load.pins.chars().enumerate() {
 			if c == 'x' {
@@ -182,8 +188,7 @@ impl Config {
 		Self {
 			pins,
 			defaults: load.defaults,
-			weights: load.weights,
-			finger_strength: load.finger_strength
+			weights: load.weights
 		}
 	}
 
@@ -194,26 +199,26 @@ impl Config {
 				trigram_precision: 1000
 			},
 			weights: Weights {
-				heatmap: 1.5,
+				heatmap: 0.7,
 				sfb: 15.0,
 				dsfb: 2.5,
 				scissors: 5.0,
-				inrolls: 1.5,
-				outrolls: 1.2,
-				onehands: 0.5,
+				inrolls: 1.6,
+				outrolls: 1.3,
+				onehands: 0.8,
 				alternates: 0.5,
 				alternates_sfs: 0.25,
 				redirects: 0.5,
-				bad_redirects: 4.5
+				bad_redirects: 4.5,
+				max_finger_use: MaxFingerUse {
+					penalty: 1.0,
+					pinky: 0.95,
+					ring: 1.60,
+					middle: 1.95,
+					index: 1.80
+				}
 			},
 			pins: Vec::new(),
-			finger_strength: MaxFingerUse {
-				penalty: 1.0,
-				pinky: 9.0,
-				ring: 13.0,
-				middle: 19.0,
-				index: 20.0
-			}
 		}
 	}
 
@@ -228,7 +233,8 @@ pub struct LayoutAnalysis {
 	pub language_data: LanguageData,
 	sfb_indices: [(usize, usize); 48],
 	scissor_indices: [(usize, usize); 18],
-	weights: Weights
+	weights: Weights,
+	pub i_to_col: [usize; 30]
 	// col_distance: [f64; 6],
 	// index_distance: [f64; 30]
 }
@@ -241,7 +247,12 @@ impl LayoutAnalysis {
 			language_data: LanguageData::new(language)?,
 			sfb_indices: get_sfb_indices(),
 			scissor_indices: get_scissor_indices(),
-			weights
+			weights,
+			i_to_col: [
+				0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
+				0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
+				0, 1, 2, 3, 3, 4, 4, 5, 6, 7
+			]
 			// col_distance: [1.0, 2.0, 1.0, 1.0, 2.0, 1.0],
 			// index_distance: Self::get_index_distance(1.4)
 		};
@@ -530,10 +541,29 @@ impl LayoutAnalysis {
 	}
 
 	pub fn effort(&self, layout: &BasicLayout) -> f64 {
+		let mut cols = [0.0; 8];
 		let mut res: f64 = 0.0;
-		for (c, e) in layout.matrix.iter().zip(EFFORT_MAP) {
-			res += e * self.language_data.characters.get(c).unwrap_or(&0.0);
+		for ((c, e), col) in layout.matrix.iter().zip(EFFORT_MAP).zip(self.i_to_col) {
+			let c_freq = self.language_data.characters.get(c).unwrap_or(&0.0);
+			res += e * c_freq;
+			cols[col] += c_freq;
 		}
+		res += (cols[0] - self.weights.max_finger_use.pinky)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[1] - self.weights.max_finger_use.ring)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[2] - self.weights.max_finger_use.middle)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[3] - self.weights.max_finger_use.index)	
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[7] - self.weights.max_finger_use.pinky)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[6] - self.weights.max_finger_use.ring)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[5] - self.weights.max_finger_use.middle)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[4] - self.weights.max_finger_use.index)	
+			.max(0.0) * self.weights.max_finger_use.penalty;
 		res
 	}
 

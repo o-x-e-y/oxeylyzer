@@ -219,16 +219,14 @@ impl TranslatorBuilder {
             "akl" | "english" | "english2" | "toki_pona" | "indonesian"=> Ok(self),
             "albanian" => Ok(self.letters("çë")),
             "bokmal" | "nynorsk" => Ok(self.letters("åøæ")),
-            "czech" => {
-            Ok(self
+            "czech" => Ok(self
                 .to_multiple(vec![
                     ('č', "*c"), ('ď', "*d"), ('é', "*x"), ('ň', "*n"), ('ó', "*o"), ('ř', "*r"),
                     ('š', "*s"), ('ť', "*t"), ('ů', "*u"), ('ú', "*b"), ('ý', "*y"), ('ž', "*z"),
                     ('Č', "*c"), ('Ď', "*d"), ('É', "*x"), ('Ň', "*n"), ('Ó', "*o"), ('Ř', "*r"),
                     ('Š', "*s"), ('Ť', "*t"), ('Ů', "*u"), ('Ú', "*b"), ('Ý', "*y"), ('Ž', "*z")
                 ])
-                .letters("áíě"))
-            },
+                .letters("áíě")),
             "dutch" => Ok(self.letters("áèéçëíîó")),
             "dutch_repeat" => Ok(self.letters("áèéçëíîó@")),
             "english_repeat" => Ok(self.keep_same("@")),
@@ -242,8 +240,7 @@ impl TranslatorBuilder {
             "finnish_repeat" => Ok(self
                 .letters("åäö@")
             ),
-            "french" | "french_qu" => {
-            Ok(self
+            "french" | "french_qu" => Ok(self
                 .to_multiple(vec![
                     ('ç', "*c"), ('Ç', "*c"), ('œ', "oe"), ('á', "*'a"), ('â', "*.a"), ('è', "*,e"),
                     ('ê', "*.e"), ('ì', "*,i"), ('í', "*'i"), ('î', "*.i"), ('ò', "*,o"), ('ó', "*'o"),
@@ -253,28 +250,37 @@ impl TranslatorBuilder {
                     ('ë', "*'e"), ('ï', "*'i"), ('ö', "*'o"), ('ü', "*'u"), ('Ä', "*'a"), ('Ë', "*'e"),
                     ('Ï', "*'i"), ('Ö', "*'o"), ('Ü', "*'u")
                 ])
-                .letters("éà"))
-            },
+                .letters("éà")),
             "german" => Ok(self.letters("äöüß")),
-            "italian" => {
-                Ok(self
+            "italian" => Ok(self
                 .to_multiple(vec![
                     ('à', "*a"), ('è', "*e"), ('ì', "*i"), ('ò', "*o"), ('ù', "*u"), ('À', "*a"),
                     ('È', "*e"), ('Ì', "*i"), ('Ò', "*o"), ('Ù', "*u")
-                ]))
-            },
+                ])),
             "russian" => Ok(self
                 .letters("абвгдеёжзийклмнопрстуфхцчшщъыьэюя")
                 .to_space("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
             ),
-            "spanish" => {
-            Ok(self
+            "spanish" => Ok(self
                 .to_multiple(vec![
                     ('á', "*a"), ('é', "*e"), ('í', "*i"), ('ó', "*o"), ('ú', "*u"), ('ü', "*y"),
                     ('Á', "*a"), ('É', "*e"), ('Í', "*i"), ('Ó', "*o"), ('Ú', "*u"), ('Ü', "*y"),
                     ('ñ', "*n"), ('Ñ', "*n")
-                ]))
-            },
+                ])),
+            "welsh" => Ok(self
+                .to_multiple(vec![
+                    ('â', "*a"), ('ê', "*e"), ('î', "*i"), ('ô', "*o"), ('û', "*u"), ('ŵ', "*w"),
+                    ('ŷ', "*y"), ('Â', "*a"), ('Ê', "*e"), ('Î', "*i"), ('Ô', "*o"), ('Û', "*u"),
+                    ('Ŵ', "*w"), ('Ŷ', "*y")
+                ])
+                .letters("ΔⳐ")
+            ),
+            "welsh_pure" => Ok(self
+                .to_multiple(vec![
+                    ('â', "*a"), ('ê', "*e"), ('î', "*i"), ('ô', "*o"), ('û', "*u"), ('ŵ', "*w"),
+                    ('ŷ', "*y"), ('Â', "*a"), ('Ê', "*e"), ('Î', "*i"), ('Ô', "*o"), ('Û', "*u"),
+                    ('Ŵ', "*w"), ('Ŷ', "*y")
+            ])),
             _ => Err(anyhow::format_err!("This language is not available. You'll have to make your own formatter, sorry!"))
         }
     }

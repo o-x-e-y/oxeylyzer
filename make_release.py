@@ -1,6 +1,6 @@
 from os import path
 import json
-from glob import iglob
+from glob import glob
 
 
 def path_to_language(path: str):
@@ -12,7 +12,7 @@ def load_json(path: str):
         return json.load(f)
 
 
-def check_doubles(language: str):
+def doubles_for_lang(language: str):
     bigrams = load_json(f"static/language_data/{language}.json")['bigrams']
     res = 0
     for b, f in bigrams.items():
@@ -21,11 +21,15 @@ def check_doubles(language: str):
     return res * 100
 
 
+def check_doubles(path: str):
+    l = path_to_language(path)
+    print(f"{l:-<16}: {doubles_for_lang(l)}%")
+
+
 def main():
     print("doubles for each lanugage is:")
-    for l in iglob("static/language_data/*.json"):
-        l = path_to_language(l)
-        print(f"{l:-<16}: {check_doubles(l)}%")
+    for p in glob("static/language_data/*.json"):
+        check_doubles(p)
     # print(path.isdir("../generator_release"))
 
 

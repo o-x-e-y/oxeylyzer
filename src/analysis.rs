@@ -93,6 +93,8 @@ pub fn available_chars(language: &str) -> [char; 30] {
 		"italian" =>              "abcdefghijklmnopqrstuvwxyz',.*",
 		"russian" =>              "абвгдежзийклмнопрстухцчшыьюя.,",
 		"spanish" =>              "abcdefghijklmnopqrstuvwxyz',.*",
+		"welsh" =>                "abcdefghijklmnop*rstuvwΔyz',.Ⳑ",
+		"welsh_pure" =>           "abcdefghijklmnop*rstuvw-yz',.;",
 		_ =>                      "abcdefghijklmnopqrstuvwxyz',.;"
 	};
 	chars.chars().collect::<Vec<char>>().try_into().unwrap()

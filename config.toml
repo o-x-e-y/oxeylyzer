@@ -5,26 +5,26 @@ xxxx. .....
 """
 
 [defaults]
-language = "dutch"
-trigram_precision = 1000
+language = "welsh"
+trigram_precision = 800
 
 [weights]
-heatmap = 0.7
+heatmap = 0.8
 sfb = 15.0
 dsfb = 2.5
 scissors = 5.0
-inrolls = 3.6
-outrolls = 3.3
-onehands = 0.6
+inrolls = 1.6
+outrolls = 1.3
+onehands = 0.8
 alternates = 0.7
 alternates_sfs = 0.35
 redirects = 1.5
 bad_redirects = 6.5
 
 # this doesn't do anything yet
-[finger_strength]
-penalty = 1.0
+[weights.max_finger_use]
+penalty = 2.5
 pinky = 9.0
-ring = 13.0
-middle = 19.0
+ring = 16.5
+middle = 19.5
 index = 18.0

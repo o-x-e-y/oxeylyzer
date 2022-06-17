@@ -365,19 +365,15 @@ impl LayoutGeneration {
 		let mut sfb_best = 0.0;
 		let mut dsfb_best = 0.0;
 		let mut matrix_scores = self.score_whole_matrix(&layout);
-		const i_to_col: [usize; 30] = [
-			0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
-			0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
-			0, 1, 2, 3, 3, 4, 4, 5, 6, 7
-		];
+
 		while best_score != score {
 			while best_score != score {
 				best_score = score;
 				for swap in possible_swaps.iter() {
 					layout.swap_pair_no_bounds(swap);
-					if i_to_col[swap.0] != i_to_col[swap.1] {
+					// if self.analysis.i_to_col[swap.0] != self.analysis.i_to_col[swap.1] {
 						
-					}
+					// }
 					let current = self.analysis.score(&layout, trigram_precision);
 					if current > score {
 						score = current;
