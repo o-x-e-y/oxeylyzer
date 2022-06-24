@@ -4,6 +4,7 @@ use anyhow::Result;
 
 pub struct Translator {
     pub table: HashMap<char, Cow<'static, str>>,
+    pub is_passthrough: bool,
     pub(crate) ignore_unknown: bool,
     pub(crate) is_empty: bool,
     pub(crate) multiple_val: f64
@@ -21,6 +22,7 @@ impl Translator {
     pub fn new() -> TranslatorBuilder {
         TranslatorBuilder {
             table: HashMap::new(),
+            is_passthrough: false,
             ignore_unknown: false
         }
     }
@@ -94,6 +96,7 @@ impl Translator {
 
 pub struct TranslatorBuilder {
     table: HashMap<char, Cow<'static, str>>,
+    is_passthrough: bool,
     ignore_unknown: bool
 }
 
@@ -172,6 +175,8 @@ impl TranslatorBuilder {
                 letters.push(c);
             }
         }
+
+        self.is_passthrough = true;
 
         self
             .letters(letters.as_str())
@@ -252,6 +257,12 @@ impl TranslatorBuilder {
                 ])
                 .letters("éà")),
             "german" => Ok(self.letters("äöüß")),
+            "hungarian" => Ok(self
+                .to_multiple(vec![
+                    ('í', "*i"), ('ü', "*u"), ('ú', "* u"), ('ű', "* u"), ('Í', "*i"), ('Ü', "*u"),
+                    ('Ú', "* u"), ('Ű', "* u")
+                ])
+                .letters("áéöóő")),
             "italian" => Ok(self
                 .to_multiple(vec![
                     ('à', "*a"), ('è', "*e"), ('ì', "*i"), ('ò', "*o"), ('ù', "*u"), ('À', "*a"),
@@ -303,6 +314,7 @@ impl TranslatorBuilder {
     pub fn build(&mut self) -> Translator {
         Translator {
             is_empty: self.table.len() == 0,
+            is_passthrough: self.is_passthrough,
             ignore_unknown: self.ignore_unknown,
             multiple_val: self.check_multiple_val(),
             table: std::mem::take(&mut self.table)

@@ -232,7 +232,7 @@ pub struct LayoutAnalysis {
 	layouts: IndexMap<String, BasicLayout>,
 	pub language_data: LanguageData,
 	sfb_indices: [(usize, usize); 48],
-	scissor_indices: [(usize, usize); 18],
+	scissor_indices: [(usize, usize); 16],
 	weights: Weights,
 	pub i_to_col: [usize; 30]
 	// col_distance: [f64; 6],

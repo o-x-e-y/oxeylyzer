@@ -59,20 +59,25 @@ pub fn get_sfb_indices() -> [(usize, usize); 48] {
 	res.try_into().unwrap()
 }
 
-pub fn get_scissor_indices() -> [(usize, usize); 18] {
+pub fn get_scissor_indices() -> [(usize, usize); 16] {
 	let mut res: Vec<(usize, usize)> = Vec::new();
-	//these four are inner index stretches
+	//these two are top pinky to ring homerow
 	res.push((0, 11));
 	res.push((9, 18));
+	//these four are inner index stretches
 	res.push((2, 24));
 	res.push((22, 4));
-	//these two are top pinky to middle homerow
 	res.push((5, 27));
 	res.push((25, 7));
-	//these add normal stretching between ajacent columns that stretch between 2 rows
+	//these add normal stretching between ajacent columns that stretch between 2 rows except for
+	//qwerty mi and cr (assuming c is typed with index)
 	for i in [0, 1, 2, 6, 7, 8] {
-		res.push((i, i+21));
-		res.push((i+1, i+20));
+		if i != 2 {
+			res.push((i, i+21));
+		}
+		if i != 6 {
+			res.push((i+1, i+20));
+		}
 	}
 	res.try_into().unwrap()
 }
@@ -90,6 +95,7 @@ pub fn available_chars(language: &str) -> [char; 30] {
 		"finnish_repeat" =>       "abcdefghijklmnopärstuvw@yz',.ö",
 		"french" | "french_qu" => "abcdefghijélmnopqrstuvàxy-',.*",
 		"german" =>               "abcdefghijklmnoprstuvwxyzüäö.,",
+		"hungarian" =>            "ab*defghijklmnopárstuvéöyzó,.ő",
 		"italian" =>              "abcdefghijklmnopqrstuvwxyz',.*",
 		"russian" =>              "абвгдежзийклмнопрстухцчшыьюя.,",
 		"spanish" =>              "abcdefghijklmnopqrstuvwxyz',.*",

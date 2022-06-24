@@ -1,6 +1,7 @@
 from os import path
 import json
 from glob import glob
+from random import choice
 
 
 def path_to_language(path: str):
@@ -28,8 +29,11 @@ def check_doubles(path: str):
 
 def main():
     print("doubles for each lanugage is:")
-    for p in glob("static/language_data/*.json"):
-        check_doubles(p)
+    # for p in glob("static/language_data/*.json"):
+    #     check_doubles(p)
+    e450k = open('450k.txt', 'r', encoding='utf8').read().split()
+    res = [choice(e450k) for _ in range(100_000_000)]
+    open('450k_corpus.txt', 'w+', encoding='utf8').write(" ".join(res))
     # print(path.isdir("../generator_release"))
 
 

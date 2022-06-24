@@ -5,8 +5,8 @@ xxxx. .....
 """
 
 [defaults]
-language = "welsh"
-trigram_precision = 800
+language = "english"
+trigram_precision = 1000
 
 [weights]
 heatmap = 0.8

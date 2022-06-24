@@ -2,12 +2,12 @@ use std::io::Write;
 use clap::{arg, command, Command};
 use crate::generate::LayoutGeneration;
 use crate::generate::BasicLayout;
-use crate::analyze::{Config, Weights};
+use crate::analyze::Config;
+use crate::load_text;
 
 pub struct Repl {
     language: String,
     gen: LayoutGeneration,
-    weights: Weights,
     pins: Vec<usize>
 }
 
@@ -20,9 +20,8 @@ impl Repl {
             gen: LayoutGeneration::new(
                 config.defaults.language.as_str(),
                 config.trigram_precision(),
-                config.weights.clone(),
+                config.weights,
             ).expect(format!("Could not read language data for {}", config.defaults.language).as_str()),
-            weights: config.weights,
             pins: config.pins
         };
 
@@ -162,6 +161,12 @@ impl Repl {
             Some(("save", save_m)) => {
                 self.save(save_m);
             }
+            Some(("load", load_m)) => {
+                if let Some(language) = load_m.value_of("LANGUAGE") {
+                    load_text::load_default(language);
+                    
+                }
+            }
             Some(("quit", _)) => {
                 println!("Exiting anlyzer...");
                 return Ok(true);
@@ -175,11 +180,11 @@ impl Repl {
 
     fn cli(&self) -> Command<'static> {
         // strip out usage
-        const PARSER_TEMPLATE: &str = "\
+        const REPL_TEMPLATE: &str = "\
             {all-args}
         ";
         // strip out name/version
-        const APPLET_TEMPLATE: &str = "\
+        const COMMAND_TEMPLATE: &str = "\
             {about-with-newline}\n\
             {usage-heading}\n    {usage}\n\
             \n\
@@ -192,12 +197,12 @@ impl Repl {
             .subcommand_required(true)
             .subcommand_value_name("APPLET")
             .subcommand_help_heading("APPLETS")
-            .help_template(PARSER_TEMPLATE)
+            .help_template(REPL_TEMPLATE)
             .subcommand(
                 command!("rank")
                     .alias("sort")
                     .about("Rank all layouts in set language by score")
-                    .help_template(APPLET_TEMPLATE),
+                    .help_template(COMMAND_TEMPLATE),
             )
             .subcommand(
                 command!("layout")
@@ -207,7 +212,7 @@ impl Repl {
                         arg!(<LAYOUT_NAME_OR_NR>)
                     )
                     .about("Show details of layout")
-                    .help_template(APPLET_TEMPLATE)
+                    .help_template(COMMAND_TEMPLATE)
             )
             .subcommand(
                 command!("compare")
@@ -219,7 +224,7 @@ impl Repl {
                         arg!(<LAYOUT_2>)
                     )
                     .about("Compare 2 layouts")
-                    .help_template(APPLET_TEMPLATE)
+                    .help_template(COMMAND_TEMPLATE)
             )
             .subcommand(
                 command!("language")
@@ -230,23 +235,23 @@ impl Repl {
                     .arg(   
                         arg!([LANGUAGE])
                     )
-                    .help_template(APPLET_TEMPLATE)
+                    .help_template(COMMAND_TEMPLATE)
                     .about("Set a language to be used for analysis. Loads corpus when not present")
             )
             .subcommand(
                 command!("languages")
-                .help_template(APPLET_TEMPLATE)
+                .help_template(COMMAND_TEMPLATE)
                 .about("Show available languages")
             )
             .subcommand(
                 command!("occ")
-                .help_template(APPLET_TEMPLATE) 
+                .help_template(COMMAND_TEMPLATE) 
                 .about("Shows the % occurence of a certain ngram (out of 100%). -s for skipgrams")
             )
             .subcommand(
                 command!("reload")
                 .alias("r")
-                .help_template(APPLET_TEMPLATE)
+                .help_template(COMMAND_TEMPLATE)
                 .about("Reloads all data with the current language. Loses temporary layouts.")
             )
             .subcommand(
@@ -255,7 +260,7 @@ impl Repl {
                     .arg(
                         arg!(<COUNT>)
                     )
-                    .help_template(APPLET_TEMPLATE)
+                    .help_template(COMMAND_TEMPLATE)
                     .about("Generate a number of layouts and take the best 10")
             )
             .subcommand(
@@ -268,7 +273,7 @@ impl Repl {
                     .arg(
                         arg!(<AMOUNT>)
                     )
-                    .help_template(APPLET_TEMPLATE)
+                    .help_template(COMMAND_TEMPLATE)
                     .about("Save the top <NR> result that was generated. Starts from 1, takes negative values")
             )
             .subcommand(
@@ -280,14 +285,31 @@ impl Repl {
                 .arg(
                     arg!([NAME])
                 )
-                .help_template(APPLET_TEMPLATE)
+                .help_template(COMMAND_TEMPLATE)
                 .about("Save the top <NR> result that was generated. Starts from 1, takes negative values")
+            )
+            .subcommand(
+                command!("load")
+                .arg(
+                    arg!(<LANGUAGE>)
+                )
+                .help_template(COMMAND_TEMPLATE)
+                .about("loads corpus for <language>. Will be passthrough if the language isn't known")
+            )
+            .subcommand(
+                command!("passthrough")
+                .alias("pass")
+                .arg(
+                    arg!(<LANGUAGE>)
+                )
+                .help_template(COMMAND_TEMPLATE)
+                .about("Loads corpus as passthrough for <language> in static/language_data_pass")
             )
             .subcommand(
                 command!("quit")
                     .alias("exit")
                     .about("Quit the repl")
-                    .help_template(APPLET_TEMPLATE),
+                    .help_template(COMMAND_TEMPLATE),
             )
     }
 }

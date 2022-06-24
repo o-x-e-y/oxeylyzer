@@ -53,9 +53,10 @@ pub fn load_data(language: &str, translator: Translator) -> Result<TextData> {
         .filter_map(Result::ok)
         .reduce(|accum, new| accum.combine_with(new))
         .unwrap_or(TextTrigrams::default());
-    
+
+    let is_passthrough = translator.is_passthrough;
     let res = TextData::from((all_trigrams, translator, language));
-    res.save()?;
+    res.save(is_passthrough)?;
     println!("loading {} took {}ms", language, (Instant::now() - start_total).as_millis());
     Ok(res)
 }
@@ -271,7 +272,7 @@ impl TextData {
         self.trigram_sum += freq;
     }
 
-    fn save(&self) -> Result<()> {
+    fn save(&self, pass: bool) -> Result<()> {
         use std::fs::OpenOptions;
         use std::io::Write;
 
@@ -280,11 +281,13 @@ impl TextData {
         let mut ser = serde_json::Serializer::with_formatter(buf, formatter);
         self.serialize(&mut ser).unwrap();
 
+        let pass_str = if pass { "_pass" } else { "" };
+
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("static/language_data/{}.json", self.language))?;
+            .open(format!("static/language_data{}/{}.json", pass_str, self.language))?;
         
         file.write(ser.into_inner().as_slice())?;
         Ok(())
