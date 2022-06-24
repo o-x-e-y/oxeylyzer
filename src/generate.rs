@@ -1,4 +1,5 @@
 use fxhash::FxHashMap;
+use smallmap::Map;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use anyhow::Result;
@@ -8,7 +9,7 @@ use crate::trigram_patterns::{TRIGRAM_COMBINATIONS, TrigramPattern};
 use crate::analyze::LayoutAnalysis;
 use crate::language_data::TrigramData;
 
-pub type CharToFinger = FxHashMap<char, u8>;
+pub type CharToFinger = Map<char, u8>;
 pub type Matrix = [char; 30];
 
 #[inline]

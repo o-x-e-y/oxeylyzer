@@ -29,3 +29,4 @@ fxhash = "0.2.1"
 indicatif = {version = "0.16.2", features = ["rayon"]}
 toml = "0.5.9"
 ansi_rgb = { git = "https://github.com/O-X-E-Y/ansi_rgb" }
+smallmap = "1.3.4"
