@@ -1,4 +1,3 @@
-use fxhash::FxHashMap;
 use smallmap::Map;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
@@ -9,7 +8,7 @@ use crate::trigram_patterns::{TRIGRAM_COMBINATIONS, TrigramPattern};
 use crate::analyze::LayoutAnalysis;
 use crate::language_data::TrigramData;
 
-pub type CharToFinger = Map<char, u8>;
+pub type CharToFinger = Map<char, usize>;
 pub type Matrix = [char; 30];
 
 #[inline]
@@ -168,14 +167,14 @@ impl Layout for BasicLayout {
 	}
 
 	fn get_trigram_pattern(&self, trigram: &[char; 3]) -> TrigramPattern {
-		let a = *self.char_to_finger.get(&trigram[0]).unwrap_or(&u8::MAX);
-		let b = *self.char_to_finger.get(&trigram[1]).unwrap_or(&u8::MAX);
-		let c = *self.char_to_finger.get(&trigram[2]).unwrap_or(&u8::MAX);
-		if (a | b | c) == u8::MAX {
+		let a = *self.char_to_finger.get(&trigram[0]).unwrap_or(&usize::MAX);
+		let b = *self.char_to_finger.get(&trigram[1]).unwrap_or(&usize::MAX);
+		let c = *self.char_to_finger.get(&trigram[2]).unwrap_or(&usize::MAX);
+		if (a | b | c) == usize::MAX {
 			return TrigramPattern::Invalid
 		}
 		// a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 = 0b111)
-		let combination = ((a as usize) << 6) | ((b as usize) << 3) | c as usize;
+		let combination = (a << 6) | (b << 3) | c;
 		TRIGRAM_COMBINATIONS[combination]
 	}
 
@@ -210,6 +209,10 @@ impl std::fmt::Display for BasicLayout {
 		}
 		write![f, "{}", res]
 	}
+}
+
+struct LayoutCache {
+	
 }
 
 type PerCharTrigrams = fxhash::FxHashMap<char, TrigramData>;
@@ -357,18 +360,18 @@ impl LayoutGeneration {
 	pub fn optimize_with_cols(&self, mut layout: BasicLayout, trigram_precision: usize, possible_swaps: &[PosPair]) -> BasicLayout {
 		let mut best_score = f64::MIN / 2.0;
 		let mut score = f64::MIN;
-		// let mut sfb_best = 0.0;
-		// let mut dsfb_best = 0.0;
-		// let mut matrix_scores = self.score_whole_matrix(&layout);
+		let mut sfb_best = 0.0;
+		let mut dsfb_best = 0.0;
+		let mut matrix_scores = self.score_whole_matrix(&layout);
 
 		while best_score != score {
 			while best_score != score {
 				best_score = score;
 				'swaps: for swap in possible_swaps.iter() {
 					layout.swap_pair_no_bounds(swap);
-					// if self.analysis.i_to_col[swap.0] != self.analysis.i_to_col[swap.1] {
+					if self.analysis.i_to_col[swap.0] != self.analysis.i_to_col[swap.1] {
 						
-					// }
+					}
 					let current = self.analysis.score(&layout, trigram_precision);
 					if current > score {
 						score = current;
@@ -535,19 +538,19 @@ mod tests {
 	#[test]
 	fn char_to_finger() {
 		let qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		assert_eq!(qwerty.char_to_finger.get(&'a'), Some(&0u8));
-		assert_eq!(qwerty.char_to_finger.get(&'w'), Some(&1u8));
-		assert_eq!(qwerty.char_to_finger.get(&'c'), Some(&2u8));
+		assert_eq!(qwerty.char_to_finger.get(&'a'), Some(&0usize));
+		assert_eq!(qwerty.char_to_finger.get(&'w'), Some(&1usize));
+		assert_eq!(qwerty.char_to_finger.get(&'c'), Some(&2usize));
 
-		assert_eq!(qwerty.char_to_finger.get(&'r'), Some(&3u8));
-		assert_eq!(qwerty.char_to_finger.get(&'b'), Some(&3u8));
+		assert_eq!(qwerty.char_to_finger.get(&'r'), Some(&3usize));
+		assert_eq!(qwerty.char_to_finger.get(&'b'), Some(&3usize));
 
-		assert_eq!(qwerty.char_to_finger.get(&'h'), Some(&4u8));
-		assert_eq!(qwerty.char_to_finger.get(&'u'), Some(&4u8));
+		assert_eq!(qwerty.char_to_finger.get(&'h'), Some(&4usize));
+		assert_eq!(qwerty.char_to_finger.get(&'u'), Some(&4usize));
 
-		assert_eq!(qwerty.char_to_finger.get(&'i'), Some(&5u8));
-		assert_eq!(qwerty.char_to_finger.get(&'.'), Some(&6u8));
-		assert_eq!(qwerty.char_to_finger.get(&';'), Some(&7u8));
+		assert_eq!(qwerty.char_to_finger.get(&'i'), Some(&5usize));
+		assert_eq!(qwerty.char_to_finger.get(&'.'), Some(&6usize));
+		assert_eq!(qwerty.char_to_finger.get(&';'), Some(&7usize));
 	}
 
 	#[test]

@@ -1,8 +1,6 @@
-use crate::language_data::TrigramData;
-
 use itertools::Itertools;
 
-pub static COL_TO_FINGER: [u8; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
+pub static COL_TO_FINGER: [usize; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
 
 #[derive(Copy, Clone)]
 pub struct PosPair(pub usize, pub usize);
