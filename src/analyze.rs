@@ -3,7 +3,7 @@ use std::fs::File;
 
 use crate::language_data::*;
 use crate::language_data::LanguageData;
-use crate::analysis::{EFFORT_MAP, get_sfb_indices, get_scissor_indices};
+use crate::analysis::*;
 use crate::trigram_patterns::*;
 use crate::generate::{Layout, BasicLayout};
 
@@ -118,6 +118,7 @@ pub struct Defaults {
 #[derive(Deserialize, Clone)]
 pub struct Weights {
 	pub heatmap: f64,
+	pub lateral_penalty: f64,
 	pub sfb: f64,
 	pub dsfb: f64,
 	pub scissors: f64,
@@ -200,6 +201,7 @@ impl Config {
 			},
 			weights: Weights {
 				heatmap: 0.7,
+				lateral_penalty: 1.3,
 				sfb: 15.0,
 				dsfb: 2.5,
 				scissors: 5.0,
@@ -234,9 +236,9 @@ pub struct LayoutAnalysis {
 	sfb_indices: [(usize, usize); 48],
 	scissor_indices: [(usize, usize); 16],
 	weights: Weights,
-	pub i_to_col: [usize; 30]
-	// col_distance: [f64; 6],
-	// index_distance: [f64; 30]
+	i_to_col: [usize; 30],
+	col_distance: [f64; 6],
+	index_distance: [f64; 30]
 }
 
 impl LayoutAnalysis {
@@ -247,41 +249,19 @@ impl LayoutAnalysis {
 			language_data: LanguageData::new(language)?,
 			sfb_indices: get_sfb_indices(),
 			scissor_indices: get_scissor_indices(),
+			col_distance: [1.0, 2.0, 1.0, 1.0, 2.0, 1.0],
+			index_distance: get_index_distance(weights.lateral_penalty),
 			weights,
 			i_to_col: [
 				0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
 				0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
 				0, 1, 2, 3, 3, 4, 4, 5, 6, 7
-			]
-			// col_distance: [1.0, 2.0, 1.0, 1.0, 2.0, 1.0],
-			// index_distance: Self::get_index_distance(1.4)
+			],
 		};
 		new_analysis.language = new_analysis.language_data.language.clone();
 		
-		// println!("language: {}", new_analysis.language);
 		new_analysis.layouts = new_analysis.load_layouts()?;
 		Ok(new_analysis)
-	}
-
-	fn get_index_distance(lat_penalty: f64) -> [f64; 30] {
-		let mut res = [0.0; 30];
-		let mut i = 0;
-		for y1 in 0..3isize {
-			for x1 in 0..2isize {
-				for y2 in 0..3isize {
-					for x2 in 0..2isize {
-						if !(x1 == x2 && y1 == y2) {
-							let x_dist = ((x1-x2).abs() as f64)*lat_penalty;
-							let y_dist = (y1-y2).abs() as f64;
-							let distance = (x_dist.powi(2) + y_dist.powi(2)).sqrt();
-							res[i] = distance;
-							i += 1;
-						}
-					}
-				}
-			}
-		}
-		res
 	}
 
 	fn is_kb_file(entry: &std::fs::DirEntry) -> bool {

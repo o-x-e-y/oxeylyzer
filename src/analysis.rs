@@ -80,6 +80,27 @@ pub fn get_scissor_indices() -> [(usize, usize); 16] {
 	res.try_into().unwrap()
 }
 
+pub fn get_index_distance(lat_penalty: f64) -> [f64; 30] {
+	let mut res = [0.0; 30];
+	let mut i = 0;
+	for y1 in 0..3isize {
+		for x1 in 0..2isize {
+			for y2 in 0..3isize {
+				for x2 in 0..2isize {
+					if !(x1 == x2 && y1 == y2) {
+						let x_dist = ((x1-x2).abs() as f64)*lat_penalty;
+						let y_dist = (y1-y2).abs() as f64;
+						let distance = (x_dist.powi(2) + y_dist.powi(2)).sqrt();
+						res[i] = distance;
+						i += 1;
+					}
+				}
+			}
+		}
+	}
+	res
+}
+
 pub fn available_chars(language: &str) -> [char; 30] {
 	let chars = match language {
 		"albanian" =>             "abcdefghijklmnopqrstuvëxyz',.ç",
