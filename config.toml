@@ -1,6 +1,6 @@
 pins = """
 ..... .....
-xxxx. .....
+xxxx    . .....
 ..... .....
 """
 
@@ -9,7 +9,7 @@ language = "english"
 trigram_precision = 1000
 
 [weights]
-heatmap = 0.8
+heatmap = 0.85
 sfb = 15.0
 dsfb = 2.5
 scissors = 5.0
@@ -21,7 +21,6 @@ alternates_sfs = 0.35
 redirects = 1.5
 bad_redirects = 6.5
 
-# this doesn't do anything yet
 [weights.max_finger_use]
 penalty = 2.5
 pinky = 9.0

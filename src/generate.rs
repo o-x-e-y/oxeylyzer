@@ -212,7 +212,7 @@ impl std::fmt::Display for BasicLayout {
 }
 
 struct LayoutCache {
-	
+
 }
 
 type PerCharTrigrams = fxhash::FxHashMap<char, TrigramData>;
@@ -342,43 +342,47 @@ impl LayoutGeneration {
 	pub fn optimize(&self, mut layout: BasicLayout, trigram_precision: usize, possible_swaps: &[PosPair]) -> BasicLayout {
 		let mut best_score = f64::MIN / 2.0;
 		let mut score = f64::MIN;
+		let mut best_swap = &PosPair::default();
 		while best_score != score {
 			best_score = score;
-			'swaps: for swap in possible_swaps.iter() {
+			for swap in possible_swaps.iter() {
 				layout.swap_pair_no_bounds(swap);
 				let current = self.analysis.score(&layout, trigram_precision);
 				if current > score {
 					score = current;
-					break 'swaps;
+					best_swap = swap;
 				}
 				layout.swap_pair_no_bounds(swap);
 			}
+			layout.swap_pair_no_bounds(best_swap);
 		}
 		layout
 	}
 
 	pub fn optimize_with_cols(&self, mut layout: BasicLayout, trigram_precision: usize, possible_swaps: &[PosPair]) -> BasicLayout {
-		let mut best_score = f64::MIN / 2.0;
+		let mut best_score = f64::MIN + 1.0;
 		let mut score = f64::MIN;
-		let mut sfb_best = 0.0;
-		let mut dsfb_best = 0.0;
-		let mut matrix_scores = self.score_whole_matrix(&layout);
+		let mut best_swap = &PosPair::default();
+		// let mut sfb_best = 0.0;
+		// let mut dsfb_best = 0.0;
+		// let mut matrix_scores = self.score_whole_matrix(&layout);
 
 		while best_score != score {
 			while best_score != score {
 				best_score = score;
-				'swaps: for swap in possible_swaps.iter() {
+				for swap in possible_swaps.iter() {
 					layout.swap_pair_no_bounds(swap);
-					if self.analysis.i_to_col[swap.0] != self.analysis.i_to_col[swap.1] {
+					// if self.analysis.i_to_col[swap.0] != self.analysis.i_to_col[swap.1] {
 						
-					}
+					// }
 					let current = self.analysis.score(&layout, trigram_precision);
 					if current > score {
 						score = current;
-						break 'swaps;
+						best_swap = swap;
 					}
 					layout.swap_pair_no_bounds(swap);
 				}
+				layout.swap_pair_no_bounds(best_swap);
 			}
 			score = self.optimize_cols(&mut layout, trigram_precision, Some(score));
 		}
