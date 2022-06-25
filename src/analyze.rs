@@ -200,7 +200,7 @@ impl Config {
 				trigram_precision: 1000
 			},
 			weights: Weights {
-				heatmap: 0.7,
+				heatmap: 0.85,
 				lateral_penalty: 1.3,
 				sfb: 15.0,
 				dsfb: 2.5,
@@ -208,16 +208,16 @@ impl Config {
 				inrolls: 1.6,
 				outrolls: 1.3,
 				onehands: 0.8,
-				alternates: 0.5,
-				alternates_sfs: 0.25,
-				redirects: 0.5,
-				bad_redirects: 4.5,
+				alternates: 0.7,
+				alternates_sfs: 0.35,
+				redirects: 1.5,
+				bad_redirects: 6.5,
 				max_finger_use: MaxFingerUse {
-					penalty: 1.0,
-					pinky: 0.95,
-					ring: 1.60,
-					middle: 1.95,
-					index: 1.80
+					penalty: 2.5,
+					pinky: 9.0,
+					ring: 16.0,
+					middle: 19.5,
+					index: 18.0
 				}
 			},
 			pins: Vec::new(),
@@ -242,7 +242,13 @@ pub struct LayoutAnalysis {
 }
 
 impl LayoutAnalysis {
-	pub fn new(language: &str, weights: Weights) -> Result<LayoutAnalysis> { 
+	pub fn new(language: &str, weights_opt: Option<Weights>) -> Result<LayoutAnalysis> { 
+		let weights = if weights_opt.is_none() {
+			crate::analyze::Config::new().weights
+		} else {
+			weights_opt.unwrap()
+		};
+
 		let mut new_analysis = LayoutAnalysis {
 			language: String::new(),
 			layouts: IndexMap::new(),

@@ -77,7 +77,7 @@ impl GenerateCached {
 	pub fn new(language: &str, trigram_precision: usize) -> Result<Self> {
 		let available = available_chars(language);
 		let new_config = Config::new();
-		let analyzer = LayoutAnalysis::new(language, new_config.weights)?;
+		let analyzer = LayoutAnalysis::new(language, Some(new_config.weights))?;
 		let n_trigrams = analyzer.language_data.trigrams.clone()
 			.into_iter()
 			.take(trigram_precision)

@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use crate::languages_cfg::LANGUAGES_CFG_MAP;
 
 pub static COL_TO_FINGER: [usize; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
 
@@ -102,11 +103,11 @@ pub fn get_index_distance(lat_penalty: f64) -> [f64; 30] {
 }
 
 pub fn available_chars(language: &str) -> [char; 30] {
-	if let Some(cfg) = crate::languages_cfg::LANGUAGES_CFG_MAP.get(language) {
+	if let Some(cfg) = LANGUAGES_CFG_MAP.get(language) {
 		cfg.chars().collect::<Vec<char>>().try_into().unwrap()
 	} else {
-		let default
-		cfg.chars().collect::<Vec<char>>().try_into().unwrap()
+		let default = LANGUAGES_CFG_MAP.get(&"default".to_string()).unwrap();
+		default.chars().collect::<Vec<char>>().try_into().unwrap()
 	}
 }
 

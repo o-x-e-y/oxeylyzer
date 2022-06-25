@@ -228,8 +228,16 @@ pub struct LayoutGeneration {
 }
 
 impl LayoutGeneration {
-	pub fn new(language: &str, trigram_precision: usize, weights: crate::analyze::Weights) -> Result<Self> {
-		if let Ok(analyzer) = LayoutAnalysis::new(language, weights.clone()) {
+	pub fn new(
+		language: &str, trigram_precision: usize, weights_opt: Option<crate::analyze::Weights>
+	) -> Result<Self> {
+		let weights = if weights_opt.is_none() {
+			crate::analyze::Config::new().weights
+		} else {
+			weights_opt.unwrap()
+		};
+		
+		if let Ok(analyzer) = LayoutAnalysis::new(language, Some(weights.clone())) {
 			let available_chars = crate::analysis::available_chars(language);
 			Ok(
 				Self {
@@ -343,11 +351,13 @@ impl LayoutGeneration {
 		let mut best_score = f64::MIN / 2.0;
 		let mut score = f64::MIN;
 		let mut best_swap = &PosPair::default();
+
 		while best_score != score {
 			best_score = score;
 			for swap in possible_swaps.iter() {
 				layout.swap_pair_no_bounds(swap);
 				let current = self.analysis.score(&layout, trigram_precision);
+
 				if current > score {
 					score = current;
 					best_swap = swap;
@@ -360,7 +370,7 @@ impl LayoutGeneration {
 	}
 
 	pub fn optimize_with_cols(&self, mut layout: BasicLayout, trigram_precision: usize, possible_swaps: &[PosPair]) -> BasicLayout {
-		let mut best_score = f64::MIN + 1.0;
+		let mut best_score = f64::MIN / 2.0;
 		let mut score = f64::MIN;
 		let mut best_swap = &PosPair::default();
 		// let mut sfb_best = 0.0;
@@ -372,10 +382,8 @@ impl LayoutGeneration {
 				best_score = score;
 				for swap in possible_swaps.iter() {
 					layout.swap_pair_no_bounds(swap);
-					// if self.analysis.i_to_col[swap.0] != self.analysis.i_to_col[swap.1] {
-						
-					// }
 					let current = self.analysis.score(&layout, trigram_precision);
+
 					if current > score {
 						score = current;
 						best_swap = swap;
@@ -598,5 +606,22 @@ mod tests {
 	fn thing() {
 		let qwerty = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		assert_eq!(qwerty.score, 0.0);
+	}
+
+	#[test]
+	fn random_layouts() {
+		let mut anal = LayoutAnalysis::new("english", None).unwrap();
+		let mut best_gen = BasicLayout::new();
+		best_gen.score = -100000.0;
+		let available_chars = available_chars("english");
+		for _ in 0..1_000_000 {
+			let r = BasicLayout::random(available_chars);
+			let score = anal.score(&r, usize::MAX);
+		}
+	}
+
+	#[test]
+	fn funny() {
+		println!("{}", 0.000027297439279327392489 as f32);
 	}
 }
