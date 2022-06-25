@@ -102,25 +102,22 @@ pub fn get_index_distance(lat_penalty: f64) -> [f64; 30] {
 }
 
 pub fn available_chars(language: &str) -> [char; 30] {
-	let chars = match language {
-		"albanian" =>             "abcdefghijklmnopqrstuvëxyz',.ç",
-		"bokmal" | "nynorsk" =>   "abcdefghijklmnopærstuvwøyå',.;",
-		"czech" =>                "abcdefghijklmnop*rstuvěxyzá,.í",
-		"dutch_repeat" =>         "abcdefghijklmnopqrstuvwxyz',.@",
-		"english_repeat" =>       "abcdefghijklmnopqrstuvwxyz',.@",
-		"esperanto" =>            "abcdefghijklmnopŝrstuvĝĉŭz',.ĵ",
-		"english_th" =>           "abcdefghijklmnopqrstuvwxyz',.þ",
-		"finnish" =>              "abcdefghijklmnopärstuvwxyz',.ö",
-		"finnish_repeat" =>       "abcdefghijklmnopärstuvw@yz',.ö",
-		"french" | "french_qu" => "abcdefghijélmnopqrstuvàxy-',.*",
-		"german" =>               "abcdefghijklmnoprstuvwxyzüäö.,",
-		"hungarian" =>            "ab*defghijklmnopárstuvéöyzó,.ő",
-		"italian" =>              "abcdefghijklmnopqrstuvwxyz',.*",
-		"russian" =>              "абвгдежзийклмнопрстухцчшыьюя.,",
-		"spanish" =>              "abcdefghijklmnopqrstuvwxyz',.*",
-		"welsh" =>                "abcdefghijklmnop*rstuvwΔyz',.Ⳑ",
-		"welsh_pure" =>           "abcdefghijklmnop*rstuvw-yz',.;",
-		_ =>                      "abcdefghijklmnopqrstuvwxyz',.;"
-	};
-	chars.chars().collect::<Vec<char>>().try_into().unwrap()
+	if let Some(cfg) = crate::languages_cfg::LANGUAGES_CFG_MAP.get(language) {
+		cfg.chars().collect::<Vec<char>>().try_into().unwrap()
+	} else {
+		let default
+		cfg.chars().collect::<Vec<char>>().try_into().unwrap()
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+
+	#[test]
+	fn index_distance() {
+		let x = get_sfb_indices();
+		// println!("{x:?}");
+		println!("{:?}", "there".split("#").collect::<Vec<&str>>());
+	}
 }

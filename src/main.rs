@@ -9,6 +9,7 @@ pub mod generate;
 pub mod translation;
 pub mod repl;
 pub mod generate_cached;
+pub mod languages_cfg;
 
 fn main() -> Result<(), String> {
 	repl::Repl::run()

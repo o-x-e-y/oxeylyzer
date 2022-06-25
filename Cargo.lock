@@ -250,6 +250,7 @@ dependencies = [
  "indexmap",
  "indicatif",
  "itertools",
+ "lazy_static",
  "rayon",
  "serde",
  "serde_json",
