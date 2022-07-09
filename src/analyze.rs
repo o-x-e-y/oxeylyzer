@@ -85,26 +85,31 @@ impl std::fmt::Debug for TrigramStats {
 	}
 }
 
+fn format_fspeed(finger_speed: &[f64]) -> String {
+	let mut finger_speed_str: Vec<String> = Vec::new();
+	for v in finger_speed {
+		finger_speed_str.push(format!("{:.3}", v*100.0))
+	}
+	finger_speed_str.join(", ")
+}
+
 #[derive(Clone)]
 struct LayoutStats {
 	sfb: f64,
 	dsfb: f64,
 	scissors: f64,
 	trigram_stats: TrigramStats,
-	// finger_speed: [f64; 8]
+	fspeed: f64,
+	finger_speed: [f64; 8]
 }
 
 impl std::fmt::Display for LayoutStats {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		// const BASE: String = String::new();
-		// let mut fspeed: [String; 4] = [BASE; 4];
-		// for i in 0..4 {
-		// 	fspeed[i] = format!("{:.1} {:.1}", self.finger_speed[i], self.finger_speed[7-i]);
-		// }
-		// let fspeed_print = fspeed.join("\n");
 		write!(
-			f, "Sfb:  {:.3}%\nDsfb: {:.3}%\nScissors: {:.3}%\n\n{}",
-			self.sfb * 100.0, self.dsfb * 100.0, self.scissors * 100.0, self.trigram_stats
+			f, concat!("Sfb:  {:.3}%\nDsfb: {:.3}%\nFinger Speed: {:.3}\n",
+			"    [{}]\nScissors: {:.3}%\n\n{}"),
+			self.sfb * 100.0, self.dsfb * 100.0, self.fspeed * 10.0, format_fspeed(&self.finger_speed),
+			self.scissors * 100.0, self.trigram_stats
 		)
 	}
 }
@@ -119,8 +124,9 @@ pub struct Defaults {
 pub struct Weights {
 	pub heatmap: f64,
 	pub lateral_penalty: f64,
-	pub sfb: f64,
-	pub dsfb: f64,
+	pub fspeed: f64,
+	pub fspeed_base: f64,
+	pub dsfb_ratio: f64,
 	pub scissors: f64,
 	pub inrolls: f64,
 	pub outrolls: f64,
@@ -173,6 +179,7 @@ pub struct Config {
 impl Config {
 	pub fn new() -> Self {
 		let mut load = ConfigLoad::new();
+
 		load.weights.max_finger_use = MaxFingerUse {
 			penalty: load.weights.max_finger_use.penalty,
 			pinky: load.weights.max_finger_use.pinky / 100.0,
@@ -202,8 +209,9 @@ impl Config {
 			weights: Weights {
 				heatmap: 0.85,
 				lateral_penalty: 1.3,
-				sfb: 15.0,
-				dsfb: 2.5,
+				fspeed: 8.0,
+				fspeed_base: 0.2,
+				dsfb_ratio: 0.5,
 				scissors: 5.0,
 				inrolls: 1.6,
 				outrolls: 1.3,
@@ -233,12 +241,12 @@ pub struct LayoutAnalysis {
 	language: String,
 	layouts: IndexMap<String, BasicLayout>,
 	pub language_data: LanguageData,
-	sfb_indices: [(usize, usize); 48],
-	scissor_indices: [(usize, usize); 16],
+	sfb_indices: [PosPair; 48],
+	scissor_indices: [PosPair; 15],
+	fspeed_vals: [(PosPair, f64); 48],
+	fspeed_base_weight: [f64; 30],
 	weights: Weights,
 	i_to_col: [usize; 30],
-	col_distance: [f64; 6],
-	index_distance: [f64; 30]
 }
 
 impl LayoutAnalysis {
@@ -254,9 +262,9 @@ impl LayoutAnalysis {
 			layouts: IndexMap::new(),
 			language_data: LanguageData::new(language)?,
 			sfb_indices: get_sfb_indices(),
+			fspeed_vals: get_fspeed(weights.lateral_penalty),
+			fspeed_base_weight: get_fspeed_base(weights.fspeed_base),
 			scissor_indices: get_scissor_indices(),
-			col_distance: [1.0, 2.0, 1.0, 1.0, 2.0, 1.0],
-			index_distance: get_index_distance(weights.lateral_penalty),
 			weights,
 			i_to_col: [
 				0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
@@ -326,9 +334,11 @@ impl LayoutAnalysis {
 	fn get_layout_stats(&self, layout: &BasicLayout) -> LayoutStats {
 		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
 		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
+		let fspeed = self.fspeed(layout);
+		let finger_speed = self.finger_speed(layout);
 		let scissors = self.scissor_percent(layout);
 		let trigram_stats = self.trigram_stats(layout, usize::MAX);
-		LayoutStats { sfb, dsfb, scissors, trigram_stats }
+		LayoutStats { sfb, dsfb, fspeed, finger_speed, scissors, trigram_stats }
 	}
 
 	pub fn rank(&self) {
@@ -400,7 +410,7 @@ impl LayoutAnalysis {
 	fn heatmap_heat(&self, c: &char) -> String {
 		let complement = 215.0 - *self.language_data.characters
 			.get(c)
-			.unwrap_or(&0.0) * 1720.0;
+			.unwrap_or_else(|| &0.0) * 1720.0;
 		let complement = complement.max(0.0) as u8;
 		let heat = rgb(215, complement, complement);
 		format!("{}", (*c).to_string().fg(heat))
@@ -485,7 +495,8 @@ impl LayoutAnalysis {
 			concat!(
 			"Sfb:              {:.3}%     Sfb:              {:.3}%\n",
 			"Dsfb:             {:.3}%     Dsfb:             {:.3}%\n",
-			"Scissors          {:.3}%     Scissors:         {:.3}%\n\n",
+			"Scissors          {:.3}%     Scissors:         {:.3}%\n",
+			"Finger Speed:     {:.3}      Finger Speed:     {:.3}\n\n",
 			"Inrolls:          {:.2}%     Inrolls:          {:.2}%\n",
 			"Outrolls:         {:.2}%     Outrolls:         {:.2}%\n",
 			"Total Rolls:      {:.2}%     Total Rolls:      {:.2}%\n",
@@ -498,11 +509,12 @@ impl LayoutAnalysis {
 			"Total Redirects:  {:.3}%     Total Redirects:  {:.2}%\n\n",
 			// "Other:            {:.3}%     Other:            {:.2}%\n",
 			// "Invalid:          {:.3}%     Invalid:          {:.2}%\n\n",
-			//"{}\n\n",
+			// "{}\n\n",
 			"Score:            {:.3}     Score:            {:.3}\n"
 		),
 			s1.sfb*100.0, s2.sfb*100.0,
 			s1.dsfb*100.0, s2.dsfb*100.0,
+			s1.fspeed * 10.0, s2.fspeed * 10.0,
 			s1.scissors*100.0, s2.scissors*100.0,
 			ts1.inrolls*100.0, ts2.inrolls*100.0,
 			ts1.outrolls*100.0, ts2.outrolls*100.0,
@@ -521,16 +533,11 @@ impl LayoutAnalysis {
 		);
 	}
 
-	pub fn finger_speed(&self, _: &BasicLayout) -> [f64; 8] {
-		let res = [0.0; 8];
-		res
-	}
-
 	pub fn effort(&self, layout: &BasicLayout) -> f64 {
 		let mut cols = [0.0; 8];
 		let mut res: f64 = 0.0;
 		for ((c, e), col) in layout.matrix.iter().zip(EFFORT_MAP).zip(self.i_to_col) {
-			let c_freq = self.language_data.characters.get(c).unwrap_or(&0.0);
+			let c_freq = self.language_data.characters.get(c).unwrap_or_else(|| &0.0);
 			res += e * c_freq;
 			cols[col] += c_freq;
 		}
@@ -542,6 +549,7 @@ impl LayoutAnalysis {
 			.max(0.0) * self.weights.max_finger_use.penalty;
 		res += (cols[3] - self.weights.max_finger_use.index)	
 			.max(0.0) * self.weights.max_finger_use.penalty;
+		
 		res += (cols[7] - self.weights.max_finger_use.pinky)
 			.max(0.0) * self.weights.max_finger_use.penalty;
 		res += (cols[6] - self.weights.max_finger_use.ring)
@@ -555,23 +563,141 @@ impl LayoutAnalysis {
 
 	pub fn scissor_percent(&self, layout: &BasicLayout) -> f64 {
 		let mut res = 0.0;
-		for (i1, i2) in self.scissor_indices {
+		for PosPair(i1, i2) in self.scissor_indices {
 			let c1 = layout.matrix[i1];
 			let c2 = layout.matrix[i2];
-			res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or(&0.0);
-			res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or(&0.0);
+			res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0);
+			res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0);
 		}
 		res
 	}
 
 	pub fn bigram_percent(&self, layout: &BasicLayout, data: &BigramData) -> f64 {
 		let mut res = 0.0;
-		for (i1, i2) in self.sfb_indices {
+		for PosPair(i1, i2) in self.sfb_indices {
 			let c1 = layout.matrix[i1];
 			let c2 = layout.matrix[i2];
-			res += data.get(&[c1, c2]).unwrap_or(&0.0);
-			res += data.get(&[c2, c1]).unwrap_or(&0.0);
+			res += data.get(&[c1, c2]).unwrap_or_else(|| &0.0);
+			res += data.get(&[c2, c1]).unwrap_or_else(|| &0.0);
 		}
+		res
+	}
+
+	pub fn fspeed(&self, layout: &BasicLayout) -> f64 {
+		let mut res = 0.0;
+		let dsfb_ratio = self.weights.dsfb_ratio;
+		let mut cols = [0.0; 8];
+
+		for (PosPair(i1, i2), dist) in self.fspeed_vals {
+			let c1 = layout.matrix[i1];
+			let c2 = layout.matrix[i2];
+
+			if c1 != '@' && c2 != '@' {
+				res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
+				res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
+
+				res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+				res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			} else {
+				res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * 0.5;
+				res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * 0.5;
+
+				res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio * 0.5;
+				res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio * 0.5;
+			}
+		}
+
+		for ((c, w), col) in layout.matrix.iter()
+			.zip(self.fspeed_base_weight)
+			.zip(self.i_to_col) {
+			let c_freq = self.language_data.characters.get(c).unwrap_or_else(|| &0.0);
+			res += c_freq * w;
+			cols[col] += c_freq;
+		}
+
+		res += (cols[0] - self.weights.max_finger_use.pinky)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[1] - self.weights.max_finger_use.ring)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[2] - self.weights.max_finger_use.middle)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[3] - self.weights.max_finger_use.index)	
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		
+		res += (cols[7] - self.weights.max_finger_use.pinky)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[6] - self.weights.max_finger_use.ring)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[5] - self.weights.max_finger_use.middle)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res += (cols[4] - self.weights.max_finger_use.index)	
+			.max(0.0) * self.weights.max_finger_use.penalty;
+
+		res
+	}
+
+	pub fn finger_speed(&self, layout: &BasicLayout) -> [f64; 8] {
+		let mut res = [0.0; 8];
+		let dsfb_ratio = self.weights.dsfb_ratio;
+		let mut cols = [0.0; 8];
+
+		let mut iter = self.fspeed_vals.iter();
+
+		for i in [0, 1, 2, 5, 6, 7] {
+			for _ in 0..3 {
+				let (PosPair(i1, i2), dist) = iter.next().unwrap();
+				let c1 = layout.matrix[*i1];
+				let c2 = layout.matrix[*i2];
+
+				res[i] += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
+				res[i] += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
+
+				res[i] += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+				res[i] += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			}
+		}
+
+		for col in [3, 4] {
+			for _ in 0..15 {
+				let (PosPair(i1, i2), dist) = iter.next().unwrap();
+				let c1 = layout.matrix[*i1];
+				let c2 = layout.matrix[*i2];
+
+				res[col] += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
+				res[col] += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
+
+				res[col] += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+				res[col] += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			}
+		}
+
+		for (i, (c, w)) in layout.matrix.iter()
+			.zip(self.fspeed_base_weight)
+			.enumerate() {
+				let col = self.i_to_col[i];
+				let c_freq = self.language_data.characters.get(c).unwrap_or_else(|| &0.0);
+				res[col] += c_freq * w;
+				cols[col] += c_freq;
+		}
+
+		res[0] += (cols[0] - self.weights.max_finger_use.pinky)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res[1] += (cols[1] - self.weights.max_finger_use.ring)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res[2] += (cols[2] - self.weights.max_finger_use.middle)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res[3] += (cols[3] - self.weights.max_finger_use.index)	
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		
+		res[7] += (cols[7] - self.weights.max_finger_use.pinky)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res[6] += (cols[6] - self.weights.max_finger_use.ring)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res[5] += (cols[5] - self.weights.max_finger_use.middle)
+			.max(0.0) * self.weights.max_finger_use.penalty;
+		res[4] += (cols[4] - self.weights.max_finger_use.index)	
+			.max(0.0) * self.weights.max_finger_use.penalty;
+
 		res
 	}
 
@@ -595,15 +721,18 @@ impl LayoutAnalysis {
 
 	pub fn score(&self, layout: &BasicLayout, trigram_precision: usize) -> f64 {
 		let mut score: f64 = 0.0;
-		let heatmap = self.effort(layout);
-		let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
-		let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
+		
+		// let heatmap = self.effort(layout);
+		// let sfb = self.bigram_percent(layout, &self.language_data.bigrams);
+		// let dsfb = self.bigram_percent(layout, &self.language_data.skipgrams);
+		let fspeed = self.fspeed(layout);
 		let scissors = self.scissor_percent(layout);
 		let trigram_data = self.trigram_stats(layout, trigram_precision);
 
-		score -= self.weights.heatmap * heatmap;
-		score -= self.weights.sfb * sfb;
-		score -= self.weights.dsfb * dsfb;
+		// score -= self.weights.heatmap * heatmap;
+		// score -= self.weights.sfb * sfb;
+		// score -= self.weights.dsfb * dsfb;
+		score -= self.weights.fspeed * fspeed;
 		score -= self.weights.scissors * scissors;
 		score += self.weights.inrolls * trigram_data.inrolls;
 		score += self.weights.outrolls * trigram_data.outrolls;
@@ -613,6 +742,63 @@ impl LayoutAnalysis {
 		score -= self.weights.redirects * trigram_data.redirects;
 		score -= self.weights.bad_redirects * trigram_data.bad_redirects;
 		score
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn finger_speed_test() {
+		let a = LayoutAnalysis::new("english", None).unwrap();
+		let qwert = BasicLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
+		let qwerty = BasicLayout::try_from("wlypkzfou'crstbxneiaqjvdgmh/,.").unwrap();
+
+		let mut res = [0.0; 8];
+		let dsfb_ratio = a.weights.dsfb_ratio;
+
+		let mut iter = a.fspeed_vals.iter();
+
+		for i in [0, 1, 2, 5, 6, 7] {
+			for _ in 0..3 {
+				let (PosPair(i1, i2), dist) = iter.next().unwrap();
+				let c1 = qwerty.matrix[*i1];
+				let c2 = qwerty.matrix[*i2];
+
+				res[i] += a.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
+				res[i] += a.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
+
+				res[i] += a.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+				res[i] += a.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			}
+		}
+
+		for col in [3, 4] {
+			for _ in 0..15 {
+				let (PosPair(i1, i2), dist) = iter.next().unwrap();
+				let c1 = qwerty.matrix[*i1];
+				let c2 = qwerty.matrix[*i2];
+
+				res[col] += a.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
+				res[col] += a.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
+
+				res[col] += a.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+				res[col] += a.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			}
+		}
+
+		println!("[{}]", format_fspeed(&res));
+
+		for (i, (c, w)) in qwerty.matrix.iter()
+			.zip(a.fspeed_base_weight)
+			.enumerate() {
+				let col = a.i_to_col[i];
+				let v = a.language_data.characters.get(c).unwrap_or_else(|| &0.0);
+				res[col] += v * w;
+		}
+
+		println!("[{}]", format_fspeed(&res));
 	}
 }
 

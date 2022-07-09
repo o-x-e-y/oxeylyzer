@@ -28,13 +28,13 @@ pub trait Layout {
 
 	fn char_by_index(&self, i: usize) -> char;
 
-	fn swap(&mut self, i1: usize, i2: usize) -> bool;
+	fn swap(&mut self, i1: usize, i2: usize) -> Option<(char, char)>;
 
-	fn swap_no_bounds(&mut self, i1: usize, i2: usize);
+	fn swap_no_bounds(&mut self, i1: usize, i2: usize) -> (char, char);
 
-	fn swap_pair(&mut self, pair: &PosPair) -> bool;
+	fn swap_pair(&mut self, pair: &PosPair) -> Option<(char, char)>;
 
-	fn swap_pair_no_bounds(&mut self, pair: &PosPair);
+	fn swap_pair_no_bounds(&mut self, pair: &PosPair) -> (char, char);
 
 	fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize);
 
@@ -109,7 +109,7 @@ impl Layout for BasicLayout {
 		self.matrix[i]
 	}
 
-	fn swap(&mut self, i1: usize, i2: usize) -> bool {
+	fn swap(&mut self, i1: usize, i2: usize) -> Option<(char, char)> {
 		if i1 < 30 && i2 < 30 {
 
 			let char1 = self.matrix[i1];
@@ -120,13 +120,14 @@ impl Layout for BasicLayout {
 			self.char_to_finger.insert(char1, COL_TO_FINGER[i2 % 10]);
 			self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
 
-			return true
+			return Some((char1, char2))
+		} else {
+			println!("Invalid coordinate, swap was cancelled");
+			None
 		}
-		println!("Invalid coordinate, swap was cancelled");
-		false
 	}
 
-	fn swap_no_bounds(&mut self, i1: usize, i2: usize) {
+	fn swap_no_bounds(&mut self, i1: usize, i2: usize) -> (char, char) {
 		let char1 = self.matrix[i1];
 		let char2 = self.matrix[i2];
 
@@ -134,14 +135,15 @@ impl Layout for BasicLayout {
 		self.matrix[i2] = char1;
 		self.char_to_finger.insert(char1, COL_TO_FINGER[i2 % 10]);
 		self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
+		(char1, char2)
 	}
 
-	fn swap_pair(&mut self, pair: &PosPair) -> bool {
+	fn swap_pair(&mut self, pair: &PosPair) -> Option<(char, char)> {
 		self.swap(pair.0, pair.1)
 	}
 
-	fn swap_pair_no_bounds(&mut self, pair: &PosPair) {
-		self.swap_no_bounds(pair.0, pair.1);
+	fn swap_pair_no_bounds(&mut self, pair: &PosPair) -> (char, char) {
+		self.swap_no_bounds(pair.0, pair.1)
 	}
 
 	fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize) {
@@ -211,8 +213,12 @@ impl std::fmt::Display for BasicLayout {
 	}
 }
 
+#[derive(Default)]
 struct LayoutCache {
-
+	fspeed_total: f64,
+	trigrams_total: f64,
+	fspeed: [f64; 8],
+	trigrams: [f64; 30]
 }
 
 type PerCharTrigrams = fxhash::FxHashMap<char, TrigramData>;
@@ -224,7 +230,7 @@ pub struct LayoutGeneration {
 	pub analysis: LayoutAnalysis,
 	pub improved_layout: BasicLayout,
 	pub temp_generated: Option<Vec<String>>,
-	cols: [usize; 6],
+	cols: [usize; 6]
 }
 
 impl LayoutGeneration {
@@ -280,27 +286,32 @@ impl LayoutGeneration {
 	pub fn trigrams_char_score(&self, layout: &BasicLayout, pos: usize) -> f64 {
 		let mut freqs = crate::analyze::TrigramStats::default();
 		let c = layout.matrix[pos];
-		for (trigram, freq) in self.per_char_trigrams.get(&c).unwrap() {
-			match layout.get_trigram_pattern(trigram) {
-				TrigramPattern::Alternate => freqs.alternates += freq,
-				TrigramPattern::AlternateSfs => freqs.alternates_sfs += freq,
-				TrigramPattern::Inroll => freqs.inrolls += freq,
-				TrigramPattern::Outroll => freqs.outrolls += freq,
-				TrigramPattern::Onehand => freqs.onehands += freq,
-				TrigramPattern::Redirect => freqs.redirects += freq,
-				TrigramPattern::BadRedirect => freqs.bad_redirects += freq,
-				_ => {}
+		if let Some(trigrams) = self.per_char_trigrams.get(&c)
+		&& trigrams.len() > 0 {
+			for (trigram, freq) in trigrams {
+				match layout.get_trigram_pattern(trigram) {
+					TrigramPattern::Alternate => freqs.alternates += freq,
+					TrigramPattern::AlternateSfs => freqs.alternates_sfs += freq,
+					TrigramPattern::Inroll => freqs.inrolls += freq,
+					TrigramPattern::Outroll => freqs.outrolls += freq,
+					TrigramPattern::Onehand => freqs.onehands += freq,
+					TrigramPattern::Redirect => freqs.redirects += freq,
+					TrigramPattern::BadRedirect => freqs.bad_redirects += freq,
+					_ => {}
+				}
 			}
+			let mut score = 0.0;
+			score += self.weights.inrolls * freqs.inrolls;
+			score += self.weights.outrolls * freqs.outrolls;
+			score += self.weights.onehands * freqs.onehands;
+			score += self.weights.alternates * freqs.alternates;
+			score += self.weights.alternates_sfs * freqs.alternates_sfs;
+			score -= self.weights.redirects * freqs.redirects;
+			score -= self.weights.bad_redirects * freqs.bad_redirects;
+			score
+		} else {
+			0.0
 		}
-		let mut score = 0.0;
-		score += self.weights.inrolls * freqs.inrolls;
-		score += self.weights.outrolls * freqs.outrolls;
-		score += self.weights.onehands * freqs.onehands;
-		score += self.weights.alternates * freqs.alternates;
-		score += self.weights.alternates_sfs * freqs.alternates_sfs;
-		score -= self.weights.redirects * freqs.redirects;
-		score -= self.weights.bad_redirects * freqs.bad_redirects;
-		score
 	}
 
 	pub fn score_whole_matrix(&self, layout: &BasicLayout) -> [f64; 30] {
@@ -309,6 +320,11 @@ impl LayoutGeneration {
 			res[i] = self.trigrams_char_score(layout, i);
 		}
 		res
+	}
+
+	fn score_swap(&self, layout: &mut BasicLayout, swap: &PosPair, cache: &LayoutCache) {
+		let (c1, c2) = layout.swap_pair_no_bounds(swap);
+
 	}
 
 	pub fn optimize_cols(&self, layout: &mut BasicLayout, trigram_precision: usize, score: Option<f64>) -> f64 {
@@ -608,20 +624,49 @@ mod tests {
 		assert_eq!(qwerty.score, 0.0);
 	}
 
-	#[test]
-	fn random_layouts() {
-		let mut anal = LayoutAnalysis::new("english", None).unwrap();
-		let mut best_gen = BasicLayout::new();
-		best_gen.score = -100000.0;
-		let available_chars = available_chars("english");
-		for _ in 0..1_000_000 {
-			let r = BasicLayout::random(available_chars);
-			let score = anal.score(&r, usize::MAX);
-		}
-	}
+	use std::io::Write;
 
 	#[test]
-	fn funny() {
-		println!("{}", 0.000027297439279327392489 as f32);
+	fn random_layouts() {
+		let anal = LayoutAnalysis::new("english", None).unwrap();
+		let available_chars = available_chars("english");
+
+		let pb = ProgressBar::new(10_000_000);
+		pb.set_style(ProgressStyle::default_bar()
+			.template("[{elapsed_precise}] [{bar:40.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
+			.progress_chars("=>-"));
+		
+		let mut res = Vec::with_capacity(10_000_000);
+
+		let start = std::time::Instant::now();
+
+		(0..10_000_000)
+			.into_par_iter()
+			.progress_with(pb)
+			.map(|_| -> f32 {
+				let r = BasicLayout::random(available_chars);
+				anal.score(&r, 5_000) as f32
+			})
+			.collect_into_vec(&mut res);
+		
+		let end = std::time::Instant::now();
+		res.sort_unstable_by(|a, b| b.partial_cmp(a).unwrap());
+		println!("that took {}s.", (end - start).as_secs_f64());
+		
+		let mut f = std::fs::OpenOptions::new()
+			.write(true)
+			.create(true)
+			.truncate(true)
+			.open("10mil_scores")
+			.unwrap();
+		
+		let mut to_save_vec = Vec::new();
+		res
+			.into_par_iter()
+			.map(|v| v.to_string())
+			.collect_into_vec(&mut to_save_vec);
+		let to_save = to_save_vec.join("\n");
+
+		f.write(to_save.as_bytes()).unwrap();
 	}
 }

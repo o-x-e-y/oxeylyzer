@@ -1,30 +1,38 @@
 pins = """
-..... .....
-xxxx. .....
-..... .....
+.xxxx .x...
+.xxxx xx...
+..xxx xx...
 """
 
 [defaults]
-language = "english"
+language = "tr"
 trigram_precision = 1000
 
 [weights]
 heatmap = 0.85
-lateral_penalty = 1.3
-sfb = 15.0
-dsfb = 2.5
-scissors = 5.0
-inrolls = 1.6
-outrolls = 1.3
+lateral_penalty = 1.2
+fspeed = 5.0
+fspeed_base = 0.6
+dsfb_ratio = 0.8
+scissors = 3.0
+inrolls = 2.8
+outrolls = 2.4
 onehands = 0.8
 alternates = 0.7
 alternates_sfs = 0.35
-redirects = 1.5
-bad_redirects = 6.5
+redirects = 1.75
+bad_redirects = 4.0
 
 [weights.max_finger_use]
 penalty = 2.5
 pinky = 9.0
 ring = 16.5
-middle = 19.5
+middle = 20.0
 index = 18.0
+
+[weights.finger_speed]
+base = 1.0
+pinky = 2.5
+ring = 1.3
+middle = 1.1
+index = 1.0
