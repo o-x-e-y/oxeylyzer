@@ -1,8 +1,8 @@
 use std::io::Write;
 use clap::{arg, command, Command};
 use crate::generate::LayoutGeneration;
-use crate::generate::BasicLayout;
-use crate::analyze::Config;
+use crate::layout::*;
+use crate::weights::Config;
 use crate::load_text;
 
 pub struct Repl {
@@ -48,10 +48,15 @@ impl Repl {
         Ok(())
     }
 
-    fn get_nth(&self, nr: usize) -> Option<BasicLayout> {
+    fn layout_from_str(&self, layout_str: &str) -> anyhow::Result<FastLayout> {
+        self.gen.analysis.layout_from_str_safe(layout_str)
+    }
+
+    fn get_nth(&self, nr: usize) -> Option<FastLayout> {
         if let Some(temp_list) = &self.gen.temp_generated {
             if nr < temp_list.len() {
-                Some(BasicLayout::try_from(temp_list[nr].as_str()).unwrap())
+                let l = self.layout_from_str(&temp_list[nr]).unwrap();
+                Some(l)
             } else {
                 println!("That's not a valid index!");
                 None

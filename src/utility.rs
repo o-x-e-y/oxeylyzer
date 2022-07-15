@@ -41,13 +41,7 @@ const fn get_possible_swaps() -> [PosPair; 435] {
 	res
 }
 
-pub static EFFORT_MAP: [f64; 30] = [
-	3.3, 2.3, 1.9, 1.5, 2.3, 3.2, 2.0, 1.8, 2.2, 2.8,
-	1.5, 1.1, 0.9, 0.8, 2.4, 2.4, 0.8, 0.9, 1.1, 1.5,
-	2.9, 2.5, 2.2, 1.6, 3.5, 1.9, 1.6, 2.2, 2.5, 3.1
-];
-
-pub fn get_fspeed_base(fspeed_base: f64) -> [f64; 30] {
+pub fn get_effort_map(heatmap: f64) -> [f64; 30] {
 	let mut res = [
 		3.3, 2.3, 1.9, 1.5, 2.3, 3.2, 2.0, 1.8, 2.2, 2.8,
 		1.5, 1.1, 0.9, 0.8, 2.4, 2.4, 0.8, 0.9, 1.1, 1.5,
@@ -56,7 +50,7 @@ pub fn get_fspeed_base(fspeed_base: f64) -> [f64; 30] {
 	
 	for i in 0..30 {
 		res[i] /= 12.0;
-		res[i] *= fspeed_base;
+		res[i] *= heatmap;
 	}
 
 	res

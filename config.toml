@@ -5,7 +5,7 @@ pins = """
 """
 
 [defaults]
-language = "tr"
+language = "e200"
 trigram_precision = 1000
 
 [weights]

@@ -4,8 +4,8 @@ use rayon::prelude::*;
 
 use crate::language_data::*;
 use crate::analyze::{TrigramStats, LayoutAnalysis, Config};
-use crate::generate::{Layout, BasicLayout};
-use crate::analysis::*;
+use crate::generate::{Layout, FastLayout};
+use crate::utility::*;
 
 pub struct PerCharStats {
 	target: char,
@@ -29,12 +29,12 @@ impl PerCharStats {
 
 #[derive(Default)]
 pub struct CachedLayout {
-	layout: BasicLayout,
+	layout: FastLayout,
 	char_score: [f64; 30]
 }
 
-impl From<BasicLayout> for CachedLayout {
-    fn from(l: BasicLayout) -> Self {
+impl From<FastLayout> for CachedLayout {
+    fn from(l: FastLayout) -> Self {
 		Self {
 			layout: l,
 			char_score: [0.0; 30]
@@ -88,7 +88,7 @@ impl GenerateCached {
 				available_chars: available,
 				char_trigrams: per_char_trigrams(n_trigrams, &available),
 				analysis: analyzer,
-				layout: CachedLayout::from(BasicLayout::random(available)),
+				layout: CachedLayout::from(FastLayout::random(available)),
 			}
 		)
 	}

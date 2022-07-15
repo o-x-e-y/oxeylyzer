@@ -2,13 +2,14 @@
 
 pub mod language_data;
 pub mod load_text;
+pub mod layout;
 pub mod trigram_patterns;
-pub mod analysis;
+pub mod utility;
+pub mod weights;
 pub mod analyze;
 pub mod generate;
 pub mod translation;
 pub mod repl;
-pub mod generate_cached;
 pub mod languages_cfg;
 
 fn main() -> Result<(), String> {
