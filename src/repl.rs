@@ -48,14 +48,10 @@ impl Repl {
         Ok(())
     }
 
-    fn layout_from_str(&self, layout_str: &str) -> anyhow::Result<FastLayout> {
-        self.gen.analysis.layout_from_str_safe(layout_str)
-    }
-
     fn get_nth(&self, nr: usize) -> Option<FastLayout> {
         if let Some(temp_list) = &self.gen.temp_generated {
             if nr < temp_list.len() {
-                let l = self.layout_from_str(&temp_list[nr]).unwrap();
+                let l = FastLayout::try_from(temp_list[nr].as_str()).unwrap();
                 Some(l)
             } else {
                 println!("That's not a valid index!");

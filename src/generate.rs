@@ -21,10 +21,10 @@ struct LayoutCache {
 	trigrams: [f64; 30]
 }
 
-type PerCharTrigrams = fxhash::FxHashMap<u8, TrigramData>;
+type PerCharTrigrams = fxhash::FxHashMap<char, TrigramData>;
 
 pub struct LayoutGeneration {
-	pub available_chars: [u8; 30],
+	pub available_chars: [char; 30],
 	pub per_char_trigrams: PerCharTrigrams,
 	pub weights: Weights,
 	pub analysis: LayoutAnalysis,
@@ -46,10 +46,7 @@ impl LayoutGeneration {
 		if let Ok(mut analyzer) = LayoutAnalysis::new(
 			language, Some(weights.clone())
 		) {
-			let mut available = [0u8; 30];
-			for (i, c) in available_chars(language).into_iter().enumerate() {
-				available[i] = analyzer.encode(c);
-			}
+			let mut available = available_chars(language);
 			Ok(
 				Self {
 					per_char_trigrams: Self::per_char_trigrams(
@@ -69,19 +66,19 @@ impl LayoutGeneration {
 	}
 
 	fn per_char_trigrams(
-		trigrams: &TrigramData, available_chars: &[u8; 30], trigram_precision: usize
+		trigrams: &TrigramData, available_chars: &[char; 30], trigram_precision: usize
 	) -> PerCharTrigrams {
 		let mut n_trigrams = trigrams.clone();
 		n_trigrams.truncate(trigram_precision);
 		
-		let thingy: Vec<(u8, Vec<([u8; 3], f64)>)> = available_chars
+		let thingy: Vec<(char, Vec<([char; 3], f64)>)> = available_chars
 			.iter()
 			.map(|c| {
 				let per_char = n_trigrams
 					.iter()
 					.map(|(t, f)| (t.clone(), f.clone()))
 					.filter(|(t, _)| t.contains(c))
-					.collect::<Vec<([u8; 3], f64)>>();
+					.collect::<Vec<([char; 3], f64)>>();
 				(*c, per_char)
 			})
 			.collect();
@@ -243,13 +240,13 @@ impl LayoutGeneration {
 		println!("generating {} layouts took: {} seconds", amount, start.elapsed().as_secs());
 		layouts.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
 		for (layout, score) in layouts.iter().take(10) {
-			let printable = self.analysis.print_layout(layout);
+			let printable = self.analysis.print_heatmap(layout);
 			println!("{}\nscore: {:.5}", printable, score);
 		}
 		
 		let temp_generated = layouts
 			.into_iter()
-			.map(|(x, _)| self.analysis.layout_to_str(&x))
+			.map(|(x, _)| x.layout_str())
 			.collect::<Vec<String>>();
 		self.temp_generated = Some(temp_generated);
 	}
@@ -305,13 +302,13 @@ impl LayoutGeneration {
 		layouts.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
 		
 		for (layout, score) in layouts.iter().take(10) {
-			let printable = self.analysis.print_layout(layout);
+			let printable = self.analysis.print_heatmap(layout);
 			println!("{}\nscore: {:.5}", printable, score);
 		}
 
 		let temp_generated = layouts
 			.into_iter()
-			.map(|(x, _)| self.analysis.layout_to_str(&x))
+			.map(|(x, _)| x.layout_str())
 			.collect::<Vec<String>>();
 		
 		self.temp_generated = Some(temp_generated);

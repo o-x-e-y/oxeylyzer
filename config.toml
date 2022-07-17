@@ -1,11 +1,11 @@
 pins = """
-.xxxx .x...
-.xxxx xx...
-..xxx xx...
+..... xxxxx
+xxxxx xxxxx
+..... xxxxx
 """
 
 [defaults]
-language = "tr"
+language = "english"
 trigram_precision = 1000
 
 [weights]

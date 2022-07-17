@@ -155,29 +155,6 @@ impl LayoutAnalysis {
 		Ok(new_analysis)
 	}
 
-	pub fn encode(&mut self, c: char) -> u8 {
-		if let Some(n) = self.language_data.encode.get(&c) {
-			*n
-		} else {
-			let len = self.language_data.encode.len() as u8;
-			if len != 0 {
-				self.language_data.encode.insert(c, len);
-				self.language_data.decode.insert(len, c);
-				len
-			} else {
-				panic!("There are more distinct characters than this system can deal with!\nExiting...");
-			}
-		}
-	}
-
-	pub fn encode_no_add(&self, c: char) -> u8 {
-		*self.language_data.encode.get(&c).unwrap()
-	}
-
-	pub fn decode(&self, n: u8) -> char {
-		*self.language_data.decode.get(&n).unwrap_or_else(|| &'~')
-	}
-
 	fn is_kb_file(entry: &std::fs::DirEntry) -> bool {
 		if let Some(ext_os) = entry.path().extension() {
 			if let Some(ext) = ext_os.to_str() {
@@ -208,23 +185,11 @@ impl LayoutAnalysis {
 			bail!("layout has too many or too few keys")
 		}
 
-		let mut base = [0u8; 30];
+		let mut base = [' '; 30];
 		for (i, c) in layout_str.chars().enumerate() {
-			base[i] = self.encode(c);
+			base[i] = c;
 		}
 		
-		Ok(FastLayout::from(base))
-	}
-
-	pub fn layout_from_str_safe(&self, layout_str: &str) -> Result<FastLayout> {
-		if layout_str.len() != 30 {
-			bail!("layout has too many or too few keys")
-		}
-
-		let mut base = [0u8; 30];
-		for (i, c) in layout_str.chars().enumerate() {
-			base[i] = self.encode_no_add(c);
-		}
 		Ok(FastLayout::from(base))
 	}
 
@@ -273,14 +238,6 @@ impl LayoutAnalysis {
 		}
 	}
 
-	pub fn layout_to_str(&self, layout: &FastLayout) -> String {
-		let mut res = String::new();
-		for c in layout.matrix {
-			res.push(self.decode(c));
-		}
-		res
-	}
-
 	pub fn layout_by_name(&self, name: &str) -> Option<&FastLayout> {
 		self.layouts.get(name)
 	}
@@ -299,10 +256,7 @@ impl LayoutAnalysis {
 
 	fn placeholder_name(&self, layout: &FastLayout) -> Result<String, ()> {
 		for i in 1..1000usize {
-    		let mut new_name = layout.matrix[10..14]
-				.iter()
-				.map(|n| self.decode(*n))
-				.collect::<String>();
+    		let mut new_name = layout.matrix[10..14].iter().collect::<String>();
 			
 			new_name.push_str(format!("{}", i).as_str());
 
@@ -331,7 +285,7 @@ impl LayoutAnalysis {
 			.truncate(true)
 			.open(format!("static/layouts/{}/{}.kb", self.language, new_name))?;
 		
-		let layout_formatted = self.layout_to_str(&layout);
+		let layout_formatted = layout.to_string();
 		println!("saved {}\n{}", new_name, layout_formatted);
 		f.write(layout_formatted.as_bytes()).unwrap();
 
@@ -344,31 +298,30 @@ impl LayoutAnalysis {
 		Ok(())
 	}
 
-	fn heatmap_heat(&self, c: &u8) -> String {
+	fn heatmap_heat(&self, c: &char) -> String {
 		let complement = 215.0 - *self.language_data.characters
 			.get(c)
 			.unwrap_or_else(|| &0.0) * 1720.0;
 		let complement = complement.max(0.0) as u8;
 		let heat = rgb(215, complement, complement);
-		let c = self.language_data.decode.get(c).unwrap();
 		format!("{}", c.to_string().fg(heat))
 	}
 
-	pub fn print_layout(&self, layout: &FastLayout) -> String {
-		let mut layout_str = String::new();
+	pub fn print_heatmap(&self, layout: &FastLayout) -> String {
+		let mut print_str = String::new();
 
 		for (i, c) in layout.matrix.iter().enumerate() {
 			if i % 10 == 0 && i > 0 {
-				layout_str.push('\n');
+				print_str.push('\n');
 			}
 			if (i + 5) % 10 == 0 {
-				layout_str.push(' ');
+				print_str.push(' ');
 			}
-			layout_str.push_str(self.heatmap_heat(c).as_str());
-			layout_str.push(' ');
+			print_str.push_str(self.heatmap_heat(c).as_str());
+			print_str.push(' ');
 		}
 
-		layout_str
+		print_str
 	}
 
 	pub fn analyze(&self, layout: &FastLayout) {
@@ -379,7 +332,7 @@ impl LayoutAnalysis {
 			layout.score
 		};
 
-		let layout_str = self.print_layout(layout);
+		let layout_str = self.print_heatmap(layout);
 		
 		println!("{}\n{}\nScore: {:.3}", layout_str, stats, score);
 	}
