@@ -87,7 +87,7 @@ impl std::fmt::Debug for TrigramStats {
 fn format_fspeed(finger_speed: &[f64]) -> String {
 	let mut finger_speed_str: Vec<String> = Vec::new();
 	for v in finger_speed {
-		finger_speed_str.push(format!("{:.3}", v*100.0))
+		finger_speed_str.push(format!("{:.3}", v*1000.0))
 	}
 	finger_speed_str.join(", ")
 }
@@ -529,8 +529,8 @@ impl LayoutAnalysis {
 			res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
 			res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
 
-			res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
-			res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			res += self.language_data.skipgrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			res += self.language_data.skipgrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
 		}
 
 		res

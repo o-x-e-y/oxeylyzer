@@ -49,7 +49,7 @@ pub fn get_effort_map(heatmap: f64) -> [f64; 30] {
 	];
 	
 	for i in 0..30 {
-		res[i] /= 12.0;
+		res[i] /= 4.0;
 		res[i] *= heatmap;
 	}
 
@@ -67,7 +67,7 @@ pub fn get_fspeed(lat_multiplier: f64) -> [(PosPair, f64); 48] {
 
 fn get_distances(lat_multiplier: f64) -> [f64; 48] {
     let mut res = Vec::new();
-    let help = |f: f64, r: f64| f.powi(2) * r;
+    let help = |f: f64, r: f64| f.powi(2).powf(0.9) * r;
     
     for fweight in [1.4, 3.6, 4.8, 4.8, 3.6, 1.4] {
 		let ratio = 5.5/fweight;
@@ -88,7 +88,7 @@ fn get_distances(lat_multiplier: f64) -> [f64; 48] {
 			// } else {
 				let x_dist = (xy1.0 - xy2.0) as f64;
 				let y_dist = (xy1.1 - xy2.1) as f64;
-				let distance = x_dist.powi(2)*lat_multiplier + y_dist.powi(2);
+				let distance = x_dist.powi(2).powf(0.9)*lat_multiplier + y_dist.powi(2).powf(0.9);
 				
 				res.push(distance);
 			// }

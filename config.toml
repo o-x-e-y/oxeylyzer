@@ -5,23 +5,23 @@ pins = """
 """
 
 [defaults]
-language = "e200"
+language = "tr"
 trigram_precision = 1000
 
 [weights]
-heatmap = 0.85
+heatmap = 1.5
 lateral_penalty = 1.2
-fspeed = 5.0
+fspeed = 15.0
 fspeed_base = 0.6
-dsfb_ratio = 0.8
-scissors = 3.0
-inrolls = 2.8
-outrolls = 2.4
+dsfb_ratio = 0.15
+scissors = 2.0
+inrolls = 2.1
+outrolls = 1.8
 onehands = 0.8
 alternates = 0.7
 alternates_sfs = 0.35
-redirects = 1.75
-bad_redirects = 4.0
+redirects = 2.0
+bad_redirects = 6.5
 
 [weights.max_finger_use]
 penalty = 2.5
