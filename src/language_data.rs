@@ -7,7 +7,7 @@ use std::io::prelude::*;
 use serde::Deserialize;
 use serde_json;
 
-pub type CharacterData = FxHashMap<char, f64>;
+pub type CharacterData = smallmap::Map<char, f64>;
 pub type BigramData = FxHashMap<[char; 2], f64>;
 pub type TrigramData = Vec<([char; 3], f64)>;
 
@@ -21,6 +21,14 @@ struct LanguageDataInter {
 }
 
 impl LanguageDataInter {
+	fn get_char_data(&self, data: &FxHashMap<char, f64>) -> CharacterData {
+		let mut res = CharacterData::new();
+		for (c, f) in data.into_iter() {
+			res.insert(*c, *f);
+		}
+		res
+	}
+
 	fn get_bigram_data(&self, data: &FxHashMap<String, f64>) -> BigramData {
 		let mut res = BigramData::default();
 		for (bigram, freq) in data {
@@ -46,7 +54,6 @@ impl LanguageDataInter {
 	}
 }
 
-#[derive(Deserialize)]
 pub struct LanguageData {
 	pub characters: CharacterData,
 	pub bigrams: BigramData,
@@ -57,7 +64,7 @@ pub struct LanguageData {
 
 impl From<LanguageDataInter> for LanguageData {
 	fn from(inter: LanguageDataInter) -> Self {
-		let characters = inter.characters.clone();
+		let characters = inter.get_char_data(&inter.characters);
 		let bigrams = inter.get_bigram_data(&inter.bigrams);
 		let skipgrams = inter.get_bigram_data(&inter.skipgrams);
 		let trigrams = inter.get_trigram_data(&inter.trigrams);
@@ -81,7 +88,7 @@ impl LanguageData {
 		let mut contents = String::new();
 
 		file.read_to_string(&mut contents)?;
-		let mut data: LanguageDataInter = serde_json::from_str(contents.as_str())?;
+		let data: LanguageDataInter = serde_json::from_str(contents.as_str())?;
 		Ok(LanguageData::from(data))
 	}
 }

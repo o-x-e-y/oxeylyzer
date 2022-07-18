@@ -221,7 +221,7 @@ impl TranslatorBuilder {
         self.default_formatting();
         let language = language.to_lowercase();
         match language.as_str() {
-            "akl" | "english" | "english2" | "toki_pona" | "indonesian"=> Ok(self),
+            "akl" | "english" | "english2" | "toki_pona" | "indonesian" | "reddit" => Ok(self),
             "albanian" => Ok(self.letters("çë")),
             "bokmal" | "nynorsk" => Ok(self.letters("åøæ")),
             "czech" => Ok(self

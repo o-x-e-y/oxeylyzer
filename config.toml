@@ -1,7 +1,7 @@
 pins = """
-..... xxxxx
-xxxxx xxxxx
-..... xxxxx
+..... ..xx.
+..... ..xxx
+..... .....
 """
 
 [defaults]
@@ -12,14 +12,13 @@ trigram_precision = 1000
 heatmap = 1.5
 lateral_penalty = 1.2
 fspeed = 15.0
-fspeed_base = 0.6
-dsfb_ratio = 0.15
-scissors = 2.0
+dsfb_ratio = 0.1
+scissors = 1.75
 inrolls = 2.1
 outrolls = 1.8
-onehands = 0.8
-alternates = 0.7
-alternates_sfs = 0.35
+onehands = 0.9
+alternates = 0.6
+alternates_sfs = 0.3
 redirects = 2.0
 bad_redirects = 6.5
 

@@ -13,13 +13,13 @@ use crate::weights::{Weights, Config};
 pub type CharToFinger<T> = Map<T, usize>;
 pub type Matrix<T> = [T; 30];
 
-#[derive(Default)]
-struct LayoutCache {
-	fspeed_total: f64,
-	trigrams_total: f64,
-	fspeed: [f64; 8],
-	trigrams: [f64; 30]
-}
+// #[derive(Default)]
+// struct LayoutCache {
+// 	fspeed_total: f64,
+// 	trigrams_total: f64,
+// 	fspeed: [f64; 8],
+// 	trigrams: [f64; 30]
+// }
 
 type PerCharTrigrams = fxhash::FxHashMap<char, TrigramData>;
 
@@ -43,10 +43,10 @@ impl LayoutGeneration {
 			weights_opt.unwrap()
 		};
 		
-		if let Ok(mut analyzer) = LayoutAnalysis::new(
+		if let Ok(analyzer) = LayoutAnalysis::new(
 			language, Some(weights.clone())
 		) {
-			let mut available = available_chars(language);
+			let available = available_chars(language);
 			Ok(
 				Self {
 					per_char_trigrams: Self::per_char_trigrams(
@@ -125,10 +125,10 @@ impl LayoutGeneration {
 		res
 	}
 
-	fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &LayoutCache) {
-		let (c1, c2) = layout.swap_pair_no_bounds(swap);
+	// fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &LayoutCache) {
+	// 	let (c1, c2) = layout.swap_pair_no_bounds(swap);
 
-	}
+	// }
 
 	pub fn optimize_cols(&self, layout: &mut FastLayout, trigram_precision: usize, score: Option<f64>) -> f64 {
 		let mut best_score = score.unwrap_or(self.analysis.score(layout, trigram_precision));

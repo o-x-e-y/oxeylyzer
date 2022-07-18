@@ -213,7 +213,7 @@ impl LayoutAnalysis {
 				}
 			}
 			res.sort_by(|_, a, _, b| {
-				b.score.partial_cmp(&a.score).unwrap()
+				a.score.partial_cmp(&b.score).unwrap()
 			});
 		} else {
 			std::fs::create_dir(format!("static/layouts/{}", self.language))?;
@@ -292,7 +292,7 @@ impl LayoutAnalysis {
 		layout.score = self.score(&layout, usize::MAX);
 		self.layouts.insert(new_name, layout);
 		self.layouts.sort_by(|_, a, _, b| {
-			b.score.partial_cmp(&a.score).unwrap()
+			a.score.partial_cmp(&b.score).unwrap()
 		});
 
 		Ok(())
@@ -371,15 +371,6 @@ impl LayoutAnalysis {
 		let s2 = self.get_layout_stats(l2);
 		let ts1 = s1.trigram_stats;
 		let ts2 = s2.trigram_stats;
-		// let fs1 = &layouts[0].stats.finger_speed;
-		// let fs2 = &layouts[1].stats.finger_speed;
-		// const BASE: String = String::new();
-		// let mut fspeed: [String; 4] = [BASE; 4];
-		// for i in 0..4 {
-		// 	fspeed[i] = format!("{:<28} {:.1}, {:.1}",
-		// 						format!("{:.1} {:.1}", fs1[i], fs2[7-i]), fs2[i], fs2[7-i]);
-		// }
-		// let fspeed_print = fspeed.join("\n");
 		println!(
 			concat!(
 			"Sfb:              {: <12} Sfb:              {:.3}%\n",
@@ -565,61 +556,3 @@ impl LayoutAnalysis {
 		score
 	}
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	// #[test]
-	// fn finger_speed_test() {
-	// 	let a = LayoutAnalysis::new("english", None).unwrap();
-	// 	let qwert = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-	// 	let qwerty = FastLayout::try_from("wlypkzfou'crstbxneiaqjvdgmh/,.").unwrap();
-
-	// 	let mut res = [0.0; 8];
-	// 	let dsfb_ratio = a.weights.dsfb_ratio;
-
-	// 	let mut iter = a.fspeed_vals.iter();
-
-	// 	for i in [0, 1, 2, 5, 6, 7] {
-	// 		for _ in 0..3 {
-	// 			let (PosPair(i1, i2), dist) = iter.next().unwrap();
-	// 			let c1 = qwerty.matrix[*i1];
-	// 			let c2 = qwerty.matrix[*i2];
-
-	// 			res[i] += a.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
-	// 			res[i] += a.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
-
-	// 			res[i] += a.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
-	// 			res[i] += a.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
-	// 		}
-	// 	}
-
-	// 	for col in [3, 4] {
-	// 		for _ in 0..15 {
-	// 			let (PosPair(i1, i2), dist) = iter.next().unwrap();
-	// 			let c1 = qwerty.matrix[*i1];
-	// 			let c2 = qwerty.matrix[*i2];
-
-	// 			res[col] += a.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
-	// 			res[col] += a.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
-
-	// 			res[col] += a.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
-	// 			res[col] += a.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
-	// 		}
-	// 	}
-
-	// 	println!("[{}]", format_fspeed(&res));
-
-	// 	for (i, (c, w)) in qwerty.matrix.iter()
-	// 		.zip(a.fspeed_base_weight)
-	// 		.enumerate() {
-	// 			let col = a.i_to_col[i];
-	// 			let v = a.language_data.characters.get(c).unwrap_or_else(|| &0.0);
-	// 			res[col] += v * w;
-	// 	}
-
-	// 	println!("[{}]", format_fspeed(&res));
-	// }
-}
-

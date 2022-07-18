@@ -3,4 +3,5 @@ target
 !.gitignore
 static/text
 static/layouts/cringe
-static/langdat
+*.py
+static/language_data/reddit.json

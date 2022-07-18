@@ -217,6 +217,8 @@ impl Repl {
             )
             .subcommand(
                 command!("compare")
+                    .alias("cmopare")
+                    .alias("comprae")
                     .alias("c")
                     .arg(
                         arg!(<LAYOUT_1>)

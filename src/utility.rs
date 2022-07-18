@@ -74,12 +74,12 @@ fn get_distances(lat_multiplier: f64) -> [f64; 48] {
         res.append(&mut vec![help(1.0, ratio), help(2.0, ratio), help(1.0, ratio)]);
     }
 
-    for i in 0..2 {
+    for _ in 0..2 {
         for c in [
 			(0, (0i32, 0)), (1, (0i32, 1)), (2, (0, 2)), (3, (1, 0)), (4, (1, 1)), (5, (1, 2))
 		].iter().combinations(2) {
-            let (i1, xy1) = c[0];
-            let (i2, xy2) = c[1];
+            let (_i1, xy1) = c[0];
+            let (_i2, xy2) = c[1];
 
 			// if i == 0 && (*i1 >= 4 && *i2 < 4 || *i2 >= 4 && *i1 < 4) && *i1 + *i2 != 9 {
 			// 	res.push(0.0);
