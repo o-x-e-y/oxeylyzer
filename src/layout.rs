@@ -38,6 +38,8 @@ pub trait Layout<T: Copy + Default> {
 	fn get_index(&self, index: usize) -> [T; 6];
 
 	fn get_trigram_pattern(&self, trigram: &[T; 3]) -> TrigramPattern;
+
+	unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[char; 3]) -> TrigramPattern;
 }
 
 #[derive(Default, Clone)]
@@ -64,7 +66,7 @@ impl TryFrom<&str> for FastLayout {
 
     fn try_from(layout_str: &str) -> Result<Self, Self::Error> {  
         let mut new_layout = FastLayout::new();
-		if layout_str.len() == 30 {
+		if layout_str.chars().count() == 30 {
 			for (i, c) in layout_str.chars().enumerate() {
 				new_layout.matrix[i] = c;
 				new_layout.char_to_finger.insert(c, COL_TO_FINGER[i%10]);
@@ -194,7 +196,16 @@ impl Layout<char> for FastLayout {
 		if (a | b | c) == usize::MAX {
 			return TrigramPattern::Invalid
 		}
-		// a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 = 0b111)
+		// a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 == 0b111)
+		let combination = (a << 6) | (b << 3) | c;
+		TRIGRAM_COMBINATIONS[combination]
+	}
+
+	unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[char; 3]) -> TrigramPattern {
+		let a = *self.char_to_finger.get(&trigram[0]).unwrap_unchecked();
+		let b = *self.char_to_finger.get(&trigram[1]).unwrap_unchecked();
+		let c = *self.char_to_finger.get(&trigram[2]).unwrap_unchecked();
+		// a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 == 0b111)
 		let combination = (a << 6) | (b << 3) | c;
 		TRIGRAM_COMBINATIONS[combination]
 	}

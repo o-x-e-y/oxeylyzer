@@ -1,6 +1,6 @@
 pins = """
 ..... ..xx.
-..... ..xxx
+x.... ..xxx
 ..... .....
 """
 
@@ -12,7 +12,7 @@ trigram_precision = 1000
 heatmap = 1.5
 lateral_penalty = 1.2
 fspeed = 15.0
-dsfb_ratio = 0.1
+dsfb_ratio = 0.12
 scissors = 1.75
 inrolls = 2.1
 outrolls = 1.8

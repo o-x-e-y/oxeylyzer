@@ -181,7 +181,7 @@ impl LayoutAnalysis {
 	}
 
 	pub fn layout_from_str(&mut self, layout_str: &str) -> Result<FastLayout> {
-		if layout_str.len() != 30 {
+		if layout_str.chars().count() != 30 {
 			bail!("layout has too many or too few keys")
 		}
 
@@ -373,21 +373,21 @@ impl LayoutAnalysis {
 		let ts2 = s2.trigram_stats;
 		println!(
 			concat!(
-			"Sfb:              {: <12} Sfb:              {:.3}%\n",
-			"Dsfb:             {: <12} Dsfb:             {:.3}%\n",
-			"Scissors          {: <12} Scissors:         {:.3}%\n",
-			"Finger Speed:     {: <12} Finger Speed:     {:.3}\n\n",
-			"Inrolls:          {: <12} Inrolls:          {:.2}%\n",
-			"Outrolls:         {: <12} Outrolls:         {:.2}%\n",
-			"Total Rolls:      {: <12} Total Rolls:      {:.2}%\n",
-			"Onehands:         {: <12} Onehands:         {:.3}%\n\n",
-			"Alternates:       {: <12} Alternates:       {:.2}%\n",
-			"Alternates (sfs): {: <12} Alternates (sfs): {:.2}%\n",
-			"Total Alternates: {: <12} Total Alternates: {:.2}%\n\n",
-			"Redirects:        {: <12} Redirects:        {:.2}%\n",
-			"Bad Redirects:    {: <12} Bad Redirects:    {:.2}%\n",
-			"Total Redirects:  {: <12} Total Redirects:  {:.2}%\n\n",
-			"Score:            {: <12} Score:            {:.3}\n"
+			"Sfb:              {: <10} Sfb:              {:.3}%\n",
+			"Dsfb:             {: <10} Dsfb:             {:.3}%\n",
+			"Scissors          {: <10} Scissors:         {:.3}%\n",
+			"Finger Speed:     {: <10} Finger Speed:     {:.3}\n\n",
+			"Inrolls:          {: <10} Inrolls:          {:.2}%\n",
+			"Outrolls:         {: <10} Outrolls:         {:.2}%\n",
+			"Total Rolls:      {: <10} Total Rolls:      {:.2}%\n",
+			"Onehands:         {: <10} Onehands:         {:.3}%\n\n",
+			"Alternates:       {: <10} Alternates:       {:.2}%\n",
+			"Alternates (sfs): {: <10} Alternates (sfs): {:.2}%\n",
+			"Total Alternates: {: <10} Total Alternates: {:.2}%\n\n",
+			"Redirects:        {: <10} Redirects:        {:.2}%\n",
+			"Bad Redirects:    {: <10} Bad Redirects:    {:.2}%\n",
+			"Total Redirects:  {: <10} Total Redirects:  {:.2}%\n\n",
+			"Score:            {: <10} Score:            {:.3}\n"
 		),
 			format!("{:.3}%", s1.sfb*100.0), s2.sfb*100.0,
 			format!("{:.3}%", s1.dsfb*100.0), s2.dsfb*100.0,
@@ -484,33 +484,37 @@ impl LayoutAnalysis {
 		let mut res = [0.0; 8];
 		let dsfb_ratio = self.weights.dsfb_ratio;
 
-		let mut iter = self.fspeed_vals.iter();
+		let mut fspeed_i = 0;
 
 		for i in [0, 1, 2, 5, 6, 7] {
 			for _ in 0..3 {
-				let (PosPair(i1, i2), dist) = iter.next().unwrap();
-				let c1 = layout.matrix[*i1];
-				let c2 = layout.matrix[*i2];
+				let (PosPair(i1, i2), dist) = self.fspeed_vals[fspeed_i];
+				let c1 = layout.matrix[i1];
+				let c2 = layout.matrix[i2];
 
 				res[i] += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
 				res[i] += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
 
 				res[i] += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
 				res[i] += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+				
+				fspeed_i += 1;
 			}
 		}
 
 		for col in [3, 4] {
 			for _ in 0..15 {
-				let (PosPair(i1, i2), dist) = iter.next().unwrap();
-				let c1 = layout.matrix[*i1];
-				let c2 = layout.matrix[*i2];
+				let (PosPair(i1, i2), dist) = self.fspeed_vals[fspeed_i];
+				let c1 = layout.matrix[i1];
+				let c2 = layout.matrix[i2];
 
 				res[col] += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
 				res[col] += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
 
 				res[col] += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
 				res[col] += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+
+				fspeed_i += 1;
 			}
 		}
 
@@ -518,6 +522,24 @@ impl LayoutAnalysis {
 	}
 
 	pub fn trigram_stats(&self, layout: &FastLayout, trigram_precision: usize) -> TrigramStats {
+		let mut freqs = TrigramStats::default();
+		for (trigram, freq) in self.language_data.trigrams.iter().take(trigram_precision) {
+			match layout.get_trigram_pattern(trigram) {
+				TrigramPattern::Alternate => freqs.alternates += freq,
+				TrigramPattern::AlternateSfs => freqs.alternates_sfs += freq,
+				TrigramPattern::Inroll => freqs.inrolls += freq,
+				TrigramPattern::Outroll => freqs.outrolls += freq,
+				TrigramPattern::Onehand => freqs.onehands += freq,
+				TrigramPattern::Redirect => freqs.redirects += freq,
+				TrigramPattern::BadRedirect => freqs.bad_redirects += freq,
+				TrigramPattern::Other => freqs.other += freq,
+				TrigramPattern::Invalid => freqs.invalid += freq
+			}
+		}
+		freqs
+	}
+
+	pub unsafe fn trigram_stats_unchecked(&self, layout: &FastLayout, trigram_precision: usize) -> TrigramStats {
 		let mut freqs = TrigramStats::default();
 		for (trigram, freq) in self.language_data.trigrams.iter().take(trigram_precision) {
 			match layout.get_trigram_pattern(trigram) {

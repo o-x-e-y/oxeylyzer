@@ -25,7 +25,8 @@ fn main() -> Result<(), String> {
 
 // fn main() -> Result<(), std::io::Error> {
 // 	// let x = GenerateCached::new("english", 1000).unwrap();
-// 	load_text::load_default("reddit");
+// 	load_text::load_default("french");
+// 	load_text::load_default("french_qu");
 
 // 	pause()
 // }
