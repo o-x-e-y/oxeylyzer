@@ -107,7 +107,7 @@ impl std::fmt::Display for LayoutStats {
 		write!(
 			f, concat!("Sfb:  {:.3}%\nDsfb: {:.3}%\nFinger Speed: {:.3}\n",
 			"    [{}]\nScissors: {:.3}%\n\n{}"),
-			self.sfb * 100.0, self.dsfb * 100.0, self.fspeed * 10.0, format_fspeed(&self.finger_speed),
+			self.sfb * 100.0, self.dsfb * 100.0, self.fspeed * 100.0, format_fspeed(&self.finger_speed),
 			self.scissors * 100.0, self.trigram_stats
 		)
 	}
@@ -391,7 +391,7 @@ impl LayoutAnalysis {
 		),
 			format!("{:.3}%", s1.sfb*100.0), s2.sfb*100.0,
 			format!("{:.3}%", s1.dsfb*100.0), s2.dsfb*100.0,
-			format!("{:.3}%", s1.fspeed * 10.0), s2.fspeed * 10.0,
+			format!("{:.3}%", s1.fspeed * 100.0), s2.fspeed * 100.0,
 			format!("{:.3}", s1.scissors*100.0), s2.scissors*100.0,
 			format!("{:.2}%", ts1.inrolls*100.0), ts2.inrolls*100.0,
 			format!("{:.2}%", ts1.outrolls*100.0), ts2.outrolls*100.0,
