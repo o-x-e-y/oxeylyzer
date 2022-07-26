@@ -7,7 +7,7 @@ use anyhow::Result;
 
 use crate::utility::*;
 use crate::trigram_patterns::TrigramPattern;
-use crate::analyze::LayoutAnalysis;
+use crate::analyze::{LayoutAnalysis, TrigramStats};
 use crate::language_data::TrigramData;
 use crate::layout::*;
 use crate::weights::{Weights, Config};
