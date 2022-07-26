@@ -119,10 +119,10 @@ pub struct LayoutAnalysis {
 	pub language_data: LanguageData,
 	sfb_indices: [PosPair; 48],
 	scissor_indices: [PosPair; 15],
-	fspeed_vals: [(PosPair, f64); 48],
-	effort_map: [f64; 30],
+	pub fspeed_vals: [(PosPair, f64); 48],
+	pub effort_map: [f64; 30],
 	weights: Weights,
-	i_to_col: [usize; 30],
+	pub i_to_col: [usize; 30],
 }
 
 impl LayoutAnalysis {
@@ -193,6 +193,20 @@ impl LayoutAnalysis {
 		Ok(FastLayout::from(base))
 	}
 
+	fn save_layout_stats(&self, layout: &FastLayout, name: &str) {
+		let stats = self.get_layout_stats(layout);
+
+		let mut f = std::fs::OpenOptions::new()
+			.write(true)
+			.create(true)
+			.truncate(true)
+			.open(format!("static/stats/{}/{}.txt", self.language, name)).expect(
+				format!("panic on trying to save {name}").as_str()
+			);
+		
+		f.write(stats.to_string().as_bytes()).unwrap();
+	}
+
 	fn load_layouts(&mut self) -> Result<IndexMap<String, FastLayout>> {
 		let mut res: IndexMap<String, FastLayout> = IndexMap::new();
 
@@ -205,6 +219,7 @@ impl LayoutAnalysis {
 					let layout_str = Self::format_layout_str(content);
 
 					if let Ok(mut layout) = self.layout_from_str(&layout_str) {
+						// self.save_layout_stats(&layout, name.as_str());
 						layout.score = self.score(&layout, usize::MAX);
 						res.insert(name, layout);
 					} else {
@@ -467,8 +482,8 @@ impl LayoutAnalysis {
 		let dsfb_ratio = self.weights.dsfb_ratio;
 
 		for (PosPair(i1, i2), dist) in self.fspeed_vals {
-			let c1 = layout.matrix[i1];
-			let c2 = layout.matrix[i2];
+			let c1 = layout.c(i1);
+			let c2 = layout.c(i2);
 
 			res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
 			res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;

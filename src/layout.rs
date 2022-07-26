@@ -19,19 +19,19 @@ pub trait Layout<T: Copy + Default> {
 
 	fn random_pins(layout_chars: [T; 30], pins: &[usize]) -> Self;
 
+	fn c(&self, i: usize) -> T;
+
 	fn char(&self, x: usize, y: usize) -> T;
 
-	fn char_by_index(&self, i: usize) -> T;
+	fn swap(&mut self, i1: usize, i2: usize) -> Option<()>;
 
-	fn swap(&mut self, i1: usize, i2: usize) -> Option<(T, T)>;
+	unsafe fn swap_no_bounds(&mut self, i1: usize, i2: usize);
 
-	fn swap_no_bounds(&mut self, i1: usize, i2: usize) -> (T, T);
+	fn swap_pair(&mut self, pair: &PosPair) -> Option<()>;
 
-	fn swap_pair(&mut self, pair: &PosPair) -> Option<(T, T)>;
+	unsafe fn swap_pair_no_bounds(&mut self, pair: &PosPair);
 
-	fn swap_pair_no_bounds(&mut self, pair: &PosPair) -> (T, T);
-
-	fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize);
+	unsafe fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize);
 
 	fn swap_indexes(&mut self);
 
@@ -121,16 +121,16 @@ impl Layout<char> for FastLayout {
 		FastLayout::from(layout_chars)
 	}
 
+	fn c(&self, i: usize) -> char {
+		self.matrix[i]
+	}
+
 	fn char(&self, x: usize, y: usize) -> char {
 		assert!(x < 10 && y < 3);
 		self.matrix[x + 10*y]
 	}
 
-	fn char_by_index(&self, i: usize) -> char {
-		self.matrix[i]
-	}
-
-	fn swap(&mut self, i1: usize, i2: usize) -> Option<(char, char)> {
+	fn swap(&mut self, i1: usize, i2: usize) -> Option<()> {
 		if i1 < 30 && i2 < 30 {
 
 			let char1 = self.matrix[i1];
@@ -141,41 +141,43 @@ impl Layout<char> for FastLayout {
 			self.char_to_finger.insert(char1, COL_TO_FINGER[i2 % 10]);
 			self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
 
-			return Some((char1, char2))
+			return Some(())
 		} else {
 			println!("Invalid coordinate, swap was cancelled");
 			None
 		}
 	}
 
-	fn swap_no_bounds(&mut self, i1: usize, i2: usize) -> (char, char) {
+	unsafe fn swap_no_bounds(&mut self, i1: usize, i2: usize) {
 		let char1 = self.matrix[i1];
 		let char2 = self.matrix[i2];
 
-		self.matrix[i1] = char2;
-		self.matrix[i2] = char1;
+		*self.matrix.get_unchecked_mut(i1) = char2;
+		*self.matrix.get_unchecked_mut(i2) = char1;
+
 		self.char_to_finger.insert(char1, COL_TO_FINGER[i2 % 10]);
 		self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
-		(char1, char2)
 	}
 
-	fn swap_pair(&mut self, pair: &PosPair) -> Option<(char, char)> {
+	fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
 		self.swap(pair.0, pair.1)
 	}
 
-	fn swap_pair_no_bounds(&mut self, pair: &PosPair) -> (char, char) {
-		self.swap_no_bounds(pair.0, pair.1)
+	unsafe fn swap_pair_no_bounds(&mut self, pair: &PosPair) {
+		self.swap_no_bounds(pair.0, pair.1);
 	}
 
-	fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize) {
+	unsafe fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize) {
 		self.swap_no_bounds(col1, col2);
 		self.swap_no_bounds(col1 + 10, col2 + 10);
 		self.swap_no_bounds(col1 + 20, col2 + 20);
 	}
 
 	fn swap_indexes(&mut self) {
-		self.swap_cols_no_bounds(3, 6);
-		self.swap_cols_no_bounds(4, 5);
+		unsafe {
+			self.swap_cols_no_bounds(3, 6);
+			self.swap_cols_no_bounds(4, 5);
+		}
 	}
 
 	fn get_index(&self, index: usize) -> [char; 6] {
@@ -239,14 +241,14 @@ mod tests {
 	#[test]
 	fn swap_no_bounds() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		qwerty.swap_no_bounds(9, 12);
+		unsafe { qwerty.swap_no_bounds(9, 12) };
 		assert_eq!(qwerty.layout_str(), "qwertyuiodaspfghjkl;zxcvbnm,./".to_string());
 	}
 
 	#[test]
 	fn swap_cols_no_bounds() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		qwerty.swap_cols_no_bounds(1, 9);
+		unsafe { qwerty.swap_cols_no_bounds(1, 9) };
 		assert_eq!(
 			qwerty.layout_str(), "qpertyuiowa;dfghjklsz/cvbnm,.x".to_string()
 		);
@@ -264,7 +266,7 @@ mod tests {
 	fn swap_pair_no_bounds() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		let new_swap = PosPair::new(0, 29);
-		qwerty.swap_pair_no_bounds(&new_swap);
+		unsafe { qwerty.swap_pair_no_bounds(&new_swap) };
 		assert_eq!(qwerty.layout_str(), "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string());
 	}
 
@@ -297,9 +299,9 @@ mod tests {
 	#[test]
 	fn char_by_index() {
 		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		assert_eq!(qwerty.char_by_index(10), 'a');
-		assert_eq!(qwerty.char_by_index(24), 'b');
-		assert_eq!(qwerty.char_by_index(22), 'c');
+		assert_eq!(qwerty.c(10), 'a');
+		assert_eq!(qwerty.c(24), 'b');
+		assert_eq!(qwerty.c(22), 'c');
 	}
 
 	#[test]

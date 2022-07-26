@@ -1,4 +1,5 @@
 #![feature(let_chains)]
+#![feature(exclusive_range_pattern)]
 
 pub mod language_data;
 pub mod load_text;
