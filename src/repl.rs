@@ -245,78 +245,72 @@ impl Repl {
             .subcommand(
                 command!("rank")
                     .alias("sort")
-                    .about("Rank all layouts in set language by score")
+                    .about("(sort) Rank all layouts in set language by score")
                     .help_template(COMMAND_TEMPLATE),
             )
             .subcommand(
-                command!("layout")
-                    .alias("analyze")
-                    .alias("a")
+                command!("analyze")
+                    .aliases(&["a", "layout"])
                     .arg(
                         arg!(<LAYOUT_NAME_OR_NR>)
                     )
-                    .about("Show details of layout")
+                    .about("(a, layout) Show details of layout")
                     .help_template(COMMAND_TEMPLATE)
             )
             .subcommand(
                 command!("compare")
-                    .alias("cmopare")
-                    .alias("comprae")
-                    .alias("c")
+                    .aliases(&["c", "comp", "cmopare", "comprae"])
                     .arg(
                         arg!(<LAYOUT_1>)
                     )
                     .arg(
                         arg!(<LAYOUT_2>)
                     )
-                    .about("Compare 2 layouts")
+                    .about("(c, comp) Compare 2 layouts")
                     .help_template(COMMAND_TEMPLATE)
             )
             .subcommand(
                 command!("language")
-                    .alias("l")
-                    .alias("lang")
-                    .alias("lanugage")
-                    .alias("langauge")
+                    .aliases(&["l", "lang", "lanugage", "langauge"])
                     .arg(
                         arg!([LANGUAGE])
                     )
                     .help_template(COMMAND_TEMPLATE)
-                    .about("Set a language to be used for analysis. Loads corpus when not present")
+                    .about("(l, lang) Set a language to be used for analysis. Loads corpus when not present")
             )
             .subcommand(
                 command!("languages")
+                .aliases(&["langs", "lanugages", "langauges"])
                 .help_template(COMMAND_TEMPLATE)
-                .about("Show available languages")
+                .about("(langs) Show available languages")
             )
             .subcommand(
-                command!("occ")
-                .alias("ngram")
+                command!("ngram")
+                .alias("occ")
                 .help_template(COMMAND_TEMPLATE) 
                 .arg(
                         arg!(<NGRAM>)
                 )
-                .about("Gives information about a certain ngram. for 2 letter ones, skipgram info will be provided as well.")
+                .about("(occ) Gives information about a certain ngram. for 2 letter ones, skipgram info will be provided as well.")
             )
             .subcommand(
                 command!("reload")
                 .alias("r")
                 .help_template(COMMAND_TEMPLATE)
-                .about("Reloads all data with the current language. Loses temporary layouts.")
+                .about("(r) Reloads all data with the current language. Loses temporary layouts. ")
             )
             .subcommand(
                 command!("generate")
-                    .alias("gen")
+                    .aliases(&["g", "gen"])
                     .arg(
                         arg!(<COUNT>)
                     )
                     .help_template(COMMAND_TEMPLATE)
-                    .about("Generate a number of layouts and take the best 10")
+                    .about("(g, gen) Generate a number of layouts and take the best 10")
             )
             .subcommand(
                 command!("improve")
-                    .alias("i")
-                    .alias("optimize")
+                    .aliases(&["i", "optimize"])
                     .arg(
                         arg!(<LAYOUT_NAME>)
                     )
@@ -324,7 +318,7 @@ impl Repl {
                         arg!(<AMOUNT>)
                     )
                     .help_template(COMMAND_TEMPLATE)
-                    .about("Save the top <NR> result that was generated. Starts from 1, takes negative values")
+                    .about("(i, optimize) Save the top <NR> result that was generated. Starts from 1, takes negative values")
             )
             .subcommand(
                 command!("save")
@@ -336,7 +330,7 @@ impl Repl {
                     arg!([NAME])
                 )
                 .help_template(COMMAND_TEMPLATE)
-                .about("Save the top <NR> result that was generated. Starts from 1, takes negative values")
+                .about("(s) Save the top <NR> result that was generated. Starts from 1, takes negative values")
             )
             .subcommand(
                 command!("load")
@@ -344,7 +338,7 @@ impl Repl {
                     arg!(<LANGUAGE>)
                 )
                 .help_template(COMMAND_TEMPLATE)
-                .about("loads corpus for <language>. Will be passthrough if the language isn't known")
+                .about("generates corpus for <language>. Will be passthrough if the language isn't known")
             )
             // .subcommand(
             //     command!("passthrough")
