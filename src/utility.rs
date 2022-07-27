@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use crate::languages_cfg::LANGUAGES_CFG_MAP;
+use crate::languages_cfg::read_cfg;
 
 pub static COL_TO_FINGER: [usize; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
 
@@ -137,10 +137,12 @@ pub fn get_scissor_indices() -> [PosPair; 15] {
 }
 
 pub fn available_chars(language: &str) -> [char; 30] {
-	if let Some(cfg) = LANGUAGES_CFG_MAP.get(language) {
+	let languages_cfg_map = read_cfg();
+
+	if let Some(cfg) = languages_cfg_map.get(language) {
 		cfg.chars().collect::<Vec<char>>().try_into().unwrap()
 	} else {
-		let default = LANGUAGES_CFG_MAP.get(&"default".to_string()).unwrap();
+		let default = languages_cfg_map.get(&String::from("default")).unwrap();
 		default.chars().collect::<Vec<char>>().try_into().unwrap()
 	}
 }

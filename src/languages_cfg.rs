@@ -1,11 +1,7 @@
 use fxhash::FxHashMap;
 use std::io::Read;
 
-lazy_static::lazy_static!(
-    pub static ref LANGUAGES_CFG_MAP: FxHashMap<String, String> = read_cfg();
-);
-
-fn read_cfg() -> FxHashMap<String, String> {
+pub fn read_cfg() -> FxHashMap<String, String> {
     let mut res = FxHashMap::default();
 
     if let Ok(mut f) = std::fs::File::open("languages_default.cfg") {
@@ -29,8 +25,7 @@ fn read_cfg() -> FxHashMap<String, String> {
     } else {
         println!("No cfg file found! Make sure to have a 'languages_default.cfg' in your root folder");
     }
-    res
-        
+    res   
 }
 
 struct LangsChars {
