@@ -241,23 +241,9 @@ checksum = "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
 name = "layout_analyser"
 version = "0.1.0"
 dependencies = [
- "ansi_rgb",
- "anyhow",
  "clap",
- "fastrand",
- "file-chunker",
- "fxhash",
- "indexmap",
- "indicatif",
- "itertools",
- "lazy_static",
- "rayon",
- "serde",
- "serde_json",
+ "oxeylyzer",
  "shlex",
- "smallmap",
- "toml",
- "unicode-normalization",
 ]
 
 [[package]]
@@ -317,6 +303,28 @@ name = "os_str_bytes"
 version = "6.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "029d8d0b2f198229de29dca79676f2738ff952edf3fde542eb8bf94d8c21b435"
+
+[[package]]
+name = "oxeylyzer"
+version = "0.1.0"
+source = "git+https://github.com/O-X-E-Y/oxeylyzer#8c91484a918d4459cfd9478d14b48bd317fe77d1"
+dependencies = [
+ "ansi_rgb",
+ "anyhow",
+ "fastrand",
+ "file-chunker",
+ "fxhash",
+ "indexmap",
+ "indicatif",
+ "itertools",
+ "lazy_static",
+ "rayon",
+ "serde",
+ "serde_json",
+ "smallmap",
+ "toml",
+ "unicode-normalization",
+]
 
 [[package]]
 name = "proc-macro2"

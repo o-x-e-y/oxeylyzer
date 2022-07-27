@@ -1,9 +1,11 @@
 use std::io::Write;
 use clap::{arg, command, Command};
-use crate::generate::LayoutGeneration;
-use crate::layout::*;
-use crate::weights::Config;
-use crate::load_text;
+use oxeylyzer::{
+    generate::LayoutGeneration,
+    layout::*,
+    weights::Config,
+    load_text
+};
 
 pub struct Repl {
     language: String,
