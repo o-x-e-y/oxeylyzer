@@ -339,23 +339,23 @@ impl Repl {
                 .help_template(COMMAND_TEMPLATE)
                 .about("Save the top <NR> result that was generated. Starts from 1, takes negative values")
             )
-            .subcommand(
-                command!("load")
-                .arg(
-                    arg!(<LANGUAGE>)
-                )
-                .help_template(COMMAND_TEMPLATE)
-                .about("loads corpus for <language>. Will be passthrough if the language isn't known")
-            )
-            .subcommand(
-                command!("passthrough")
-                .alias("pass")
-                .arg(
-                    arg!(<LANGUAGE>)
-                )
-                .help_template(COMMAND_TEMPLATE)
-                .about("Loads corpus as passthrough for <language> in static/language_data_pass")
-            )
+            // .subcommand(
+            //     command!("load")
+            //     .arg(
+            //         arg!(<LANGUAGE>)
+            //     )
+            //     .help_template(COMMAND_TEMPLATE)
+            //     .about("loads corpus for <language>. Will be passthrough if the language isn't known")
+            // )
+            // .subcommand(
+            //     command!("passthrough")
+            //     .alias("pass")
+            //     .arg(
+            //         arg!(<LANGUAGE>)
+            //     )
+            //     .help_template(COMMAND_TEMPLATE)
+            //     .about("Loads corpus as passthrough for <language> in static/language_data_pass")
+            // )
             .subcommand(
                 command!("quit")
                     .alias("exit")
