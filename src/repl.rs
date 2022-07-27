@@ -4,7 +4,8 @@ use oxeylyzer::{
     generate::LayoutGeneration,
     layout::*,
     weights::Config,
-    load_text
+    load_text,
+    language_data::LanguageData
 };
 
 pub struct Repl {
@@ -48,6 +49,43 @@ impl Repl {
         }
 
         Ok(())
+    }
+
+    fn language_data(&self) -> &LanguageData {
+		&self.gen.analysis.language_data
+	}
+
+    fn get_ngram_info(&self, ngram: &str) -> String {
+        match ngram.chars().count() {
+            1 => {
+                let c = ngram.chars().next().unwrap();
+                let occ = self.language_data().characters.get(&c).unwrap_or(&0.0) * 100.0;
+                format!("{ngram}: {occ:.3}%")
+            },
+            2 => {
+                let b: [char; 2] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
+                let b2 = [b[1], b[0]];
+                let rev = String::from_iter(b2);
+                let occ_b = self.language_data().bigrams.get(&b).unwrap_or(&0.0) * 100.0;
+                let occ_b2 = self.language_data().bigrams.get(&b2).unwrap_or(&0.0) * 100.0;
+                let occ_s = self.language_data().skipgrams.get(&b).unwrap_or(&0.0) * 100.0;
+                let occ_s2 = self.language_data().skipgrams.get(&b2).unwrap_or(&0.0) * 100.0;
+                format!(
+                    "{ngram} + {rev}: {:.3}%,\n  {ngram}: {occ_b:.3}%\n  {rev}: {occ_b2:.3}%\n\
+                    {ngram} + {rev} (skipgram): {:.3}%,\n  {ngram}: {occ_s:.3}%\n  {rev}: {occ_s2:.3}%",
+                    occ_b+occ_b2, occ_s+occ_s2
+                )
+            }
+            3 => {
+                let t: [char; 3] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
+                let &(_, occ) = self.language_data().trigrams
+                    .iter()
+                    .find(|&&(tf, _)| tf == t)
+                    .unwrap_or(&(t, 0.0));
+                format!("{ngram}: {:.3}%", occ*100.0)
+            }
+            _ => "Invalid ngram! It must be 1, 2 or 3 chars long.".to_string()
+        }
     }
 
     fn get_nth(&self, nr: usize) -> Option<FastLayout> {
@@ -111,6 +149,10 @@ impl Repl {
                 } else {
                     self.gen.analysis.analyze_name(name_or_nr);
                 }
+            }
+            Some(("occ", occ_m)) => {
+                let ngram = occ_m.value_of("NGRAM").unwrap();
+                println!("{}", self.get_ngram_info(ngram));
             }
             Some(("compare", new_m)) => {
                 let layout1 = new_m.value_of("LAYOUT_1").unwrap();
@@ -237,7 +279,7 @@ impl Repl {
                     .alias("lang")
                     .alias("lanugage")
                     .alias("langauge")
-                    .arg(   
+                    .arg(
                         arg!([LANGUAGE])
                     )
                     .help_template(COMMAND_TEMPLATE)
@@ -250,8 +292,12 @@ impl Repl {
             )
             .subcommand(
                 command!("occ")
+                .alias("ngram")
                 .help_template(COMMAND_TEMPLATE) 
-                .about("Shows the % occurence of a certain ngram (out of 100%). -s for skipgrams")
+                .arg(
+                        arg!(<NGRAM>)
+                )
+                .about("Gives information about a certain ngram. for 2 letter ones, skipgram info will be provided as well.")
             )
             .subcommand(
                 command!("reload")
