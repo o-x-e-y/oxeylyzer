@@ -1,4 +1,3 @@
-#![feature(let_chains)]
 #![feature(exclusive_range_pattern)]
 
 mod repl;
