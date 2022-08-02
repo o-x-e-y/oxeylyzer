@@ -1,14 +1,17 @@
 use crate::translation::Translator;
+
 use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::fs::{File, read_dir};
 use std::time::Instant;
 
+use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use file_chunker::FileChunker;
 use anyhow::Result;
 use indexmap::IndexMap;
 use serde::{Serialize, Deserialize};
+use smartstring::{SmartString, Compact};
 
 const TWO_MB: u64 = 1024 * 1024 * 2;
 
@@ -61,8 +64,8 @@ pub fn load_data(language: &str, translator: Translator) -> Result<TextData> {
     Ok(res)
 }
 
-#[derive(Default)]
-struct TextTrigrams {
+#[derive(Default, Debug)]
+pub struct TextTrigrams {
     pub trigrams: HashMap<[char; 3], usize>,
 }
 
@@ -91,17 +94,14 @@ impl TryFrom<File> for TextTrigrams {
 impl From<&str> for TextTrigrams {
     fn from(s: &str) -> Self {
         let mut trigrams: HashMap<[char; 3], usize> = HashMap::new();
-        let mut chars = "  ".chars().chain(s.chars().chain("  ".chars()));
 
-        if let Some(mut c1) = chars.next() {
-            if let Some(mut c2) = chars.next() {
-                while let Some(c3) = chars.next() {
-                    *trigrams.entry([c1, c2, c3]).or_insert_with(|| 0) += 1;
-                    c1 = c2;
-                    c2 = c3;
-                }
-            }
+        let mut chars = "  ".chars().chain(s.chars().chain("  ".chars()))
+            .tuple_windows::<(_, _, _)>();
+
+        while let Some((c1, c2, c3)) = chars.next() {
+            *trigrams.entry([c1, c2, c3]).or_insert_with(|| 0) += 1;
         }
+        
         Self { trigrams }
     }
 }
@@ -115,7 +115,7 @@ impl TextTrigrams {
     }
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct TextData {
     language: String,
 
@@ -160,57 +160,39 @@ impl From<(TextTrigrams, Translator, &str)> for TextData {
         res.language = language.replace(" ", "_");
 
         for (trigram, freq) in data.trigrams.into_iter() {
-            let s = String::from_iter(trigram);
-            let c1_as_string = String::from(trigram[0]);
-            let first_trans = translator.translate(c1_as_string.as_str());
-            let trans = translator.translate(s.as_str());
-            let mut chars = trans.chars();
-            if first_trans.len() > 0 {
-                if let Some(c1) = chars.next() {
-                    if let Some(c2) = chars.next() {
-                        if let Some(c3) = chars.next() {
+            let s: SmartString<Compact> = SmartString::from_iter(trigram);
+            let translated = translator.translate(s.as_str());
+            let trans_len = translated.chars().count();
+
+            let mut it_count = if let Some(f) = translator.table.get(&trigram[0]) {
+                f.len()
+            } else { 0 };
+
+            if it_count > 0 {
+                match trans_len {
+                    3.. => {
+                        let mut it = translated.chars()
+                            .tuple_windows::<(_, _, _)>();
+    
+                        while let Some((c1, c2, c3)) = it.next() && it_count > 0 {
                             res.add_from_three_subsequent(c1, c2, c3, freq as f64);
+                            it_count -= 1;
                         }
-                    }
-                }
-            }
-            if first_trans.len() > 1 {
-                let mut chars_c = first_trans.chars();
-                chars_c.next();
-                while let Some(c) = chars_c.next() {
-                    if c != ' ' {
-                        res.add_character(c, freq as f64);
-                    }
-                }
-                let mut chars_b = first_trans.chars();
-                chars_b.next();
-                if let Some(mut c1) = chars_b.next() {
-                    while let Some(c2) = chars_b.next() {
-                        if c1 != ' ' && c2 != ' ' {
-                            res.add_bigram([c1, c2], freq as f64);
-                        }
-                        c1 = c2;
-                    }
-                }
-                let mut chars_t = first_trans.chars();
-                chars_t.next();
-                if let Some(mut c1) = chars_b.next() {
-                    if let Some(mut c2) = chars_b.next() {
-                        while let Some(c3) = chars_b.next() {
-                            if c1 != ' ' && c3 != ' '{
-                                res.add_skipgram([c1, c3], freq as f64);
-                                if c2 != ' ' {
-                                    res.add_trigram([c1, c2, c3], freq as f64);
-                                }
-                            }
-                            c1 = c2;
-                            c2 = c3;
-                        }
-                    } 
+                    },
+                    2 => {
+                        let (c1, c2) = translated.chars().next_tuple::<(_, _)>().unwrap();
+                        res.add_from_two_subsequent(c1, c2, freq as f64)
+                    },
+                    1 => {
+                        let c1 = translated.chars().next().unwrap();
+                        res.add_character(c1, freq as f64);
+                    },
+                    _ => {}
                 }
             }
         }
-        // IndexMaps have the propertiy of being sorted based on insertion, so they're sortable:
+
+        // IndexMaps have the property of being sorted based on insertion, so they're sortable:
         res.characters.iter_mut().for_each(|(_, f)| *f /= res.char_sum);
         res.bigrams.iter_mut().for_each(|(_, f)| *f /= res.bigram_sum);
         res.skipgrams.iter_mut().for_each(|(_, f)| *f /= res.skipgram_sum);
@@ -240,6 +222,17 @@ impl TextData {
             // c1 and c3 for skipgrams
             if c3 != ' ' {
                 self.add_skipgram([c1, c3], freq);
+            }
+        }
+    }
+
+    fn add_from_two_subsequent(&mut self, c1: char, c2: char, freq: f64) {
+        if c1 != ' ' {
+            self.add_character(c1, freq);
+            // take first, first 2 etc chars of the trigram every time for the appropriate stat
+            // as long as they don't contain spaces
+            if c2 != ' ' {
+                self.add_bigram([c1, c2], freq);
             }
         }
     }
@@ -282,6 +275,8 @@ impl TextData {
         self.serialize(&mut ser).unwrap();
 
         let pass_str = if pass { "_pass" } else { "" };
+
+        println!("{pass_str}");
 
         let mut file = OpenOptions::new()
             .write(true)

@@ -245,7 +245,7 @@ impl TranslatorBuilder {
             "finnish_repeat" => Ok(self
                 .letters("åäö@")
             ),
-            "french" | "french_qu" => Ok(self
+            "french" | "french_qu" | "test" => Ok(self
                 .to_multiple(vec![
                     ('ç', "*c"), ('Ç', "*c"), ('œ', "oe"),    ('á', "* a"), ('â', "* a"), ('è', "* e"),
                     ('ê', "* e"), ('ì', "* i"), ('í', "* i"), ('î', "* i"), ('ò', "* o"), ('ó', "* o"),
