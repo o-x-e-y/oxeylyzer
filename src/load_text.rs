@@ -46,7 +46,6 @@ pub fn load_all_default() -> Result<()> {
 
 pub fn load_data(language: &str, translator: Translator) -> Result<TextData> {
     let start_total = Instant::now();
-    println!("path: {}", format!("static/text/{language}"));
 
     let all_trigrams = read_dir(format!("static/text/{language}"))?
         .filter_map(Result::ok)
