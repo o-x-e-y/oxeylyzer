@@ -1,6 +1,7 @@
 #![feature(exclusive_range_pattern)]
 
 mod repl;
+use oxeylyzer::load_text;
 
 fn main() -> Result<(), String> {
 	repl::Repl::run()
@@ -14,10 +15,8 @@ fn main() -> Result<(), String> {
 // }
 
 // fn main() -> Result<(), std::io::Error> {
-// 	// let x = GenerateCached::new("english", 1000).unwrap();
-// 	// load_text::load_default("french");
-// 	// load_text::load_default("french_qu");
-// 	println!("hello world");
+// 	load_text::load_default("toki_pona");
+// 	// load_text::load_all_default().expect("sussy impostor lol impostor");
 
 // 	pause()
 // }

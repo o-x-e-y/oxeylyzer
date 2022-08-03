@@ -140,7 +140,7 @@ impl Repl {
             Some(("rank", _)) => {
                 self.gen.analysis.rank();
             }
-            Some(("layout", new_m)) => {
+            Some(("analyze", new_m)) => {
                 let name_or_nr = new_m.value_of("LAYOUT_NAME_OR_NR").unwrap();
                 if let Ok(nr) = usize::from_str_radix(name_or_nr, 10) {
                     if let Some(layout) = self.get_nth(nr) {
@@ -150,7 +150,7 @@ impl Repl {
                     self.gen.analysis.analyze_name(name_or_nr);
                 }
             }
-            Some(("occ", occ_m)) => {
+            Some(("ngram", occ_m)) => {
                 let ngram = occ_m.value_of("NGRAM").unwrap();
                 println!("{}", self.get_ngram_info(ngram));
             }
@@ -215,7 +215,7 @@ impl Repl {
                 println!("Exiting anlyzer...");
                 return Ok(true);
             }
-            Some((name, _new_m)) => unimplemented!("{}", name),
+            Some((name, _new_m)) => println!("{name} is not a valid command!"),
             None => unreachable!("subcommand required"),
         }
 

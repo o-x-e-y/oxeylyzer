@@ -1,7 +1,7 @@
 pins = """
-xxx.. ..xxx
-xxx.. .xxxx
-xxx.. .xxxx
+..... ..xx.
+..... ..xxx
+....x x....
 """
 
 [defaults]
@@ -13,12 +13,12 @@ heatmap = 1.5
 lateral_penalty = 1.0
 fspeed = 14.0
 dsfb_ratio = 0.12
-scissors = 1.75
+scissors = 0.0
 inrolls = 2.1
 outrolls = 1.8
 onehands = 0.9
 alternates = 0.6
-alternates_sfs = 0.3
+alternates_sfs = 0.9
 redirects = 2.0
 bad_redirects = 6.5
 
@@ -27,7 +27,7 @@ penalty = 2.5
 pinky = 9.0
 ring = 16.5
 middle = 20.0
-index = 18.0
+index = 26.0
 
 [weights.finger_speed]
 base = 1.0
