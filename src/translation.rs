@@ -4,7 +4,7 @@ use anyhow::Result;
 
 pub struct Translator {
     pub table: HashMap<char, Cow<'static, str>>,
-    pub is_passthrough: bool,
+    pub is_raw: bool,
     pub(crate) ignore_unknown: bool,
     pub(crate) is_empty: bool,
     pub(crate) multiple_val: f64
@@ -22,7 +22,7 @@ impl Translator {
     pub fn new() -> TranslatorBuilder {
         TranslatorBuilder {
             table: HashMap::new(),
-            is_passthrough: false,
+            is_raw: false,
             ignore_unknown: false
         }
     }
@@ -41,17 +41,17 @@ impl Translator {
         }
     }
 
-    pub fn language_or_passthrough(language: &str) -> Self {
+    pub fn language_or_raw(language: &str) -> Self {
         if let Ok(t) = Self::language(language) {
             t
         } else {
-            Self::passthrough()
+            Self::raw()
         }
     }
 
-    pub fn passthrough() -> Self {
+    pub fn raw() -> Self {
         Translator::new()
-            .passthrough()
+            .raw()
             .ascii_lower()
             .normalize_punct()
             .keep_unknown()
@@ -96,7 +96,7 @@ impl Translator {
 
 pub struct TranslatorBuilder {
     table: HashMap<char, Cow<'static, str>>,
-    is_passthrough: bool,
+    is_raw: bool,
     ignore_unknown: bool
 }
 
@@ -167,7 +167,7 @@ impl TranslatorBuilder {
         self
     }
 
-    pub fn passthrough(&mut self) -> &mut Self {
+    pub fn raw(&mut self) -> &mut Self {
         let mut letters = String::new();
         for i in 128u32..1250 {
             if let Some(c) = char::from_u32(i)
@@ -176,7 +176,7 @@ impl TranslatorBuilder {
             }
         }
 
-        self.is_passthrough = true;
+        self.is_raw = true;
 
         self
             .letters(letters.as_str())
@@ -222,8 +222,12 @@ impl TranslatorBuilder {
         let language = language.to_lowercase();
         match language.as_str() {
             "akl" | "english" | "english2" | "toki_pona" | "indonesian" | "reddit" => Ok(self),
-            "albanian" => Ok(self.letters("çë")),
-            "bokmal" | "nynorsk" => Ok(self.letters("åøæ")),
+            "albanian" => Ok(self
+                .letters("çë")
+        ),
+            "bokmal" | "nynorsk" => Ok(self
+                .letters("åøæ")
+        ),
             "czech" => Ok(self
                 .to_multiple(vec![
                     ('č', "*c"), ('ď', "*d"), ('é', "*x"), ('ň', "*n"), ('ó', "*o"), ('ř', "*r"),
@@ -231,7 +235,8 @@ impl TranslatorBuilder {
                     ('Č', "*c"), ('Ď', "*d"), ('É', "*x"), ('Ň', "*n"), ('Ó', "*o"), ('Ř', "*r"),
                     ('Š', "*s"), ('Ť', "*t"), ('Ů', "*u"), ('Ú', "*b"), ('Ý', "*y"), ('Ž', "*z")
                 ])
-                .letters("áíě")),
+                .letters("áíě")
+            ),
             "dutch" => Ok(self.letters("áèéçëíîó")),
             "dutch_repeat" => Ok(self.letters("áèéçëíîó@")),
             "english_repeat" => Ok(self.keep_same("@")),
@@ -255,19 +260,22 @@ impl TranslatorBuilder {
                     ('ë', "* e"), ('ï', "* i"), ('ö', "* o"), ('ü', "* u"), ('Ä', "* a"), ('Ë', "* e"),
                     ('Ï', "* i"), ('Ö', "* o"), ('Ü', "* u")
                 ])
-                .letters("éà")),
+                .letters("éà")
+            ),
             "german" => Ok(self.letters("äöüß")),
             "hungarian" => Ok(self
                 .to_multiple(vec![
                     ('í', "*i"), ('ü', "*u"), ('ú', "* u"), ('ű', "* u"), ('Í', "*i"), ('Ü', "*u"),
                     ('Ú', "* u"), ('Ű', "* u")
                 ])
-                .letters("áéöóő")),
+                .letters("áéöóő")
+            ),
             "italian" => Ok(self
                 .to_multiple(vec![
                     ('à', "*a"), ('è', "*e"), ('ì', "*i"), ('ò', "*o"), ('ù', "*u"), ('À', "*a"),
                     ('È', "*e"), ('Ì', "*i"), ('Ò', "*o"), ('Ù', "*u")
-                ])),
+                ])
+            ),
             "russian" => Ok(self
                 .letters("абвгдеёжзийклмнопрстуфхцчшщъыьэюя")
                 .to_space("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -277,7 +285,11 @@ impl TranslatorBuilder {
                     ('á', "*a"), ('é', "*e"), ('í', "*i"), ('ó', "*o"), ('ú', "*u"), ('ü', "*y"),
                     ('Á', "*a"), ('É', "*e"), ('Í', "*i"), ('Ó', "*o"), ('Ú', "*u"), ('Ü', "*y"),
                     ('ñ', "*n"), ('Ñ', "*n")
-                ])),
+                ])
+            ),
+            "swedish" => Ok(
+                self.letters("äåö")
+            ),
             "welsh" => Ok(self
                 .to_multiple(vec![
                     ('â', "*a"), ('ê', "*e"), ('î', "*i"), ('ô', "*o"), ('û', "*u"), ('ŵ', "*w"),
@@ -291,7 +303,8 @@ impl TranslatorBuilder {
                     ('â', "*a"), ('ê', "*e"), ('î', "*i"), ('ô', "*o"), ('û', "*u"), ('ŵ', "*w"),
                     ('ŷ', "*y"), ('Â', "*a"), ('Ê', "*e"), ('Î', "*i"), ('Ô', "*o"), ('Û', "*u"),
                     ('Ŵ', "*w"), ('Ŷ', "*y")
-            ])),
+                ])
+            ),
             _ => Err(anyhow::format_err!("This language is not available. You'll have to make your own formatter, sorry!"))
         }
     }
@@ -314,7 +327,7 @@ impl TranslatorBuilder {
     pub fn build(&mut self) -> Translator {
         Translator {
             is_empty: self.table.len() == 0,
-            is_passthrough: self.is_passthrough,
+            is_raw: self.is_raw,
             ignore_unknown: self.ignore_unknown,
             multiple_val: self.check_multiple_val(),
             table: std::mem::take(&mut self.table)

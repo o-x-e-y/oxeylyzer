@@ -17,15 +17,15 @@ const TWO_MB: u64 = 1024 * 1024 * 2;
 
 pub fn load_raw(language: &str) {
     let translator = Translator::new()
-        .passthrough()
+        .raw()
         .build();
     load_data(language, translator).unwrap();
 }
 
 pub fn load_default(language: &str) {
-    let translator = Translator::language_or_passthrough(language);
-	if let Err(_) = load_data(language, translator) {
-        println!("{} failed to update", language);
+    let translator = Translator::language_or_raw(language);
+	if let Err(e) = load_data(language, translator) {
+        println!("{} failed to update: '{}'", language, e);
     }
 }
 
@@ -46,8 +46,9 @@ pub fn load_all_default() -> Result<()> {
 
 pub fn load_data(language: &str, translator: Translator) -> Result<TextData> {
     let start_total = Instant::now();
+    println!("path: {}", format!("static/text/{language}"));
 
-    let all_trigrams = read_dir(format!("static/text/{language}/"))?
+    let all_trigrams = read_dir(format!("static/text/{language}"))?
         .filter_map(Result::ok)
         .map(|dir_entry| -> Result<TextTrigrams> {
             let f = File::open(dir_entry.path())?;
@@ -57,9 +58,9 @@ pub fn load_data(language: &str, translator: Translator) -> Result<TextData> {
         .reduce(|accum, new| accum.combine_with(new))
         .unwrap_or(TextTrigrams::default());
 
-    let is_passthrough = translator.is_passthrough;
+    let is_raw = translator.is_raw;
     let res = TextData::from((all_trigrams, translator, language));
-    res.save(is_passthrough)?;
+    res.save(is_raw)?;
     println!("loading {} took {}ms", language, (Instant::now() - start_total).as_millis());
     Ok(res)
 }
@@ -274,15 +275,17 @@ impl TextData {
         let mut ser = serde_json::Serializer::with_formatter(buf, formatter);
         self.serialize(&mut ser).unwrap();
 
-        let pass_str = if pass { "_pass" } else { "" };
+        let data_dir = format!("static/language_data{}", if pass { "_raw" } else { "" });
 
-        println!("{pass_str}");
+        if let Ok(t) = std::fs::try_exists(&data_dir) && !t {
+            std::fs::create_dir_all(&data_dir)?;
+        }
 
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("static/language_data{}/{}.json", pass_str, self.language))?;
+            .open(format!("{}/{}.json", data_dir, self.language))?;
         
         file.write(ser.into_inner().as_slice())?;
         Ok(())

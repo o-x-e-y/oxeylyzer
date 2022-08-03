@@ -1,4 +1,4 @@
-#![feature(let_chains)]
+#![feature(fs_try_exists)]
 #![feature(exclusive_range_pattern)]
 
 pub mod language_data;
