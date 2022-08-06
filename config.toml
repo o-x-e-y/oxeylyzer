@@ -1,6 +1,6 @@
 pins = """
-..... ..xx.
-..... ..xxx
+..... .....
+..... .....
 ....x x....
 """
 
@@ -13,7 +13,7 @@ heatmap = 1.5
 lateral_penalty = 1.0
 fspeed = 14.0
 dsfb_ratio = 0.12
-scissors = 0.0
+scissors = 1.75
 inrolls = 2.1
 outrolls = 1.8
 onehands = 0.9
