@@ -23,7 +23,9 @@ pub struct Weights {
 	pub lateral_penalty: f64,
 	pub fspeed: f64,
 	pub dsfb_ratio: f64,
+	#[serde(default)]
 	pub dsfb_ratio2: f64,
+	#[serde(default)]
 	pub dsfb_ratio3: f64,
 	pub scissors: f64,
 	pub inrolls: f64,
