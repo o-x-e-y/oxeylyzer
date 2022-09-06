@@ -20,6 +20,9 @@ pub struct TrigramStats {
 	pub onehands: f64,
 	pub redirects: f64,
 	pub bad_redirects: f64,
+	pub sfbs: f64,
+	pub bad_sfbs: f64,
+	pub sfts: f64,
 	pub other: f64,
 	pub invalid: f64
 }
@@ -37,7 +40,9 @@ Alternates (sfs): {:.3}%
 Total Alternates: {:.3}%\n
 Redirects: {:.3}%
 Bad Redirects: {:.3}%
-Total Redirects: {:.3}%",
+Total Redirects: {:.3}%\n,
+Bad Sfbs: {:.3}%,
+Sft: {:.3}%",
 			self.inrolls*100.0,
 			self.outrolls*100.0,
 			(self.inrolls + self.outrolls)*100.0,
@@ -47,7 +52,9 @@ Total Redirects: {:.3}%",
 			(self.alternates + self.alternates_sfs)*100.0,
 			self.redirects*100.0,
 			self.bad_redirects*100.0,
-			(self.redirects + self.bad_redirects)*100.0
+			(self.redirects + self.bad_redirects)*100.0,
+			self.bad_sfbs,
+			self.sfts
 		)
 	}
 }
@@ -66,6 +73,8 @@ impl std::fmt::Debug for TrigramStats {
 			Redirects: {:.3}%\n\
 			Bad Redirects: {:.3}%\n
 			Total Redirects: {:.3}%\n\n
+			Bad Sfbs: {:.3}%\n
+			Sft: {:.3}%\n\n
 			Other: {:.3}%\n
 			Invalid: {:.3}%",
 			self.inrolls*100.0,
@@ -78,6 +87,8 @@ impl std::fmt::Debug for TrigramStats {
 			self.redirects*100.0,
 			self.bad_redirects*100.0,
 			(self.redirects + self.bad_redirects)*100.0,
+			self.bad_sfbs,
+			self.sfts,
 			self.other*100.0,
 			self.invalid*100.0
 		)
@@ -402,6 +413,8 @@ impl LayoutAnalysis {
 			"Redirects:        {: <10} Redirects:        {:.2}%\n",
 			"Bad Redirects:    {: <10} Bad Redirects:    {:.2}%\n",
 			"Total Redirects:  {: <10} Total Redirects:  {:.2}%\n\n",
+			"Bad Sfbs:         {: <10} Bad Sfbs:         {:.2}%\n",
+			"Sft:              {: <10} Sft:              {:.3}%\n\n",
 			"Score:            {: <10} Score:            {:.3}\n"
 		),
 			format!("{:.3}%", s1.sfb*100.0), s2.sfb*100.0,
@@ -418,6 +431,8 @@ impl LayoutAnalysis {
 			format!("{:.3}%", ts1.redirects*100.0), ts2.redirects*100.0,
 			format!("{:.3}%", ts1.bad_redirects*100.0), ts2.bad_redirects*100.0,
 			format!("{:.3}%", (ts1.redirects + ts1.bad_redirects)*100.0), (ts2.redirects + ts2.bad_redirects)*100.0,
+			format!("{:.3}%", ts1.bad_sfbs*100.0), ts2.bad_sfbs*100.0,
+			format!("{:.3}%", ts1.sfts*100.0), ts2.sfts*100.0,
 			format!("{:.3}", l1.score), l2.score
 		);
 	}
@@ -480,16 +495,26 @@ impl LayoutAnalysis {
 	pub fn fspeed(&self, layout: &FastLayout) -> f64 {
 		let mut res = 0.0;
 		let dsfb_ratio = self.weights.dsfb_ratio;
+		let dsfb_ratio2 = self.weights.dsfb_ratio2;
+		let dsfb_ratio3 = self.weights.dsfb_ratio3;
 
 		for (PosPair(i1, i2), dist) in self.fspeed_vals {
 			let c1 = layout.c(i1);
 			let c2 = layout.c(i2);
 
-			res += self.language_data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
-			res += self.language_data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
+			let (pair, rev) = ([c1, c2], [c2, c1]);
 
-			res += self.language_data.skipgrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
-			res += self.language_data.skipgrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			res += self.language_data.bigrams.get(&pair).unwrap_or_else(|| &0.0) * dist;
+			res += self.language_data.bigrams.get(&rev).unwrap_or_else(|| &0.0) * dist;
+
+			res += self.language_data.skipgrams.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			res += self.language_data.skipgrams.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+
+			res += self.language_data.skipgrams2.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio2;
+			res += self.language_data.skipgrams2.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio2;
+
+			res += self.language_data.skipgrams3.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio3;
+			res += self.language_data.skipgrams3.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio3;			
 		}
 
 		res
@@ -547,6 +572,9 @@ impl LayoutAnalysis {
 				TrigramPattern::Onehand => freqs.onehands += freq,
 				TrigramPattern::Redirect => freqs.redirects += freq,
 				TrigramPattern::BadRedirect => freqs.bad_redirects += freq,
+				TrigramPattern::Sfb => freqs.sfbs += freq,
+				TrigramPattern::BadSfb => freqs.bad_sfbs += freq,
+				TrigramPattern::Sft => freqs.sfts += freq,
 				TrigramPattern::Other => freqs.other += freq,
 				TrigramPattern::Invalid => freqs.invalid += freq
 			}
@@ -565,6 +593,9 @@ impl LayoutAnalysis {
 				TrigramPattern::Onehand => freqs.onehands += freq,
 				TrigramPattern::Redirect => freqs.redirects += freq,
 				TrigramPattern::BadRedirect => freqs.bad_redirects += freq,
+				TrigramPattern::Sfb => freqs.sfbs += freq,
+				TrigramPattern::BadSfb => freqs.bad_sfbs += freq,
+				TrigramPattern::Sft => freqs.sfts += freq,
 				TrigramPattern::Other => freqs.other += freq,
 				TrigramPattern::Invalid => freqs.invalid += freq
 			}

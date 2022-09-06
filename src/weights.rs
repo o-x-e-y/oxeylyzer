@@ -23,6 +23,8 @@ pub struct Weights {
 	pub lateral_penalty: f64,
 	pub fspeed: f64,
 	pub dsfb_ratio: f64,
+	pub dsfb_ratio2: f64,
+	pub dsfb_ratio3: f64,
 	pub scissors: f64,
 	pub inrolls: f64,
 	pub outrolls: f64,
@@ -80,6 +82,8 @@ impl Config {
 				pins.push(i);
 			}
 		}
+		load.weights.dsfb_ratio2 = (load.weights.dsfb_ratio * 6.0).powi(3);
+		load.weights.dsfb_ratio3 = (load.weights.dsfb_ratio * 6.0).powi(5);
 		Self {
 			pins,
 			defaults: load.defaults,
@@ -97,7 +101,9 @@ impl Config {
 				heatmap: 0.85,
 				lateral_penalty: 1.3,
 				fspeed: 8.0,
-				dsfb_ratio: 0.5,
+				dsfb_ratio: 0.12,
+				dsfb_ratio2: (0.10 * 6.0f64).powi(2),
+				dsfb_ratio3: (0.08 * 6.0f64).powi(3),
 				scissors: 5.0,
 				inrolls: 1.6,
 				outrolls: 1.3,

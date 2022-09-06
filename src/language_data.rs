@@ -17,6 +17,8 @@ struct LanguageDataInter {
 	pub characters: FxHashMap<char, f64>,
 	pub bigrams: FxHashMap<String, f64>,
 	pub skipgrams: FxHashMap<String, f64>,
+	pub skipgrams2: FxHashMap<String, f64>,
+	pub skipgrams3: FxHashMap<String, f64>,
 	pub trigrams: IndexMap<String, f64>,
 }
 
@@ -58,6 +60,8 @@ pub struct LanguageData {
 	pub characters: CharacterData,
 	pub bigrams: BigramData,
 	pub skipgrams: BigramData,
+	pub skipgrams2: BigramData,
+	pub skipgrams3: BigramData,
 	pub trigrams: TrigramData,
 	pub language: String
 }
@@ -65,12 +69,16 @@ pub struct LanguageData {
 impl From<LanguageDataInter> for LanguageData {
 	fn from(inter: LanguageDataInter) -> Self {
 		let characters = inter.get_char_data(&inter.characters);
+
 		let bigrams = inter.get_bigram_data(&inter.bigrams);
 		let skipgrams = inter.get_bigram_data(&inter.skipgrams);
+		let skipgrams2 = inter.get_bigram_data(&inter.skipgrams2);
+		let skipgrams3 = inter.get_bigram_data(&inter.skipgrams3);
+
 		let trigrams = inter.get_trigram_data(&inter.trigrams);
 
 		Self {
-			characters, bigrams, skipgrams, trigrams, language: inter.language,
+			characters, bigrams, skipgrams, skipgrams2, skipgrams3, trigrams, language: inter.language,
 		}
 	}
 }
