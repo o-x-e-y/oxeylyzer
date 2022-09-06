@@ -7,6 +7,9 @@ pub enum TrigramPattern {
 	Onehand,
 	Redirect,
 	BadRedirect,
+	Sfb,
+	BadSfb,
+	Sft,
 	Other,
 	Invalid
 }
@@ -66,6 +69,18 @@ const fn get_one_hand(c1: usize, c2: usize, c3: usize) -> TrigramPattern {
 	TrigramPattern::Other
 }
 
+const fn has_sfb(c1: usize, c2: usize, c3: usize) -> bool {
+	c1 == c2 || c1 == c3 || c2 == c3
+}
+
+const fn is_sft(c1: usize, c2: usize, c3: usize) -> bool {
+	c1 == c2 && c2 == c3
+}
+
+const fn on_same_hand(lh1: bool, lh2: bool, lh3: bool) -> bool {
+	lh1 == lh2 && lh2 == lh3
+}
+
 const fn get_trigram_pattern(c1: usize, c2: usize, c3: usize) -> TrigramPattern {
 	let lh1 = lh(c1);
 	let lh2 = lh(c2);
@@ -81,6 +96,14 @@ const fn get_trigram_pattern(c1: usize, c2: usize, c3: usize) -> TrigramPattern 
 		get_one_hand(c1, c2, c3)
 	} else if is_roll(lh1, lh2, lh3, c1, c2, c3) {
 		get_roll(lh1, lh2, lh3, c1, c2, c3)
+	} else if has_sfb(c1, c2, c3) {
+		if is_sft(c1, c2, c3) {
+			TrigramPattern::Sft
+		} else if on_same_hand(lh1, lh2, lh3) {
+			TrigramPattern::BadSfb
+		} else {
+			TrigramPattern::Sfb
+		}
 	} else {
 		TrigramPattern::Other
 	}
