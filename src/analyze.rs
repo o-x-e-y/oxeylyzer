@@ -147,7 +147,7 @@ impl LayoutAnalysis {
 		let mut new_analysis = LayoutAnalysis {
 			language: String::new(),
 			layouts: IndexMap::new(),
-			language_data: LanguageData::new(language)?,
+			language_data: LanguageData::from_file(language)?,
 			sfb_indices: get_sfb_indices(),
 			fspeed_vals: get_fspeed(weights.lateral_penalty),
 			effort_map: get_effort_map(weights.heatmap),

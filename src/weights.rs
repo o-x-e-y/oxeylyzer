@@ -84,8 +84,8 @@ impl Config {
 				pins.push(i);
 			}
 		}
-		load.weights.dsfb_ratio2 = (load.weights.dsfb_ratio * 6.0).powi(3);
-		load.weights.dsfb_ratio3 = (load.weights.dsfb_ratio * 6.0).powi(5);
+		load.weights.dsfb_ratio2 = (load.weights.dsfb_ratio * 6.0).powi(3) / 6.0;
+		load.weights.dsfb_ratio3 = (load.weights.dsfb_ratio * 6.0).powi(5) / 6.0;
 		Self {
 			pins,
 			defaults: load.defaults,

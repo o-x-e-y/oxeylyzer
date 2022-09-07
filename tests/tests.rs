@@ -2,13 +2,26 @@ mod tests {
 	use oxeylyzer::*;
 
     #[test]
-    fn load_test_corpus() {
-        use load_text::*;
+    fn load_test_json_from_file() {
+        
+
+        
+        
+    }
+
+	#[test]
+	fn load_language_data() {
+		use load_text::*;
         use language_data::*;
 
-        load_default("test");
-        let data = LanguageData::new("test").unwrap();
-        let total_c = 1.0/data.characters.iter().map(|&(_, f)| f).reduce(f64::min).unwrap();
+		load_default("test");
+
+		let data = LanguageData::from_file("test")
+			.expect("'test.json' in static/language_data/ was not created");
+		
+		assert!(data.language == "test");
+
+		let total_c = 1.0/data.characters.iter().map(|&(_, f)| f).reduce(f64::min).unwrap();
         
         assert_eq!(data.characters.get(&'e'), Some(&(2.0/total_c)));
         assert_eq!(data.characters.get(&'\''), Some(&(1.0/total_c)));
@@ -26,7 +39,7 @@ mod tests {
 		assert_eq!(data.skipgrams.get(&['\'', 't']), None);
 
         let total_t = 1.0/data.trigrams.iter().map(|(_, f)| *f).reduce(f64::min).unwrap();
-    }
+	}
 
 	#[test]
 	fn get_analysis() {
