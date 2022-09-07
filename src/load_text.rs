@@ -24,8 +24,8 @@ pub fn load_raw(language: &str) {
 
 pub fn load_default(language: &str) {
     let translator = Translator::language_or_raw(language);
-	if let Err(e) = load_data(language, translator) {
-        println!("{} failed to update: '{}'", language, e);
+	if let Err(error) = load_data(language, translator) {
+        println!("{language} failed to update: '{error}'");
     }
 }
 
@@ -95,7 +95,7 @@ impl From<&str> for TextNgrams<5> {
     fn from(s: &str) -> Self {
         let mut ngrams: HashMap<[char; 5], usize> = HashMap::new();
 
-        let mut chars = "    ".chars().chain(s.chars().chain("    ".chars()))
+        let mut chars = s.chars().chain("    ".chars())
             .tuple_windows::<(_, _, _, _, _)>();
 
         while let Some((c1, c2, c3, c4, c5)) = chars.next() {
