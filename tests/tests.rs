@@ -1,3 +1,4 @@
+#[cfg(test)]
 mod tests {
 	use oxeylyzer::*;
 
@@ -49,7 +50,7 @@ mod tests {
 		assert!(a.is_ok());
 	}
 
-    #[test]
+    // #[test]
 	fn caching() {
 		let g_opt = generate::LayoutGeneration::new(
 			"tr", 1000, None
