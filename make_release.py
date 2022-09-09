@@ -1,3 +1,4 @@
+from itertools import permutations
 from os import path
 import json
 from glob import glob
@@ -27,6 +28,30 @@ def check_doubles(path: str):
     print(f"{l:-<16}: {doubles_for_lang(l)}%")
 
 
+def filterPossibilities(p: str):
+    c1, c2 = p[0], p[1]
+    if c1 == "a":
+        return c2 == "e"
+    elif c1 == "e":
+        return c2 == "a" or c2 == "i"
+    elif c1 == "i":
+        return c2 != "i"
+    elif c1 == "o":
+        return c2 == "i" or c2 == "u"
+    else:
+        return c2 == "a"
+
+
+class Solution:
+    def countVowelPermutation(self, n: int) -> int:
+        pos = "aeiou"
+        perms = (p for p in permutations(pos, n) if filterPossibilities(p))
+        length = 0
+        for _ in perms:
+            length += 1
+        return length % (10**9 + 7)
+
+
 def main():
     print("doubles for each lanugage is:")
     # for p in glob("static/language_data/*.json"):
@@ -38,4 +63,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    s = Solution()
+    s.countVowelPermutation(3)
