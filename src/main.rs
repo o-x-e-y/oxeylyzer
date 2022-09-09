@@ -1,11 +1,14 @@
+#![feature(fs_try_exists)]
 #![feature(exclusive_range_pattern)]
+#![feature(let_chains)]
 
 mod repl;
-use oxeylyzer::load_text;
 
 fn main() -> Result<(), String> {
 	repl::Repl::run()
 }
+
+// use oxeylyzer::load_text;
 
 // fn pause() -> Result<(), std::io::Error> {
 //     println!("\nPress any key to continue...");
@@ -15,8 +18,7 @@ fn main() -> Result<(), String> {
 // }
 
 // fn main() -> Result<(), std::io::Error> {
-// 	load_text::load_default("toki_pona");
-// 	// load_text::load_all_default().expect("sussy impostor lol impostor");
+// 	load_text::load_all_default().expect("sussy impostor lol sus");
 
 // 	pause()
 // }
