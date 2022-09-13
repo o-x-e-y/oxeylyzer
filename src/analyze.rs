@@ -401,8 +401,8 @@ impl LayoutAnalysis {
 			concat!(
 			"Sfb:              {: <10} Sfb:              {:.3}%\n",
 			"Dsfb:             {: <10} Dsfb:             {:.3}%\n",
-			"Scissors          {: <10} Scissors:         {:.3}%\n",
-			"Finger Speed:     {: <10} Finger Speed:     {:.3}\n\n",
+			"Finger Speed:     {: <10} Finger Speed:     {:.3}\n",
+			"Scissors          {: <10} Scissors:         {:.3}%\n\n",
 			"Inrolls:          {: <10} Inrolls:          {:.2}%\n",
 			"Outrolls:         {: <10} Outrolls:         {:.2}%\n",
 			"Total Rolls:      {: <10} Total Rolls:      {:.2}%\n",
