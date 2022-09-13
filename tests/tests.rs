@@ -2,14 +2,6 @@
 mod tests {
 	use oxeylyzer::*;
 
-    #[test]
-    fn load_test_json_from_file() {
-        
-
-        
-        
-    }
-
 	#[test]
 	fn load_language_data() {
 		use load_text::*;
