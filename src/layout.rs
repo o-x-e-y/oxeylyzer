@@ -219,7 +219,9 @@ mod tests {
 
 	#[test]
 	fn layout_str() {
-		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
+		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./")
+			.expect("couldn't create qwerty");
+		
 		assert_eq!(
 			qwerty.matrix,
 			[
