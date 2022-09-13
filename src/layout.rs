@@ -307,78 +307,57 @@ mod tests {
 	}
 
 	#[test]
-	fn get_trigram_pattern() {
-		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		assert_eq!(TrigramPattern::Alternate, qwerty.get_trigram_pattern(&['r', 'o', 'd']));
-		assert_eq!(TrigramPattern::AlternateSfs, qwerty.get_trigram_pattern(&['j', 'a', 'y']));
-
-		assert_eq!(TrigramPattern::Inroll, qwerty.get_trigram_pattern(&['w', 'o', 'u']));
-		assert_eq!(TrigramPattern::Outroll, qwerty.get_trigram_pattern(&['m', 'o', 't']));
-		assert_eq!(TrigramPattern::Onehand, qwerty.get_trigram_pattern(&['s', 'e', 'r']));
-
-		assert_eq!(TrigramPattern::Redirect, qwerty.get_trigram_pattern(&['y', 'o', 'u']));
-		assert_eq!(TrigramPattern::BadRedirect, qwerty.get_trigram_pattern(&['s', 'a', 'd']));
-
-		assert_eq!(TrigramPattern::Other, qwerty.get_trigram_pattern(&['s', 's', 'h']));
-		assert_eq!(TrigramPattern::Other, qwerty.get_trigram_pattern(&['s', 's', 's']));
-
-		assert_eq!(TrigramPattern::Invalid, qwerty.get_trigram_pattern(&['d', '\'', 'n']));
-		assert_eq!(TrigramPattern::Invalid, qwerty.get_trigram_pattern(&['\'', 'l', 'l']));
-		assert_eq!(TrigramPattern::Invalid, qwerty.get_trigram_pattern(&['l', 'l', ']']));
-	}
-
-	#[test]
 	fn thing() {
 		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		assert_eq!(qwerty.score, 0.0);
 	}
 
-	#[test]
-	fn random_layouts() {
-		use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-		use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
-		use std::io::Write;
-		use crate::analyze::LayoutAnalysis;
+	// #[test]
+	// fn random_layouts() {
+	// 	use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+	// 	use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+	// 	use std::io::Write;
+	// 	use crate::analyze::LayoutAnalysis;
 
-		let anal = LayoutAnalysis::new("english", None).unwrap();
-		let available_chars = available_chars("english");
+	// 	let anal = LayoutAnalysis::new("english", None).unwrap();
+	// 	let available_chars = available_chars("english");
 
-		let pb = ProgressBar::new(10_000_000);
-		pb.set_style(ProgressStyle::default_bar()
-			.template("[{elapsed_precise}] [{bar:40.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
-			.progress_chars("=>-"));
+	// 	let pb = ProgressBar::new(10_000_000);
+	// 	pb.set_style(ProgressStyle::default_bar()
+	// 		.template("[{elapsed_precise}] [{bar:40.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
+	// 		.progress_chars("=>-"));
 		
-		let mut res = Vec::with_capacity(10_000_000);
+	// 	let mut res = Vec::with_capacity(10_000_000);
 
-		let start = std::time::Instant::now();
+	// 	let start = std::time::Instant::now();
 
-		(0..10_000_000)
-			.into_par_iter()
-			.progress_with(pb)
-			.map(|_| -> f32 {
-				let r = FastLayout::random(available_chars);
-				anal.score(&r, 5_000) as f32
-			})
-			.collect_into_vec(&mut res);
+	// 	(0..10_000_000)
+	// 		.into_par_iter()
+	// 		.progress_with(pb)
+	// 		.map(|_| -> f32 {
+	// 			let r = FastLayout::random(available_chars);
+	// 			anal.score(&r, 5_000) as f32
+	// 		})
+	// 		.collect_into_vec(&mut res);
 		
-		let end = std::time::Instant::now();
-		res.sort_unstable_by(|a, b| b.partial_cmp(a).unwrap());
-		println!("that took {}s.", (end - start).as_secs_f64());
+	// 	let end = std::time::Instant::now();
+	// 	res.sort_unstable_by(|a, b| b.partial_cmp(a).unwrap());
+	// 	println!("that took {}s.", (end - start).as_secs_f64());
 		
-		let mut f = std::fs::OpenOptions::new()
-			.write(true)
-			.create(true)
-			.truncate(true)
-			.open("10mil_scores")
-			.unwrap();
+	// 	let mut f = std::fs::OpenOptions::new()
+	// 		.write(true)
+	// 		.create(true)
+	// 		.truncate(true)
+	// 		.open("10mil_scores")
+	// 		.unwrap();
 		
-		let mut to_save_vec = Vec::new();
-		res
-			.into_par_iter()
-			.map(|v| v.to_string())
-			.collect_into_vec(&mut to_save_vec);
-		let to_save = to_save_vec.join("\n");
+	// 	let mut to_save_vec = Vec::new();
+	// 	res
+	// 		.into_par_iter()
+	// 		.map(|v| v.to_string())
+	// 		.collect_into_vec(&mut to_save_vec);
+	// 	let to_save = to_save_vec.join("\n");
 
-		f.write(to_save.as_bytes()).unwrap();
-	}
+	// 	f.write(to_save.as_bytes()).unwrap();
+	// }
 }
