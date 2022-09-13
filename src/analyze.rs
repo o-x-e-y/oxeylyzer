@@ -53,8 +53,8 @@ Sft: {:.3}%",
 			self.redirects*100.0,
 			self.bad_redirects*100.0,
 			(self.redirects + self.bad_redirects)*100.0,
-			self.bad_sfbs,
-			self.sfts
+			self.bad_sfbs*100.0,
+			self.sfts*100.0
 		)
 	}
 }
@@ -87,8 +87,8 @@ impl std::fmt::Debug for TrigramStats {
 			self.redirects*100.0,
 			self.bad_redirects*100.0,
 			(self.redirects + self.bad_redirects)*100.0,
-			self.bad_sfbs,
-			self.sfts,
+			self.bad_sfbs*100.0,
+			self.sfts*100.0,
 			self.other*100.0,
 			self.invalid*100.0
 		)
