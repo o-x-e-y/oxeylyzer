@@ -14,98 +14,121 @@ pub enum TrigramPattern {
 	Invalid
 }
 
-const fn lh(num: usize) -> bool {
-	num < 4
+#[derive(Debug)]
+struct Trigram {
+	c1: usize, c2: usize, c3: usize,
+	lh1: bool, lh2: bool, lh3: bool
 }
 
-const fn is_alt(lh1: bool, lh2: bool, lh3: bool) -> bool {
-	lh1 != lh2 && lh2 != lh3
+impl std::fmt::Display for Trigram {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {}, {})", self.c1, self.c2, self.c3)
+    }
 }
 
-const fn is_roll(lh1: bool, lh2: bool, lh3: bool, c1: usize, c2: usize, c3: usize) -> bool {
-	let r = lh1 as usize + lh2 as usize + lh3 as usize;
-	!is_alt(lh1, lh2, lh3) && (r == 1 || r == 2) && c1 != c2 && c2 != c3
-}
-
-const fn get_roll(lh1: bool, lh2: bool, lh3: bool, c1: usize, c2: usize, c3: usize) -> TrigramPattern {
-	if lh1 && lh2 && !lh3 {
-		particular_roll(c2, c1)
-	} else if !lh1 && lh2 && lh3 {
-		particular_roll(c3, c2)
-	} else if !lh1 && !lh2 && lh3 {
-		particular_roll(c1, c2)
-	} else if lh1 && !lh2 && !lh3 {
-		particular_roll(c2, c3)
-	} else {
-		TrigramPattern::Other
+impl Trigram {
+	const fn lh(col: usize) -> bool {
+		col < 4
 	}
-}
 
-const fn particular_roll(f1: usize, f2: usize) -> TrigramPattern {
-	if f1 > f2 {
-		return TrigramPattern::Outroll
-	}
-	TrigramPattern::Inroll
-}
-
-const fn on_one_hand(lh1: bool, lh2: bool, lh3: bool) -> bool {
-	lh1 == lh2 && lh2 == lh3
-}
-
-const fn is_bad_redir(c1: usize, c2: usize, c3: usize) -> bool {
-	!(c1 == 3 || c2 == 3 || c3 == 3 || c1 == 4 || c2 == 4 || c3 == 4)
-}
-
-const fn get_one_hand(c1: usize, c2: usize, c3: usize) -> TrigramPattern {
-	if (c1 < c2 && c2 > c3) || (c1 > c2 && c2 < c3) {
-		if is_bad_redir(c1, c2, c3) {
-			return TrigramPattern::BadRedirect
+	const fn new(c1: usize, c2: usize, c3: usize) -> Self {
+		Trigram {
+			c1, c2, c3, lh1: Self::lh(c1), lh2: Self::lh(c2), lh3: Self::lh(c3)
 		}
-		return TrigramPattern::Redirect
 	}
-	if (c1 > c2 && c2 > c3) || (c1 < c2 && c2 < c3) {
-		return TrigramPattern::Onehand
+
+	const fn is_alt(&self) -> bool {
+		self.lh1 != self.lh2 && self.lh2 != self.lh3
 	}
-	TrigramPattern::Other
-}
 
-const fn has_sfb(c1: usize, c2: usize, c3: usize) -> bool {
-	c1 == c2 || c1 == c3 || c2 == c3
-}
-
-const fn is_sft(c1: usize, c2: usize, c3: usize) -> bool {
-	c1 == c2 && c2 == c3
-}
-
-const fn on_same_hand(lh1: bool, lh2: bool, lh3: bool) -> bool {
-	lh1 == lh2 && lh2 == lh3
-}
-
-const fn get_trigram_pattern(c1: usize, c2: usize, c3: usize) -> TrigramPattern {
-	let lh1 = lh(c1);
-	let lh2 = lh(c2);
-	let lh3 = lh(c3);
-
-	if is_alt(lh1, lh2, lh3) {
-		if c1 == c3 {
+	const fn get_alternate(&self) -> TrigramPattern {
+		if self.c1 == self.c3 {
 			TrigramPattern::AlternateSfs
 		} else {
 			TrigramPattern::Alternate
 		}
-	} else if on_one_hand(lh1, lh2, lh3) {
-		get_one_hand(c1, c2, c3)
-	} else if is_roll(lh1, lh2, lh3, c1, c2, c3) {
-		get_roll(lh1, lh2, lh3, c1, c2, c3)
-	} else if has_sfb(c1, c2, c3) {
-		if is_sft(c1, c2, c3) {
-			TrigramPattern::Sft
-		} else if on_same_hand(lh1, lh2, lh3) {
-			TrigramPattern::BadSfb
+	}
+
+	const fn is_roll(&self) -> bool {
+		let r = self.lh1 as usize + self.lh2 as usize + self.lh3 as usize;
+		!self.is_alt() &&
+		(r == 1 || r == 2) &&
+		self.c1 != self.c2 &&
+		self.c2 != self.c3
+	}
+
+	const fn get_roll(&self) -> TrigramPattern {
+		if self.lh1 && self.lh2 && !self.lh3 {
+			Self::particular_roll(self.c2, self.c1)
+		} else if !self.lh1 && self.lh2 && self.lh3 {
+			Self::particular_roll(self.c3, self.c2)
+		} else if !self.lh1 && !self.lh2 && self.lh3 {
+			Self::particular_roll(self.c1, self.c2)
+		} else if self.lh1 && !self.lh2 && !self.lh3 {
+			Self::particular_roll(self.c2, self.c3)
 		} else {
-			TrigramPattern::Sfb
+			TrigramPattern::Other
 		}
-	} else {
-		TrigramPattern::Other
+	}
+
+	const fn particular_roll(f1: usize, f2: usize) -> TrigramPattern {
+		if f1 > f2 {
+			return TrigramPattern::Outroll
+		}
+		TrigramPattern::Inroll
+	}
+
+	const fn on_one_hand(&self) -> bool {
+		self.lh1 == self.lh2 && self.lh2 == self.lh3
+	}
+
+	const fn is_redir(&self) -> bool {
+		(self.c1 < self.c2 && self.c2 > self.c3) || (self.c1 > self.c2 && self.c2 < self.c3)
+	}
+
+	const fn is_bad_redir(&self) -> bool {
+		!(self.c1 == 3 || self.c2 == 3 || self.c3 == 3 || self.c1 == 4 || self.c2 == 4 || self.c3 == 4)
+	}
+
+	const fn has_sfb(&self) -> bool {
+		self.c1 == self.c2 || self.c2 == self.c3
+	}
+
+	const fn is_sft(&self) -> bool {
+		self.c1 == self.c2 && self.c2 == self.c3
+	}
+
+	const fn get_one_hand(&self) -> TrigramPattern {
+		if self.is_sft() {
+			TrigramPattern::Sft
+		} else if self.has_sfb() {
+			TrigramPattern::BadSfb
+		}
+		else if self.is_redir() {
+			if self.is_bad_redir() {
+				TrigramPattern::BadRedirect
+			} else {
+				TrigramPattern::Redirect
+			}
+		} else if (self.c1 > self.c2 && self.c2 > self.c3) || (self.c1 < self.c2 && self.c2 < self.c3) {
+			TrigramPattern::Onehand
+		} else {
+			TrigramPattern::Other
+		}
+	}
+
+	const fn get_trigram_pattern(&self) -> TrigramPattern {
+		if self.is_alt() {
+			self.get_alternate()
+		} else if self.on_one_hand() {
+			self.get_one_hand()
+		} else if self.has_sfb() {
+			TrigramPattern::Sfb
+		} else if self.is_roll() {
+			self.get_roll()
+		} else {
+			TrigramPattern::Other
+		}
 	}
 }
 
@@ -119,7 +142,8 @@ const fn get_trigram_combinations() -> [TrigramPattern; 512] {
 			let mut c1 = 0;
 			while c1 < 8 {
 				let index = c3*64 + c2*8 + c1;
-				combinations[index] = get_trigram_pattern(c1, c2, c3);
+				let trigram = Trigram::new(c1, c2, c3);
+				combinations[index] = trigram.get_trigram_pattern();
 				c1 += 1;
 			}
 			c2 += 1;
@@ -130,3 +154,32 @@ const fn get_trigram_combinations() -> [TrigramPattern; 512] {
 }
 
 pub static TRIGRAM_COMBINATIONS: [TrigramPattern; 512] = get_trigram_combinations();
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::*;
+
+	#[test]
+	fn trigram_combinations() {
+		use layout::{FastLayout, Layout};
+		use trigram_patterns::TrigramPattern::*;
+
+		let dvorak = FastLayout::try_from("',.pyfgcrlaoeuidhtns;qjkxbmwvz")
+			.expect("couldn't create dvorak");
+
+		assert_eq!(dvorak.get_trigram_pattern(&['h', 'o', 't']), Alternate);
+		assert_eq!(dvorak.get_trigram_pattern(&['l', 'a', 'z']), AlternateSfs);
+
+		assert_eq!(dvorak.get_trigram_pattern(&['a', 'b', 'c']), Outroll);
+		assert_eq!(dvorak.get_trigram_pattern(&['t', 'h', 'e']), Inroll);
+		assert_eq!(dvorak.get_trigram_pattern(&['r', 't', 'h']), Onehand);
+		assert_eq!(dvorak.get_trigram_pattern(&['h', 't', 'r']), Onehand);
+
+		assert_eq!(dvorak.get_trigram_pattern(&['c', 'b', 't']), Redirect);
+		assert_eq!(dvorak.get_trigram_pattern(&['r', 't', 's']), BadRedirect);
+
+		assert_eq!(dvorak.get_trigram_pattern(&['g', 'h', 't']), BadSfb);
+		assert_eq!(dvorak.get_trigram_pattern(&['p', 'u', 'k']), Sft);
+    }
+}
