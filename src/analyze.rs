@@ -40,7 +40,7 @@ Alternates (sfs): {:.3}%
 Total Alternates: {:.3}%\n
 Redirects: {:.3}%
 Bad Redirects: {:.3}%
-Total Redirects: {:.3}%\n,
+Total Redirects: {:.3}%\n
 Bad Sfbs: {:.3}%,
 Sft: {:.3}%",
 			self.inrolls*100.0,
