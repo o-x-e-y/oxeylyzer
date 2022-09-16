@@ -245,7 +245,7 @@ impl Repl {
             .subcommand(
                 command!("rank")
                     .alias("sort")
-                    .about("(sort) Rank all layouts in set language by score")
+                    .about("(sort) Rank all layouts in set language by score using values set from 'config.toml'")
                     .help_template(COMMAND_TEMPLATE),
             )
             .subcommand(
@@ -286,7 +286,7 @@ impl Repl {
             )
             .subcommand(
                 command!("ngram")
-                .alias("occ")
+                .aliases(&["n","occ"])
                 .help_template(COMMAND_TEMPLATE) 
                 .arg(
                         arg!(<NGRAM>)
@@ -306,7 +306,7 @@ impl Repl {
                         arg!(<COUNT>)
                     )
                     .help_template(COMMAND_TEMPLATE)
-                    .about("(g, gen) Generate a number of layouts and take the best 10")
+                    .about("(g, gen) Generate a number of layouts and shows the best 10, All layouts generated are accessible until reloading or quiting. ")
             )
             .subcommand(
                 command!("improve")
@@ -318,7 +318,7 @@ impl Repl {
                         arg!(<AMOUNT>)
                     )
                     .help_template(COMMAND_TEMPLATE)
-                    .about("(i, optimize) Save the top <NR> result that was generated. Starts from 1, takes negative values")
+                    .about("(i, optimize) Save the top <NR> result that was generated. Starts from 1, Takes negative values")
             )
             .subcommand(
                 command!("save")
@@ -330,7 +330,7 @@ impl Repl {
                     arg!([NAME])
                 )
                 .help_template(COMMAND_TEMPLATE)
-                .about("(s) Save the top <NR> result that was generated. Starts from 1, takes negative values")
+                .about("(s) Save the top <NR> result that was generated. Starts from 1 up to the number generated, Takes negative values")
             )
             .subcommand(
                 command!("load")
@@ -338,7 +338,7 @@ impl Repl {
                     arg!(<LANGUAGE>)
                 )
                 .help_template(COMMAND_TEMPLATE)
-                .about("generates corpus for <language>. Will be passthrough if the language isn't known")
+                .about("Generates corpus for <language>. Will be exclude spaces from source if the language isn't known")
             )
             // .subcommand(
             //     command!("passthrough")
@@ -351,8 +351,8 @@ impl Repl {
             // )
             .subcommand(
                 command!("quit")
-                    .alias("exit")
-                    .about("Quit the repl")
+                    .aliases(&["exit","q"])
+                    .about("(q) Quit the repl")
                     .help_template(COMMAND_TEMPLATE),
             )
     }
