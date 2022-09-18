@@ -169,7 +169,7 @@ impl TranslatorBuilder {
 
     pub fn raw(&mut self) -> &mut Self {
         let mut letters = String::new();
-        for i in 128u32..1250 {
+        for i in 128u32..66_666 {
             if let Some(c) = char::from_u32(i)
             && c.is_alphabetic() {
                 letters.push(c);
