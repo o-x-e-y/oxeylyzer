@@ -219,8 +219,7 @@ impl TranslatorBuilder {
 
     pub fn language(&mut self, language: &str) -> Result<&mut Self> {
         self.default_formatting();
-        let language = language.to_lowercase();
-        match language.as_str() {
+        match language.to_lowercase().as_str() {
             "akl" | "english" | "english2" | "toki_pona" | "indonesian" | "reddit" => Ok(self),
             "albanian" => Ok(self
                 .letters("çë")
