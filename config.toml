@@ -1,7 +1,7 @@
 pins = """
 ..... .....
-..... .xxx.
-..... x....
+..... .....
+..... .....
 """
 
 [defaults]
@@ -19,15 +19,15 @@ outrolls = 1.8
 onehands = 0.9
 alternates = 0.9
 alternates_sfs = 0.6
-redirects = 2.3
-bad_redirects = 6.5
+redirects = 1.5
+bad_redirects = 5.0
 
 [weights.max_finger_use]
 penalty = 2.5
 pinky = 9.0
 ring = 16.5
 middle = 20.0
-index = 26.0
+index = 19.0
 
 [weights.finger_speed]
 base = 1.0
