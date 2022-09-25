@@ -277,7 +277,7 @@ impl TranslatorBuilder {
             ),
             "korean" => Ok(self
                 .to_space("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-                .keep_same("ㅣㅡㅜㅏㅊㅈㅅㅂㅁㄹㄷㄴㅇㅋㅌㅍㅐㅑㅓㅕㅗㅎㅔㅛㅠ")
+                .keep_same("ㅣㅡㅜㅏㅊㅈㅅㅂㅁㄹㄷㄴㄱㅇㅋㅌㅍㅐㅑㅓㅕㅗㅎㅔㅛㅠ")
                 .to_another("ㄲㄸㅆㅃㅉㅒㅖ", "ㄱㄷㅅㅂㅈㅐㅔ")
                 .to_multiple(vec![
                     ('ㄳ', "ㄱㅅ"), ('ㅥ', "ㄴㄴ"), ('ㅦ', "ㄴㄷ"), ('ㅧ', "ㄴㅅ"), ('ㄵ', "ㄴㅈ"),
