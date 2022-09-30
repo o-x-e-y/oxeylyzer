@@ -64,10 +64,15 @@ impl LayoutGeneration {
 			language, Some(weights.clone())
 		) {
 			let available = available_chars(language);
+			let possible_chars = analyzer.language_data.characters.iter()
+				.map(|(c, _)| *c)
+				.collect::<Vec<_>>();
 			Ok(
 				Self {
 					per_char_trigrams: Self::per_char_trigrams(
-						&analyzer.language_data.trigrams, &available, trigram_precision
+						&analyzer.language_data.trigrams,
+						possible_chars.as_ref(),
+						trigram_precision
 					),
 					weights: weights,
 					available_chars: available,
@@ -88,14 +93,13 @@ impl LayoutGeneration {
 		let mut n_trigrams = trigrams.clone();
 		n_trigrams.truncate(trigram_precision);
 		
-		let thingy: Vec<(char, Vec<([char; 3], f64)>)> = available_chars
-			.iter()
+		let thingy: Vec<(char, Vec<([char; 3], f64)>)> = possible
+			.into_iter()
 			.map(|c| {
 				let per_char = n_trigrams
 					.iter()
-					// we divide by 3 because each trigram will occur 3 times, one for each letter in it
-					.map(|(t, f)| (t.clone(), f.clone()/3.0))
-					.filter(|(t, _)| t.contains(c))
+					.map(|(t, f)| (t.clone(), f.clone()))
+					.filter(|(t, _)| (*t).contains(c))
 					.collect::<Vec<([char; 3], f64)>>();
 				(*c, per_char)
 			})
