@@ -248,32 +248,27 @@ impl LayoutGeneration {
 		res
 	}
 
-	// #[inline]
-	// fn has_key_off_homerow(pair: &PosPair) -> bool {
-	// 	unsafe { *TF_TABLE.get_unchecked(pair.0) || *TF_TABLE.get_unchecked(pair.1) }
-	// }
+	fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
+		let mut res = LayoutCache::default();
 
-	// fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
-	// 	let mut res = LayoutCache::default();
+		for i in 0..layout.matrix.len() {
+			res.effort[i] = self.char_effort(layout, i);
+		}
+		res.effort_total = res.effort.iter().sum();
 
-	// 	res.scissors = self.analysis.scissor_percent(layout);
+		for col in 0..8 {
+			res.usage[col] = self.col_usage(layout, col);
+			res.fspeed[col] = self.col_fspeed(layout, col)
+		}
+		res.usage_total = res.usage.iter().sum();
+		res.fspeed_total = res.fspeed.iter().sum();
 
-	// 	for i in 0..30 {
-	// 		res.trigrams[i] = self.char_trigrams(layout, i);
-	// 		res.effort[i] = self.char_effort(layout, i);
-	// 	}
-	// 	res.trigrams_total = res.trigrams.iter().sum();
-	// 	res.effort_total = res.trigrams.iter().sum();
+		res.scissors = self.scissor_score(layout);
 
-	// 	for col in 0..8 {
-	// 		res.usage[col] = self.col_usage(layout, col);
-	// 		res.fspeed[col] = self.col_fspeed(layout, col)
-	// 	}
-	// 	res.usage_total = res.usage.iter().sum();
-	// 	res.fspeed_total = res.fspeed.iter().sum();
+		res.trigrams_total = self.analysis.trigram_score(layout, 1000);
 
-	// 	res
-	// }
+		res
+	}
 
 	// fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &LayoutCache) -> f64 {
 	// 	unsafe { layout.swap_pair_no_bounds(swap) };
