@@ -86,9 +86,7 @@ impl LayoutGeneration {
 		}
 	}
 
-	fn per_char_trigrams(
-		trigrams: &TrigramData, available_chars: &[char; 30], trigram_precision: usize
-	) -> PerCharTrigrams {
+	fn per_char_trigrams(trigrams: &TrigramData, possible: &[char], trigram_precision: usize) -> PerCharTrigrams {
 		let mut n_trigrams = trigrams.clone();
 		n_trigrams.truncate(trigram_precision);
 		
