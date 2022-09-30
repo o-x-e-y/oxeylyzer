@@ -401,15 +401,17 @@ impl LayoutGeneration {
 		(best_swap, best_score)
 	}
 
-	pub fn optimize_cached(&self, mut layout: FastLayout, cache: &mut LayoutCache, possible_swaps: &[PosPair]) -> FastLayout {
+	fn optimize_cached(
+		&self, layout: &mut FastLayout, cache: &mut LayoutCache, possible_swaps: &[PosPair]
+	) -> f64 {
 		let mut current_best_score = f64::MIN / 2.0;
 		
 		while let (Some(best_swap), new_score) =
-			self.best_swap_cached(&mut layout, &cache, Some(current_best_score), possible_swaps) {
+			self.best_swap_cached(layout, &cache, Some(current_best_score), possible_swaps) {
 			current_best_score = new_score;
-			self.accept_swap(&mut layout, &best_swap, cache);
+			self.accept_swap(layout, &best_swap, cache);
 		}
-		layout
+		current_best_score
 	}
 
 	pub fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> f64 {
