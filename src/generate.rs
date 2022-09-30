@@ -578,6 +578,7 @@ impl LayoutGeneration {
 		if amount == 0 {
 			return;
 		}
+
 		let possible_swaps = Self::pinned_swaps(pins);
 		let mut layouts: Vec<(FastLayout, f64)> = Vec::with_capacity(amount);
 		let start = std::time::Instant::now();
@@ -702,18 +703,21 @@ mod tests {
 		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 
 		let optimized_normal = 
-			GEN.optimize(qwerty.clone(), &POSSIBLE_SWAPS);
+			GEN.optimize_normal_no_cols(qwerty.clone(), &POSSIBLE_SWAPS);
+		let normal_score = GEN.analysis.score(&optimized_normal, 1000);
 
 		println!("optimized normally:\n{}", GEN.analysis.print_heatmap(&optimized_normal));
 
 		let mut cache = GEN.initialize_cache(&qwerty);
-		let optimized_cached =
-			GEN.optimize_cached(qwerty, &mut cache, &POSSIBLE_SWAPS);
+		let mut qwerty_for_cached = qwerty.clone();
+		let best_cached_score =
+			GEN.optimize_cached(&mut qwerty_for_cached, &mut cache, &POSSIBLE_SWAPS);
 
-		println!("optimized with cache:\n{}", GEN.analysis.print_heatmap(&optimized_cached));
-		
-		let final_score = GEN.analysis.score(&optimized_cached, 1000);
-		let final_score_cached = cache.total_score();
-		assert!(final_score.approx_equal_dbg(final_score_cached, 7));
+		println!("optimized with cache:\n{}", GEN.analysis.print_heatmap(&qwerty_for_cached));
+		assert!(normal_score.approx_equal_dbg(best_cached_score, 7));
+
+		let with_cols = GEN.optimize(qwerty.clone(), &POSSIBLE_SWAPS);
+
+		println!("optimized with cache and cols:\n{}", GEN.analysis.print_heatmap(&with_cols));
 	}
 }
