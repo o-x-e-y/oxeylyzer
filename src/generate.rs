@@ -559,13 +559,19 @@ impl LayoutGeneration {
 		res
 	}
 
-	pub fn generate_pinned(&self, based_on: &FastLayout, pins: &[usize], possible_swaps: Option<&[PosPair]>) -> FastLayout {
-		let layout = FastLayout::random_pins(based_on.matrix, pins);
+	pub fn generate_pinned(
+		&self, based_on: &FastLayout, pins: &[usize], possible_swaps: Option<&[PosPair]>
+	) -> FastLayout {
+		let mut layout = FastLayout::random_pins(based_on.matrix, pins);
+		let mut cache = self.initialize_cache(&layout);
+
 		if let Some(ps) = possible_swaps {
-			self.optimize(layout, ps)
+			self.optimize_cached(&mut layout, &mut cache, ps)
 		} else {
-			self.optimize(layout, &Self::pinned_swaps(pins))
-		}
+			self.optimize_cached(&mut layout, &mut cache, &Self::pinned_swaps(pins))
+		};
+
+		layout
 	}
 
 	pub fn generate_n_pins(&mut self, amount: usize, based_on: FastLayout, pins: &[usize]) {
