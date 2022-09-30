@@ -321,29 +321,85 @@ impl LayoutGeneration {
 
 	}
 
+	fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
+		let trigrams_start = self.trigram_char_score(layout, swap);
 
-	// 	let u1 = self.col_usage(layout, col1);
-	// 	let u2 = self.col_usage(layout, col2);
-	// 	cache.usage_total = cache.usage_total - cache.usage[col1] - cache.usage[col2] + u1 + u2;
-	// 	cache.usage[col1] = u1;
-	// 	cache.usage[col2] = u2;
+		unsafe { layout.swap_pair_no_bounds(swap) };
 
-	// 	let e1 = self.char_effort(layout, i1);
-	// 	let e2 = self.char_effort(layout, i2);
-	// 	cache.effort_total = cache.effort_total - cache.effort[i1] - cache.effort[i2] + e1 + e2;
-	// 	cache.effort[i1] = e1;
-	// 	cache.effort[i2] = e2;
+		let PosPair(i1, i2) = *swap;
 
-	// 	let t1 = self.char_trigrams(layout, i1);
-	// 	let t2 = self.char_trigrams(layout, i2);
-	// 	cache.trigrams_total = cache.trigrams_total - cache.trigrams[i1] - cache.trigrams[i2] + t1 + t2;
-	// 	cache.trigrams[i1] = t1;
-	// 	cache.trigrams[i2] = t2;
+		let col1 = self.analysis.i_to_col[i1];
+		let col2 = self.analysis.i_to_col[i2];
 
-	// 	if Self::has_key_off_homerow(swap) {
-	// 		cache.scissors = self.analysis.scissor_percent(layout) * self.weights.scissors;
-	// 	}
-	// }
+		cache.fspeed_total = if col1 == col2 {
+			let fspeed = self.col_fspeed(layout, col1);
+			let total = cache.fspeed_total - cache.fspeed[col1] + fspeed;
+
+			cache.fspeed[col1] = fspeed;
+
+			total
+		} else {
+			let fspeed1 = self.col_fspeed(layout, col1);
+			let fspeed2 = self.col_fspeed(layout, col2);
+			let total = cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2]
+				+ fspeed1 + fspeed2;
+
+			cache.fspeed[col1] = fspeed1;
+			cache.fspeed[col2] = fspeed2;
+
+			total
+		};
+
+		cache.usage_total = if col1 == col2 {
+			let usage = self.col_usage(layout, col1);
+			let total = cache.usage_total - cache.usage[col1] + usage;
+
+			cache.usage[col1] = usage;
+			
+			total
+		} else {
+			let usage1 = self.col_usage(layout, col1);
+			let usage2 = self.col_usage(layout, col2);
+			let total = cache.usage_total - cache.usage[col1] - cache.usage[col2] + usage1 + usage2;
+
+			cache.usage[col1] = usage1;
+			cache.usage[col2] = usage2;
+
+			total
+		};
+
+		let effort1 = self.char_effort(layout, i1);
+		let effort2 = self.char_effort(layout, i2);
+		cache.effort_total = cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
+		cache.effort[i1] = effort1;
+		cache.effort[i2] = effort2;
+
+		let trigrams_end = self.trigram_char_score(layout, &swap);
+		cache.trigrams_total = cache.trigrams_total - trigrams_start + trigrams_end;
+
+		if swap.affects_scissor() {
+			cache.scissors = self.scissor_score(layout);
+		}
+	}
+
+	pub fn best_swap_cached(
+		&self, layout: &mut FastLayout, cache: &LayoutCache, current_best_score: Option<f64>, possible_swaps: &[PosPair]
+	) -> (Option<PosPair>, f64) {
+		let mut best_score = current_best_score.unwrap_or_else(|| f64::MIN / 2.0);
+		let mut best_swap: Option<PosPair> = None;
+
+		for swap in possible_swaps {
+			let score = self.score_swap_cached(layout, swap, cache);
+			
+			if score > best_score {
+				best_score = score;
+				best_swap = Some(*swap);
+			}
+		}
+
+		(best_swap, best_score)
+	}
+
 
 	pub fn optimize_cols(&self, layout: &mut FastLayout, trigram_precision: usize, score: Option<f64>) -> f64 {
 		let mut best_score = score.unwrap_or(self.analysis.score(layout, trigram_precision));
