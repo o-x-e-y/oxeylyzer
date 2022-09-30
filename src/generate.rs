@@ -134,15 +134,9 @@ impl LayoutGeneration {
 		score
 	}
 
-	fn trigram_has_char((t, f): (&[char; 3], f64), c: char) {
-		t.contains(&c);
-	}
-
-	fn char_trigrams(&self, layout: &FastLayout, pos: [usize; 2]) -> f64 {
-		let mut freqs = TrigramStats::default();
-
-		let c1 = layout.c(pos[0]);
-		let c2 = layout.c(pos[1]);
+	fn trigram_char_score(&self, layout: &FastLayout, pos: &PosPair) -> f64 {
+		let c1 = layout.c(pos.0);
+		let c2 = layout.c(pos.1);
 
 		let v1 = self.per_char_trigrams.get(&c1);
 		let v2 = self.per_char_trigrams.get(&c2);
@@ -150,36 +144,16 @@ impl LayoutGeneration {
 		match (v1, v2) {
 			(None, None) => 0.0,
 			(Some(v), None) | (None, Some(v)) => {
-				self.trigram_score_vec(layout, v.into_iter())
+				self.trigram_score_iter(layout, v)
 			},
 			(Some(v1), Some(v2)) => {
 				let (big, small, c) =
-					if v1.len() >= v2.len() { (v1, v2, c1) } else { (v2, v1, c2) };
+					if v1.len() >= v2.len() { (v1, v2, &c1) } else { (v2, v1, &c2) };
 				
-				for (trigram, freq) in big.into_iter().chain(
-					small.into_iter().filter(|(t, _)| t.contains(&c))
-				) {
-					match layout.get_trigram_pattern(trigram) {
-						TrigramPattern::Alternate => freqs.alternates += freq,
-						TrigramPattern::AlternateSfs => freqs.alternates_sfs += freq,
-						TrigramPattern::Inroll => freqs.inrolls += freq,
-						TrigramPattern::Outroll => freqs.outrolls += freq,
-						TrigramPattern::Onehand => freqs.onehands += freq,
-						TrigramPattern::Redirect => freqs.redirects += freq,
-						TrigramPattern::BadRedirect => freqs.bad_redirects += freq,
-						_ => {}
-					}
-				}
-
-				let mut score = 0.0;
-				score += self.weights.inrolls * freqs.inrolls;
-				score += self.weights.outrolls * freqs.outrolls;
-				score += self.weights.onehands * freqs.onehands;
-				score += self.weights.alternates * freqs.alternates;
-				score += self.weights.alternates_sfs * freqs.alternates_sfs;
-				score -= self.weights.redirects * freqs.redirects;
-				score -= self.weights.bad_redirects * freqs.bad_redirects;
-				score
+				let iter = big.into_iter().chain(
+					small.into_iter().filter(|(t, _)| !t.contains(c))
+				);
+				self.trigram_score_iter(layout, iter)
 			}
 		}
 	}
