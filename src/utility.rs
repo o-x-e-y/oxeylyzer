@@ -159,3 +159,29 @@ pub fn available_chars(language: &str) -> [char; 30] {
 		default.chars().collect::<Vec<char>>().try_into().unwrap()
 	}
 }
+
+pub trait ApproxEq {
+	fn approx_equal(self, other: f64, dec: u8) -> bool;
+
+	fn approx_equal_dbg(self, other: f64, dec: u8) -> bool;
+}
+
+impl ApproxEq for f64 {
+	fn approx_equal(self, other: f64, dec: u8) -> bool {
+		let factor = 10.0f64.powi(dec as i32);
+		let a = (self * factor).trunc();
+		let b = (other * factor).trunc();
+		a == b
+	}
+
+	fn approx_equal_dbg(self, other: f64, dec: u8) -> bool {
+		let factor = 10.0f64.powi(dec as i32);
+		let a = (self * factor).trunc();
+		let b = (other * factor).trunc();
+
+		if a != b {
+			println!("approx not equal: {self} != {other}");
+		}
+		a == b
+	}
+}
