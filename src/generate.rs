@@ -158,7 +158,7 @@ impl LayoutGeneration {
 		}
 	}
 
-	fn data(&self) -> &crate::language_data::LanguageData {
+	const fn data(&self) -> &crate::language_data::LanguageData {
 		&self.analysis.language_data
 	}
 
