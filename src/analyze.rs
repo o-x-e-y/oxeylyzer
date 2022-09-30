@@ -125,14 +125,14 @@ impl std::fmt::Display for LayoutStats {
 }
 
 pub struct LayoutAnalysis {
-	language: String,
-	layouts: IndexMap<String, FastLayout>,
+	pub language: String,
+	pub layouts: IndexMap<String, FastLayout>,
 	pub language_data: LanguageData,
-	sfb_indices: [PosPair; 48],
-	scissor_indices: [PosPair; 15],
+	pub sfb_indices: [PosPair; 48],
+	pub scissor_indices: [PosPair; 15],
 	pub fspeed_vals: [(PosPair, f64); 48],
 	pub effort_map: [f64; 30],
-	weights: Weights,
+	pub weights: Weights,
 	pub i_to_col: [usize; 30],
 }
 
