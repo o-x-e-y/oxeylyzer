@@ -1,4 +1,5 @@
 use std::hint::unreachable_unchecked;
+use core::option::Option;
 
 use smallmap::Map;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
@@ -701,10 +702,14 @@ mod tests {
 
 		println!("optimized normally:\n{}", GEN.analysis.print_heatmap(&optimized_normal));
 
-		let cache = GEN.initialize_cache(&qwerty);
+		let mut cache = GEN.initialize_cache(&qwerty);
 		let optimized_cached =
-			GEN.optimize_cached(qwerty, cache, &POSSIBLE_SWAPS);
+			GEN.optimize_cached(qwerty, &mut cache, &POSSIBLE_SWAPS);
 
-		println!("optimized with cache:\n{}", GEN.analysis.print_heatmap(&optimized_normal));
+		println!("optimized with cache:\n{}", GEN.analysis.print_heatmap(&optimized_cached));
+		
+		let final_score = GEN.analysis.score(&optimized_cached, 1000);
+		let final_score_cached = cache.total_score();
+		assert!(final_score.approx_equal_dbg(final_score_cached, 7));
 	}
 }
