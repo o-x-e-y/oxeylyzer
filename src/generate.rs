@@ -105,8 +105,11 @@ impl LayoutGeneration {
 		PerCharTrigrams::from_iter(thingy)
 	}
 
-	fn trigram_score_vec(&self, layout: &FastLayout, trigrams: std::slice::Iter<'_, ([char; 3], f64)>) -> f64 {
+	#[inline]
+	fn trigram_score_iter<'a, T>(&self, layout: &FastLayout, trigrams: T) -> f64
+	where T: IntoIterator<Item=&'a ([char; 3], f64)> {
 		let mut freqs = TrigramStats::default();
+
 		for (trigram, freq) in trigrams {
 			match layout.get_trigram_pattern(trigram) {
 				TrigramPattern::Alternate => freqs.alternates += freq,
