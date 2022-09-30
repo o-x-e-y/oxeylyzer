@@ -418,6 +418,24 @@ impl LayoutGeneration {
 		score
 	}
 
+	pub fn best_swap(
+		&self, layout: &mut FastLayout, current_best_score: Option<f64>, possible_swaps: &[PosPair]
+	) -> (Option<PosPair>, f64) {
+		let mut best_score = current_best_score.unwrap_or_else(|| f64::MIN / 2.0);
+		let mut best_swap = None;
+
+		for swap in possible_swaps.iter() {
+			let current = self.score_swap(layout, swap);
+
+			if current > best_score {
+				best_score = current;
+				best_swap = Some(*swap);
+			}
+		}
+
+		(best_swap, best_score)
+	}
+
 	pub fn optimize_cols(&self, layout: &mut FastLayout, trigram_precision: usize, score: Option<f64>) -> f64 {
 		let mut best_score = score.unwrap_or(self.analysis.score(layout, trigram_precision));
 
