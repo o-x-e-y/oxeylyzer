@@ -482,7 +482,7 @@ impl LayoutGeneration {
 		self.optimize(layout, &POSSIBLE_SWAPS)
 	}
 
-	pub fn optimize(&self, mut layout: FastLayout, possible_swaps: &[PosPair]) -> FastLayout {
+	fn optimize_normal_no_cols(&self, mut layout: FastLayout, possible_swaps: &[PosPair]) -> FastLayout {
 		let mut current_best_score = f64::MIN / 2.0;
 
 		while let (Some(best_swap), new_score) =
