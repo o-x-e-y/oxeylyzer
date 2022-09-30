@@ -162,6 +162,10 @@ impl LayoutGeneration {
 		&self.analysis.language_data
 	}
 
+	fn scissor_score(&self, layout: &FastLayout) -> f64 {
+		self.analysis.scissor_percent(layout) * self.weights.scissors
+	}
+
 	fn col_usage(&self, layout: &FastLayout, col: usize) -> f64 {
 		let mut res = 0.0;
 		match col {
