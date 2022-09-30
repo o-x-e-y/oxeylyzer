@@ -411,6 +411,12 @@ impl LayoutGeneration {
 		layout
 	}
 
+	pub fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> f64 {
+		unsafe { layout.swap_pair_no_bounds(swap) };
+		let score = self.analysis.score(&layout, 1000);
+		unsafe { layout.swap_pair_no_bounds(swap) };
+		score
+	}
 
 	pub fn optimize_cols(&self, layout: &mut FastLayout, trigram_precision: usize, score: Option<f64>) -> f64 {
 		let mut best_score = score.unwrap_or(self.analysis.score(layout, trigram_precision));
