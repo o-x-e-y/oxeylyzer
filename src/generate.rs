@@ -199,13 +199,15 @@ impl LayoutGeneration {
 		}
 	}
 
-	fn col_fspeed(&self, layout: &FastLayout, col: usize) -> f64 {
-		let (start, len) = match col {
+	pub(self) fn col_to_start_len(col: usize) -> (usize, usize) {
+		match col {
 			0 | 1 | 2 => (col * 3, 3),
 			3 | 4 => (18 + ((col - 3) * 15), 15),
 			5 | 6 | 7 => ((col - 2) * 3, 3),
 			_ => unsafe { unreachable_unchecked() }
-		};
+		}
+	}
+
 
 		let mut res = 0.0;
 		let dsfb_ratio = self.weights.dsfb_ratio;
