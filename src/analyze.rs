@@ -603,16 +603,10 @@ impl LayoutAnalysis {
 		freqs
 	}
 
-	pub fn score(&self, layout: &FastLayout, trigram_precision: usize) -> f64 {
-		let mut score: f64 = 0.0;
-		
-		let fspeed = self.fspeed(layout);
-		let scissors = self.scissor_percent(layout);
+	pub fn trigram_score(&self, layout: &FastLayout, trigram_precision: usize) -> f64 {
+		let mut score = 0.0;
 		let trigram_data = self.trigram_stats(layout, trigram_precision);
 
-		score -= self.effort(layout);
-		score -= self.weights.fspeed * fspeed;
-		score -= self.weights.scissors * scissors;
 		score += self.weights.inrolls * trigram_data.inrolls;
 		score += self.weights.outrolls * trigram_data.outrolls;
 		score += self.weights.onehands * trigram_data.onehands;
@@ -620,6 +614,21 @@ impl LayoutAnalysis {
 		score += self.weights.alternates_sfs * trigram_data.alternates_sfs;
 		score -= self.weights.redirects * trigram_data.redirects;
 		score -= self.weights.bad_redirects * trigram_data.bad_redirects;
+
+		score
+	}
+
+	pub fn score(&self, layout: &FastLayout, trigram_precision: usize) -> f64 {
+		let mut score: f64 = 0.0;
+		
+		let fspeed = self.fspeed(layout);
+		let scissors = self.scissor_percent(layout);
+		let trigram_score = self.trigram_score(layout, trigram_precision);
+
+		score -= self.effort(layout);
+		score -= self.weights.fspeed * fspeed;
+		score -= self.weights.scissors * scissors;
+		score += trigram_score;
 
 		score
 	}
