@@ -3,8 +3,14 @@ use crate::languages_cfg::read_cfg;
 
 pub static COL_TO_FINGER: [usize; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PosPair(pub usize, pub usize);
+
+const AFFECTS_SCISSOR: [bool; 30] = [
+	true, true, true, true, true, true, true, true, true, true,
+	false, true, false, false, false, false, false, false, true, false,
+	true, true, true, false, true, false, false, true, true, true
+];
 
 impl PosPair {
 	pub const fn default() -> Self {
@@ -13,6 +19,13 @@ impl PosPair {
 
 	pub const fn new(x1: usize, x2: usize) -> Self {
 		Self(x1, x2)
+	}
+
+	#[inline]
+	pub fn affects_scissor(&self) -> bool {
+		unsafe {
+			*AFFECTS_SCISSOR.get_unchecked(self.0) || *AFFECTS_SCISSOR.get_unchecked(self.1)
+		}
 	}
 }
 
