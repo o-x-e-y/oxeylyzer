@@ -563,9 +563,9 @@ impl LayoutGeneration {
 	pub fn generate_pinned(&self, based_on: &FastLayout, pins: &[usize], possible_swaps: Option<&[PosPair]>) -> FastLayout {
 		let layout = FastLayout::random_pins(based_on.matrix, pins);
 		if let Some(ps) = possible_swaps {
-			self.optimize(layout, 1000, ps)
+			self.optimize(layout, ps)
 		} else {
-			self.optimize(layout, 1000, &Self::pinned_swaps(pins))
+			self.optimize(layout, &Self::pinned_swaps(pins))
 		}
 	}
 
