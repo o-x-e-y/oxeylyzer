@@ -164,7 +164,15 @@ impl LayoutGeneration {
 	}
 
 	fn scissor_score(&self, layout: &FastLayout) -> f64 {
-		self.analysis.scissor_percent(layout) * self.weights.scissors
+		let mut res = 0.0;
+		for PosPair(i1, i2) in self.analysis.scissor_indices {
+			let c1 = layout.matrix[i1];
+			let c2 = layout.matrix[i2];
+			res += self.data().bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0);
+			res += self.data().bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0);
+		}
+		
+		res * self.weights.scissors
 	}
 
 	fn col_usage(&self, layout: &FastLayout, col: usize) -> f64 {
