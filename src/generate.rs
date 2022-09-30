@@ -270,52 +270,57 @@ impl LayoutGeneration {
 		res
 	}
 
-	// fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &LayoutCache) -> f64 {
-	// 	unsafe { layout.swap_pair_no_bounds(swap) };
-	// 	let PosPair(i1, i2) = *swap;
+	fn score_swap_cached(&self, layout: &mut FastLayout, swap: &PosPair, cache: &LayoutCache) -> f64 {
+		let trigrams_start = self.trigram_char_score(layout, swap);
 
-	// 	let col1 = self.analysis.i_to_col[i1];
-	// 	let col2 = self.analysis.i_to_col[i2];
+		unsafe { layout.swap_pair_no_bounds(swap) };
 
-	// 	let f1 = self.col_fspeed(layout, col1);
-	// 	let f2 = self.col_fspeed(layout, col2);
-	// 	let new_fspeed = cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + f1 + f2;
-	// 	let fspeed_score = new_fspeed * self.weights.fspeed;
+		let PosPair(i1, i2) = *swap;
 
-	// 	let u1 = self.col_usage(layout, col1);
-	// 	let u2 = self.col_usage(layout, col2);
-	// 	let new_usage = cache.usage_total - cache.usage[col1] - cache.usage[col2] + u1 + u2;
-	// 	let usage_score = new_usage * self.weights.max_finger_use.penalty;
+		let col1 = self.analysis.i_to_col[i1];
+		let col2 = self.analysis.i_to_col[i2];
 
-	// 	let e_new = self.char_effort(layout, &[i1, i2]);
-	// 	let effort_score = cache.effort_total - cache.effort[i1] - cache.effort[i2] + e1 + e2;
+		let fspeed_score = if col1 == col2 {
+			let fspeed = self.col_fspeed(layout, col1);
+			let new = cache.fspeed_total - cache.fspeed[col1] + fspeed;
 
-	// 	let t1 = self.char_trigrams(layout, i1, false);
-	// 	let t2 = self.char_trigrams(layout, i2, );
-	// 	let trigrams_score = cache.trigrams_total - cache.trigrams[i1] - cache.trigrams[i2] + t1 + t2;
+			new
+		} else {
+			let fspeed1 = self.col_fspeed(layout, col1);
+			let fspeed2 = self.col_fspeed(layout, col2);
+			let new = cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + fspeed1 + fspeed2;
+			
+			new
+		};
 
-	// 	let scissors_score = if Self::has_key_off_homerow(swap) {
-	// 		self.analysis.scissor_percent(layout) * self.weights.scissors
-	// 	} else {
-	// 		cache.scissors
-	// 	};
+		let usage_score = if col1 == col2 {
+			let usage = self.col_usage(layout, col1);
+			cache.usage_total - cache.usage[col1] + usage
+		} else {
+			let usage1 = self.col_usage(layout, col1);
+			let usage2 = self.col_usage(layout, col2);
+			cache.usage_total - cache.usage[col1] - cache.usage[col2] + usage1 + usage2
+		};
 
-	// 	unsafe { layout.swap_pair_no_bounds(swap) };
-	// 	fspeed_score + usage_score + effort_score + trigrams_score + scissors_score
-	// }
+		let effort1 = self.char_effort(layout, i1);
+		let effort2 = self.char_effort(layout, i2);
+		let effort_score = cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
 
-	// fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
-	// 	unsafe { layout.swap_pair_no_bounds(swap) };
-	// 	let PosPair(i1, i2) = *swap;
+		let trigrams_end = self.trigram_char_score(layout, &swap);
+		let trigrams_score = cache.trigrams_total - trigrams_start + trigrams_end;
 
-	// 	let col1 = self.analysis.i_to_col[i1];
-	// 	let col2 = self.analysis.i_to_col[i2];
+		let scissors_score = if swap.affects_scissor() {
+			self.scissor_score(layout)
+		} else {
+			cache.scissors
+		};
 
-	// 	let f1 = self.col_fspeed(layout, col1);
-	// 	let f2 = self.col_fspeed(layout, col2);
-	// 	cache.fspeed_total = cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + f1 + f2;
-	// 	cache.fspeed[col1] = f1;
-	// 	cache.fspeed[col2] = f2;
+		unsafe { layout.swap_pair_no_bounds(swap) };
+
+		trigrams_score - scissors_score - effort_score - usage_score - fspeed_score
+
+	}
+
 
 	// 	let u1 = self.col_usage(layout, col1);
 	// 	let u2 = self.col_usage(layout, col2);
