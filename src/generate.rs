@@ -488,9 +488,6 @@ impl LayoutGeneration {
 		let mut best_score = f64::MIN / 2.0;
 		let mut score = f64::MIN;
 		let mut best_swap = &PosPair::default();
-		// let mut sfb_best = 0.0;
-		// let mut dsfb_best = 0.0;
-		// let mut matrix_scores = self.score_whole_matrix(&layout);
 
 		while best_score != score {
 			while best_score != score {
