@@ -15,14 +15,8 @@ use crate::weights::{Weights, Config};
 pub type CharToFinger<T> = Map<T, usize>;
 pub type Matrix<T> = [T; 30];
 
-const TF_TABLE: [bool; 30] = [
-    true, true, true, true, true, true, true, true, true, true,
-    false, false, false, false, false, false, false, false, false, false, 
-    true, true, true, true, true, true, true, true, true, true,
-];
-
-#[derive(Default)]
-struct LayoutCache {
+#[derive(Default, Debug)]
+pub struct LayoutCache {
 	effort: [f64; 30],
 	effort_total: f64,
 
@@ -34,8 +28,13 @@ struct LayoutCache {
 	fspeed: [f64; 8],
 	fspeed_total: f64,
 
-	trigrams: [f64; 30],
 	trigrams_total: f64
+}
+
+impl LayoutCache {
+	pub fn total_score(&self) -> f64 {
+		self.trigrams_total - self.scissors - self.effort_total - self.usage_total - self.fspeed_total
+	}
 }
 
 type PerCharTrigrams = fxhash::FxHashMap<char, TrigramData>;
