@@ -439,21 +439,28 @@ impl LayoutGeneration {
 		(best_swap, best_score)
 	}
 
-	pub fn optimize_cols(&self, layout: &mut FastLayout, trigram_precision: usize, score: Option<f64>) -> f64 {
-		let mut best_score = score.unwrap_or(self.analysis.score(layout, trigram_precision));
+	pub fn optimize_cols(&self, layout: &mut FastLayout, cache: &mut LayoutCache, score: Option<f64>) -> f64 {
+		let mut best_score = score.unwrap_or_else(|| cache.total_score());
 
 		let mut best = layout.clone();
-		self.col_perms(layout, &mut best, &mut best_score, 6);
+		self.col_perms(layout, &mut best, cache, &mut best_score, 6);
 		layout.swap_indexes();
 
-		self.col_perms(layout, &mut best, &mut best_score, 6);
+		self.col_perms(layout, &mut best, cache, &mut best_score, 6);
 		*layout = best;
 		best_score
 	}
 
-	fn col_perms(&self, layout: &mut FastLayout, best: &mut FastLayout, best_score: &mut f64, k: usize) {
+	fn col_perms(
+		&self,
+		layout: &mut FastLayout,
+		best: &mut FastLayout,
+		cache: &mut LayoutCache,
+		best_score: &mut f64,
+		k: usize
+	) {
 		if k == 1 {
-			let new_score = self.analysis.score(layout, 1000);
+			let new_score = cache.total_score();
 			if new_score > *best_score {
 				*best_score = new_score;
 				*best = layout.clone();
@@ -461,18 +468,18 @@ impl LayoutGeneration {
 			return;
 		}
 		for i in 0..k {
-			LayoutGeneration::col_perms(self, layout, best, best_score, k - 1);
+			self.col_perms(layout, best, cache, best_score, k - 1);
 			if k % 2 == 0 {
-				unsafe { layout.swap_cols_no_bounds(self.cols[i], self.cols[k - 1]) };
+				self.accept_swap(layout, &PosPair(self.cols[i], self.cols[k - 1]), cache);
 			} else {
-				unsafe { layout.swap_cols_no_bounds(self.cols[0], self.cols[k - 1]) };
+				self.accept_swap(layout, &PosPair(self.cols[0], self.cols[k - 1]), cache);
 			}
 		}
 	}
 
 	pub fn generate(&self) -> FastLayout {
 		let layout = FastLayout::random(self.available_chars);
-		self.optimize_with_cols(layout, 1000, &POSSIBLE_SWAPS)
+		self.optimize(layout, &POSSIBLE_SWAPS)
 	}
 
 	pub fn optimize(&self, mut layout: FastLayout, possible_swaps: &[PosPair]) -> FastLayout {
@@ -487,28 +494,16 @@ impl LayoutGeneration {
 		layout
 	}
 
-	pub fn optimize_with_cols(&self, mut layout: FastLayout, trigram_precision: usize, possible_swaps: &[PosPair]) -> FastLayout {
-		let mut best_score = f64::MIN / 2.0;
-		let mut score = f64::MIN;
-		let mut best_swap = &PosPair::default();
+	pub fn optimize(&self, mut layout: FastLayout, possible_swaps: &[PosPair]) -> FastLayout {
+		let mut with_col_score = f64::MIN;
+		let mut optimized_score = f64::MIN / 2.0;
+		let mut cache = self.initialize_cache(&layout);
 
-		while best_score != score {
-			while best_score != score {
-				best_score = score;
-				for swap in possible_swaps.iter() {
-					unsafe { layout.swap_pair_no_bounds(swap) };
-					let current = self.analysis.score(&layout, trigram_precision);
-
-					if current > score {
-						score = current;
-						best_swap = swap;
-					}
-					unsafe { layout.swap_pair_no_bounds(swap) };
-				}
-				unsafe { layout.swap_pair_no_bounds(best_swap) };
-			}
-			score = self.optimize_cols(&mut layout, trigram_precision, Some(score));
+		while with_col_score < optimized_score {
+			optimized_score = self.optimize_cached(&mut layout, &mut cache, possible_swaps);
+			with_col_score = self.optimize_cols(&mut layout, &mut cache, Some(optimized_score));
 		}
+
 		layout
 	}
 
@@ -516,6 +511,7 @@ impl LayoutGeneration {
 		if amount == 0 {
 			return;
 		}
+
 		let mut layouts: Vec<(FastLayout, f64)> = Vec::with_capacity(amount);
 		let start = std::time::Instant::now();
 		
