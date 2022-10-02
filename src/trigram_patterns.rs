@@ -157,7 +157,6 @@ pub static TRIGRAM_COMBINATIONS: [TrigramPattern; 512] = get_trigram_combination
 
 #[cfg(test)]
 mod tests {
-	use super::*;
 	use crate::*;
 
 	#[test]

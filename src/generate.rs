@@ -4,9 +4,7 @@ use std::path::Path;
 use fxhash::FxHashMap;
 use indexmap::IndexMap;
 use smallmap::Map;
-use itertools::Itertools;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use anyhow::Result;
 
 use crate::utility::*;
@@ -185,7 +183,6 @@ pub struct LayoutGeneration {
 
 	pub weights: Weights,
 	pub layouts: IndexMap<String, FastLayout>,
-	pub temp_generated: Option<Vec<FastLayout>>,
 	pub per_char_trigrams: PerCharTrigrams,
 	//pub analysis: LayoutAnalysis,
 }
@@ -229,8 +226,7 @@ impl LayoutGeneration {
 					],
 
 					weights,
-					layouts: IndexMap::new(),
-					temp_generated: None,
+					layouts: IndexMap::new()
 				}
 			)
 		} else {

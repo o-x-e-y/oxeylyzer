@@ -30,8 +30,6 @@ mod tests {
 		assert_eq!(data.skipgrams.get(&['*', 'e']), Some(&(1.0/total_s)));
 		assert_eq!(data.skipgrams.get(&['t', 'e']), Some(&(1.0/total_s)));
 		assert_eq!(data.skipgrams.get(&['\'', 't']), None);
-
-        let total_t = 1.0/data.trigrams.iter().map(|(_, f)| *f).reduce(f64::min).unwrap();
 	}
 
 	#[test]

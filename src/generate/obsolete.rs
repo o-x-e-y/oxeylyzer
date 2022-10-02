@@ -5,6 +5,7 @@ use crate::{
 };
 
 impl LayoutGeneration {
+    #[allow(dead_code)]
     pub(crate) fn score_with_precision(&self, layout: &FastLayout, trigram_precision: usize) -> f64 {
         let effort = (0..layout.matrix.len())
             .into_iter()
@@ -24,6 +25,7 @@ impl LayoutGeneration {
         trigram_score - effort - fspeed_usage - scissors
     }
 
+    #[allow(dead_code)]
     pub(crate) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> f64 {
         unsafe { layout.swap_pair_no_bounds(swap) };
         let score = self.score_with_precision(&layout, 1000);
@@ -31,6 +33,7 @@ impl LayoutGeneration {
         score
     }
 
+    #[allow(dead_code)]
     pub(crate) fn best_swap(
         &self, layout: &mut FastLayout, current_best_score: Option<f64>, possible_swaps: &[PosPair]
     ) -> (Option<PosPair>, f64) {
@@ -49,6 +52,7 @@ impl LayoutGeneration {
         (best_swap, best_score)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn optimize_normal_no_cols(&self, mut layout: FastLayout, possible_swaps: &[PosPair]) -> FastLayout {
         let mut current_best_score = f64::MIN / 2.0;
 
