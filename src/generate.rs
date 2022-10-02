@@ -41,7 +41,7 @@ impl LayoutCache {
 type PerCharTrigrams = fxhash::FxHashMap<char, TrigramData>;
 
 pub struct LayoutGeneration {
-	pub available_chars: [char; 30],
+	pub chars_for_generation: [char; 30],
 	pub per_char_trigrams: PerCharTrigrams,
 	pub weights: Weights,
 	pub analysis: LayoutAnalysis,
@@ -63,12 +63,13 @@ impl LayoutGeneration {
 		if let Ok(analyzer) = LayoutAnalysis::new(
 			language, Some(weights.clone())
 		) {
-			let available = available_chars(language);
+			let chars_for_generation = chars_for_generation(language);
 			let possible_chars = analyzer.language_data.characters.iter()
 				.map(|(c, _)| *c)
 				.collect::<Vec<_>>();
 			Ok(
 				Self {
+					chars_for_generation,
 					per_char_trigrams: Self::per_char_trigrams(
 						&analyzer.language_data.trigrams,
 						possible_chars.as_ref(),
@@ -498,8 +499,7 @@ impl LayoutGeneration {
 	}
 
 	pub fn generate(&self) -> FastLayout {
-		let layout = FastLayout::random(self.available_chars);
-		self.optimize(layout, &POSSIBLE_SWAPS)
+		let layout = FastLayout::random(self.chars_for_generation);
 	}
 
 	pub fn optimize(&self, mut layout: FastLayout, possible_swaps: &[PosPair]) -> FastLayout {

@@ -149,7 +149,7 @@ pub fn get_scissor_indices() -> [PosPair; 15] {
 	res.try_into().unwrap()
 }
 
-pub fn available_chars(language: &str) -> [char; 30] {
+pub fn chars_for_generation(language: &str) -> [char; 30] {
 	let languages_cfg_map = read_cfg();
 
 	if let Some(cfg) = languages_cfg_map.get(language) {
