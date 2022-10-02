@@ -192,9 +192,9 @@ pub struct LayoutGeneration {
 }
 
 impl LayoutGeneration {
-	pub fn new(
-		language: &str, trigram_precision: usize, weights_opt: Option<Weights>
-	) -> Result<Self> {
+	pub fn new<P>(
+		language: &str, base_path: P, trigram_precision: usize, weights_opt: Option<Weights>
+	) -> Result<Self> where P: AsRef<Path> {
 		let weights = if weights_opt.is_none() {
 			Config::new().weights
 		} else {
@@ -202,7 +202,7 @@ impl LayoutGeneration {
 		};
 		
 		if let Ok(data) = LanguageData::from_file(
-			"static/language_data", language
+			base_path.as_ref().join("language_data"), language
 		) {
 			let chars_for_generation = chars_for_generation(language);
 			let possible_chars = data.characters.iter()
@@ -872,7 +872,7 @@ mod tests {
 	use crate::utility::ApproxEq;
 
 	lazy_static!{
-		pub static ref GEN: LayoutGeneration = LayoutGeneration::new("english", 1000, None).unwrap();
+		pub static ref GEN: LayoutGeneration = LayoutGeneration::new("english", "static", 1000, None).unwrap();
 	}
 
 	#[test]

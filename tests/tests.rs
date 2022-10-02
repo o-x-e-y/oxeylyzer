@@ -37,7 +37,7 @@ mod tests {
 	#[test]
 	fn get_generator() {
 
-		let a = generate::LayoutGeneration::new("test", 1000, None);
+		let a = generate::LayoutGeneration::new("test", "static", 1000, None);
 		assert!(a.is_ok());
 	}
 }
