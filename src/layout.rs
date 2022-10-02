@@ -70,14 +70,16 @@ impl TryFrom<&str> for FastLayout {
 
     fn try_from(layout_str: &str) -> Result<Self, Self::Error> {  
         let mut new_layout = FastLayout::new();
+
 		if layout_str.chars().count() == 30 {
 			for (i, c) in layout_str.chars().enumerate() {
 				new_layout.matrix[i] = c;
 				new_layout.char_to_finger.insert(c, COL_TO_FINGER[i%10]);
 			}
+
 			Ok(new_layout)
 		} else {
-			Err(anyhow::Error::msg("string to create a layout should be 30 chars long"))
+			anyhow::bail!("string to create a layout should be 30 chars long")
 		}
     }
 }
