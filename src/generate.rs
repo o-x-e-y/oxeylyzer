@@ -278,7 +278,7 @@ impl LayoutGeneration {
 		Ok(res)
 	}
 
-	fn get_layout_stats(&self, layout: &FastLayout) -> LayoutStats {
+	pub fn get_layout_stats(&self, layout: &FastLayout) -> LayoutStats {
 		let sfb = self.bigram_percent(layout, "sfbs");
 		let dsfb = self.bigram_percent(layout, "skipgrams");
 		let cache = self.initialize_cache(layout);
