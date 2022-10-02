@@ -97,14 +97,6 @@ impl std::fmt::Debug for TrigramStats {
 	}
 }
 
-fn format_fspeed(finger_speed: &[f64]) -> String {
-	let mut finger_speed_str: Vec<String> = Vec::new();
-	for v in finger_speed {
-		finger_speed_str.push(format!("{:.3}", v*1000.0))
-	}
-	finger_speed_str.join(", ")
-}
-
 #[derive(Clone)]
 pub struct LayoutStats {
 	pub sfb: f64,
