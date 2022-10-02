@@ -137,6 +137,7 @@ impl Layout<char> for FastLayout {
 		*self.matrix.get_unchecked(i)
 	}
 
+	#[inline]
 	fn char(&self, x: usize, y: usize) -> char {
 		assert!(x < 10 && y < 3);
 		self.matrix[x + 10*y]
@@ -160,9 +161,10 @@ impl Layout<char> for FastLayout {
 		}
 	}
 
+	#[inline]
 	unsafe fn swap_no_bounds(&mut self, i1: usize, i2: usize) {
-		let char1 = self.matrix[i1];
-		let char2 = self.matrix[i2];
+		let char1 = self.cu(i1);
+		let char2 = self.cu(i2);
 
 		*self.matrix.get_unchecked_mut(i1) = char2;
 		*self.matrix.get_unchecked_mut(i2) = char1;
@@ -171,10 +173,12 @@ impl Layout<char> for FastLayout {
 		self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
 	}
 
+	#[inline]
 	fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
 		self.swap(pair.0, pair.1)
 	}
 
+	#[inline]
 	unsafe fn swap_pair_no_bounds(&mut self, pair: &PosPair) {
 		self.swap_no_bounds(pair.0, pair.1);
 	}
