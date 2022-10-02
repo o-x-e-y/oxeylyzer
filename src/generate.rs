@@ -702,43 +702,6 @@ impl LayoutGeneration {
 		}
 	}
 
-	pub(self) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> f64 {
-		unsafe { layout.swap_pair_no_bounds(swap) };
-		let score = self.analysis.score(&layout, 1000);
-		unsafe { layout.swap_pair_no_bounds(swap) };
-		score
-	}
-
-	pub(self) fn best_swap(
-		&self, layout: &mut FastLayout, current_best_score: Option<f64>, possible_swaps: &[PosPair]
-	) -> (Option<PosPair>, f64) {
-		let mut best_score = current_best_score.unwrap_or_else(|| f64::MIN / 2.0);
-		let mut best_swap = None;
-
-		for swap in possible_swaps.iter() {
-			let current = self.score_swap(layout, swap);
-
-			if current > best_score {
-				best_score = current;
-				best_swap = Some(*swap);
-			}
-		}
-
-		(best_swap, best_score)
-	}
-
-	fn optimize_normal_no_cols(&self, mut layout: FastLayout, possible_swaps: &[PosPair]) -> FastLayout {
-		let mut current_best_score = f64::MIN / 2.0;
-
-		while let (Some(best_swap), new_score) =
-			self.best_swap(&mut layout, Some(current_best_score), possible_swaps) {
-			current_best_score = new_score;
-			unsafe { layout.swap_pair_no_bounds(&best_swap) };
-		}
-
-		layout
-	}
-
 	pub fn best_swap_cached(
 		&self, layout: &mut FastLayout, cache: &LayoutCache, current_best_score: Option<f64>, possible_swaps: &[PosPair]
 	) -> (Option<PosPair>, f64) {
@@ -934,6 +897,8 @@ impl LayoutGeneration {
 		self.temp_generated = Some(temp_generated);
 	}
 }
+
+mod obsolete;
 
 #[cfg(test)]
 mod tests {
