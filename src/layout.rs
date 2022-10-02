@@ -204,9 +204,9 @@ impl Layout<char> for FastLayout {
 	}
 
 	fn get_trigram_pattern(&self, trigram: &[char; 3]) -> TrigramPattern {
-		let a = *self.char_to_finger.get(&trigram[0]).unwrap_or(&usize::MAX);
-		let b = *self.char_to_finger.get(&trigram[1]).unwrap_or(&usize::MAX);
-		let c = *self.char_to_finger.get(&trigram[2]).unwrap_or(&usize::MAX);
+		let a = *self.char_to_finger.get(&trigram[0]).unwrap_or_else(|| &usize::MAX);
+		let b = *self.char_to_finger.get(&trigram[1]).unwrap_or_else(|| &usize::MAX);
+		let c = *self.char_to_finger.get(&trigram[2]).unwrap_or_else(|| &usize::MAX);
 		if (a | b | c) == usize::MAX {
 			return TrigramPattern::Invalid
 		}
