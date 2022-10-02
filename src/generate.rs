@@ -8,7 +8,6 @@ use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use anyhow::Result;
-use ansi_rgb::{rgb, Colorable};
 
 use crate::utility::*;
 use crate::trigram_patterns::TrigramPattern;
@@ -345,32 +344,6 @@ impl LayoutGeneration {
 		let trigram_score = self.trigram_score_iter(layout, &self.data.trigrams);
 
 		trigram_score - effort - fspeed_usage - scissors
-	}
-
-	fn heatmap_heat(&self, c: &char) -> String {
-		let complement = 215.0 - *self.data.characters
-			.get(c)
-			.unwrap_or_else(|| &0.0) * 1720.0;
-		let complement = complement.max(0.0) as u8;
-		let heat = rgb(215, complement, complement);
-		format!("{}", c.to_string().fg(heat))
-	}
-
-	pub fn print_heatmap(&self, layout: &FastLayout) -> String {
-		let mut print_str = String::new();
-
-		for (i, c) in layout.matrix.iter().enumerate() {
-			if i % 10 == 0 && i > 0 {
-				print_str.push('\n');
-			}
-			if (i + 5) % 10 == 0 {
-				print_str.push(' ');
-			}
-			print_str.push_str(self.heatmap_heat(c).as_str());
-			print_str.push(' ');
-		}
-
-		print_str
 	}
 
 	fn per_char_trigrams(trigrams: &TrigramData, possible: &[char], trigram_precision: usize) -> PerCharTrigrams {
@@ -784,41 +757,6 @@ impl LayoutGeneration {
 		x
 	}
 
-	fn generate_n_iter_obsolete(&mut self, amount: usize) {
-		if amount == 0 {
-			return;
-		}
-
-		let mut layouts: Vec<FastLayout> = Vec::with_capacity(amount);
-		let start = std::time::Instant::now();
-		
-		let pb = ProgressBar::new(amount as u64);
-		pb.set_style(ProgressStyle::default_bar()
-			.template("[{elapsed_precise}] [{bar:40.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
-			.progress_chars("=>-"));
-
-		(0..amount)
-			.into_par_iter()
-			.progress_with(pb)
-			.map(|_| {
-				let mut layout = self.generate();
-				layout.score = self.score(&layout);
-				layout
-			}).collect_into_vec(&mut layouts);
-
-		println!("generating {} layouts took: {} seconds", amount, start.elapsed().as_secs());
-		layouts.sort_by(
-			|l1, l2| l2.score.partial_cmp(&l1.score).unwrap()
-		);
-
-		for (i, layout) in layouts.iter().enumerate().take(10) {
-			let printable = self.print_heatmap(layout);
-			println!("{}\n#{}, score: {:.5}", printable, i, layout.score);
-		}
-		
-		self.temp_generated = Some(layouts);
-	}
-
 	pub fn generate_with_pins(
 		&self, based_on: &FastLayout, pins: &[usize], possible_swaps: Option<&[PosPair]>
 	) -> FastLayout {
@@ -834,35 +772,6 @@ impl LayoutGeneration {
 		layout.score = self.score(&layout);
 		layout
 	}
-
-	fn generate_n_with_pins_i(&self, amount: usize, based_on: FastLayout, pins: &[usize]) -> Vec<FastLayout> {
-		if amount == 0 {
-			return Vec::new();
-		}
-
-		let start = std::time::Instant::now();
-		
-		let pb = ProgressBar::new(amount as u64);
-		pb.set_style(ProgressStyle::default_bar()
-			.template("[{elapsed_precise}] [{bar:40.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
-			.progress_chars("=>-"));
-
-		let mut layouts = self.generate_n_with_pins_iter(amount, based_on, pins)
-			.progress_with(pb)
-			.collect::<Vec<_>>();
-
-		println!("optmizing {} variants took: {} seconds", amount, start.elapsed().as_secs());
-		layouts.sort_by(
-			|l1, l2| l2.score.partial_cmp(&l1.score).unwrap()
-		);
-		
-		for layout in layouts.iter().take(10) {
-			let printable = self.print_heatmap(layout);
-			println!("{}\nscore: {:.5}", printable, layout.score);
-		}
-		
-		layouts
-	}
 }
 
 mod obsolete;
@@ -875,12 +784,6 @@ mod tests {
 
 	lazy_static!{
 		pub static ref GEN: LayoutGeneration = LayoutGeneration::new("english", "static", 1000, None).unwrap();
-	}
-
-	#[test]
-	fn progress_bar_test() {
-		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		GEN.generate_n_with_pins_i(400, qwerty, &[]);
 	}
 
 	#[test]
@@ -960,19 +863,19 @@ mod tests {
 			GEN.optimize_normal_no_cols(qwerty.clone(), &POSSIBLE_SWAPS);
 		let normal_score = GEN.score_with_precision(&optimized_normal, 1000);
 
-		println!("optimized normally:\n{}", GEN.print_heatmap(&optimized_normal));
+		println!("optimized normally:\n{}", optimized_normal);
 
 		let mut cache = GEN.initialize_cache(&qwerty);
 		let mut qwerty_for_cached = qwerty.clone();
 		let best_cached_score =
 			GEN.optimize_cached(&mut qwerty_for_cached, &mut cache, &POSSIBLE_SWAPS);
 
-		println!("optimized with cache:\n{}", GEN.print_heatmap(&qwerty_for_cached));
+		println!("optimized with cache:\n{}", qwerty_for_cached);
 		assert!(normal_score.approx_equal_dbg(best_cached_score, 7));
 
 		let mut cache = GEN.initialize_cache(&qwerty);
 		let with_cols = GEN.optimize(qwerty.clone(), &mut cache, &POSSIBLE_SWAPS);
 
-		println!("optimized with cache and cols:\n{}", GEN.print_heatmap(&with_cols));
+		println!("optimized with cache and cols:\n{}", with_cols);
 	}
 }
