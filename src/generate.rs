@@ -451,8 +451,8 @@ impl LayoutGeneration {
 	}
 
 	fn trigram_char_score(&self, layout: &FastLayout, pos: &PosPair) -> f64 {
-		let c1 = layout.c(pos.0);
-		let c2 = layout.c(pos.1);
+		let c1 = unsafe { layout.cu(pos.0) };
+		let c2 = unsafe { layout.cu(pos.1) };
 
 		let v1 = self.per_char_trigrams.get(&c1);
 		let v2 = self.per_char_trigrams.get(&c2);
@@ -490,20 +490,20 @@ impl LayoutGeneration {
 		let mut res = 0.0;
 		match col {
 			0 | 1 | 2 => {
-				for c in [layout.c(col), layout.c(col+10), layout.c(col+20)] {
-					res += *self.data().characters.get(&c).unwrap_or_else(|| &0.0);
+				for c in [unsafe { layout.cu(col) }, layout.c(col+10), layout.c(col+20)] {
+					res += *self.data.characters.get(&c).unwrap_or_else(|| &0.0);
 				}
 			},
 			3 | 4 => {
 				let col = (col - 3) * 2 + 3;
-				for c in [layout.c(col), layout.c(col+10), layout.c(col+20),
+				for c in [unsafe { layout.cu(col) }, layout.c(col+10), layout.c(col+20),
 								layout.c(col+1), layout.c(col+11), layout.c(col+21)] {
 					res += *self.data.characters.get(&c).unwrap_or_else(|| &0.0);
 				}
 			},
 			5 | 6 | 7 => {
 				let col = col + 2;
-				for c in [layout.c(col), layout.c(col+10), layout.c(col+20)] {
+				for c in [unsafe { layout.cu(col) }, layout.c(col+10), layout.c(col+20)] {
 					res += *self.data.characters.get(&c).unwrap_or_else(|| &0.0);
 				}
 			},
@@ -519,6 +519,7 @@ impl LayoutGeneration {
 		}
 	}
 
+	#[inline]
 	pub(self) fn col_to_start_len(col: usize) -> (usize, usize) {
 		match col {
 			0 | 1 | 2 => (col * 3, 3),
@@ -539,8 +540,8 @@ impl LayoutGeneration {
 		for i in start..(start+len) {
 			let (PosPair(i1, i2), dist) = self.fspeed_vals[i];
 
-			let c1 = layout.c(i1);
-			let c2 = layout.c(i2);
+			let c1 = unsafe { layout.cu(i1) };
+			let c2 = unsafe { layout.cu(i2) };
 
 			let (pair, rev) = ([c1, c2], [c2, c1]);
 
@@ -562,7 +563,7 @@ impl LayoutGeneration {
 
 	#[inline]
 	fn char_effort(&self, layout: &FastLayout, i: usize) -> f64 {
-		let c = layout.c(i);
+		let c = unsafe { layout.cu(i) };
 		let mut res = *self.data.characters.get(&c).unwrap_or_else(|| &0.0);
 		res *= self.effort_map[i];
 		res

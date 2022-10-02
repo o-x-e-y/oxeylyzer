@@ -23,6 +23,8 @@ pub trait Layout<T: Copy + Default> {
 
 	fn c(&self, i: usize) -> T;
 
+	unsafe fn cu(&self, i: usize) -> char;
+
 	fn char(&self, x: usize, y: usize) -> T;
 
 	fn swap(&mut self, i1: usize, i2: usize) -> Option<()>;
@@ -126,6 +128,11 @@ impl Layout<char> for FastLayout {
 
 	fn c(&self, i: usize) -> char {
 		self.matrix[i]
+	}
+
+	#[inline]
+	unsafe fn cu(&self, i: usize) -> char {
+		*self.matrix.get_unchecked(i)
 	}
 
 	fn char(&self, x: usize, y: usize) -> char {
