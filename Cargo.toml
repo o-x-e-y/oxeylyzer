@@ -9,7 +9,7 @@ edition = "2021"
 itertools = "0.10.3"
 serde = {version = "1.0.136", features = ["derive"]}
 serde_json = "1.0.79"
-fastrand = "1.6.0"
+nanorand = "0.7.0"
 rayon = "1.5.1"
 file-chunker = "0.1.1"
 anyhow = "1.0.57"
