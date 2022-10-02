@@ -128,6 +128,7 @@ impl Layout<char> for FastLayout {
 		FastLayout::from(layout_chars)
 	}
 
+	#[inline]
 	fn c(&self, i: usize) -> char {
 		self.matrix[i]
 	}
