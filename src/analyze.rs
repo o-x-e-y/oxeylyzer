@@ -6,123 +6,11 @@ use crate::utility::*;
 use crate::weights::{Config, Weights};
 use crate::trigram_patterns::*;
 use crate::layout::*;
+use crate::generate::*;
 
 use anyhow::{Result, bail};
 use indexmap::IndexMap;
 use ansi_rgb::{rgb, Colorable};
-
-#[derive(Clone, Default)]
-pub struct TrigramStats {
-	pub alternates: f64,
-	pub alternates_sfs: f64,
-	pub inrolls: f64,
-	pub outrolls: f64,
-	pub onehands: f64,
-	pub redirects: f64,
-	pub bad_redirects: f64,
-	pub sfbs: f64,
-	pub bad_sfbs: f64,
-	pub sfts: f64,
-	pub other: f64,
-	pub invalid: f64
-}
-
-impl std::fmt::Display for TrigramStats {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(
-			f,
-"Inrolls: {:.3}%
-Outrolls: {:.3}% 
-Total Rolls: {:.3}%
-Onehands: {:.3}%\n
-Alternates: {:.3}%
-Alternates (sfs): {:.3}%
-Total Alternates: {:.3}%\n
-Redirects: {:.3}%
-Bad Redirects: {:.3}%
-Total Redirects: {:.3}%\n
-Bad Sfbs: {:.3}%,
-Sft: {:.3}%",
-			self.inrolls*100.0,
-			self.outrolls*100.0,
-			(self.inrolls + self.outrolls)*100.0,
-			self.onehands*100.0,
-			self.alternates*100.0,
-			self.alternates_sfs*100.0,
-			(self.alternates + self.alternates_sfs)*100.0,
-			self.redirects*100.0,
-			self.bad_redirects*100.0,
-			(self.redirects + self.bad_redirects)*100.0,
-			self.bad_sfbs*100.0,
-			self.sfts*100.0
-		)
-	}
-}
-
-impl std::fmt::Debug for TrigramStats {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(
-			f,
-			"Inrolls: {:.3}%\n
-			Outrolls: {:.3}%\n
-			Total Rolls: {:.3}%\n
-			Onehands: {:.3}%\n\n\
-			Alternates: {:.3}%\n
-			Alternates (sfs): {:.3}%\n
-			Total Alternates: {:.3}%\n\n
-			Redirects: {:.3}%\n\
-			Bad Redirects: {:.3}%\n
-			Total Redirects: {:.3}%\n\n
-			Bad Sfbs: {:.3}%\n
-			Sft: {:.3}%\n\n
-			Other: {:.3}%\n
-			Invalid: {:.3}%",
-			self.inrolls*100.0,
-			self.outrolls*100.0,
-			(self.inrolls + self.outrolls)*100.0,
-			self.onehands*100.0,
-			self.alternates*100.0,
-			self.alternates_sfs*100.0,
-			(self.alternates + self.alternates_sfs)*100.0,
-			self.redirects*100.0,
-			self.bad_redirects*100.0,
-			(self.redirects + self.bad_redirects)*100.0,
-			self.bad_sfbs*100.0,
-			self.sfts*100.0,
-			self.other*100.0,
-			self.invalid*100.0
-		)
-	}
-}
-
-fn format_fspeed(finger_speed: &[f64]) -> String {
-	let mut finger_speed_str: Vec<String> = Vec::new();
-	for v in finger_speed {
-		finger_speed_str.push(format!("{:.3}", v*1000.0))
-	}
-	finger_speed_str.join(", ")
-}
-
-#[derive(Clone)]
-struct LayoutStats {
-	sfb: f64,
-	dsfb: f64,
-	scissors: f64,
-	trigram_stats: TrigramStats,
-	fspeed: f64,
-	finger_speed: [f64; 8]
-}
-
-impl std::fmt::Display for LayoutStats {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(
-			f, concat!("Sfb:  {:.3}%\nDsfb: {:.3}%\nFinger Speed: {:.3}\n",
-			"    [{}]\nScissors: {:.3}%\n\n{}"),
-			self.sfb * 100.0, self.dsfb * 100.0, self.fspeed * 100.0, format_fspeed(&self.finger_speed),
-			self.scissors * 100.0, self.trigram_stats
-		)
-	}
-}
 
 pub struct LayoutAnalysis {
 	pub language: String,
@@ -147,7 +35,7 @@ impl LayoutAnalysis {
 		let mut new_analysis = LayoutAnalysis {
 			language: String::new(),
 			layouts: IndexMap::new(),
-			language_data: LanguageData::from_file(language)?,
+			language_data: LanguageData::from_file("static/language_data", language)?,
 			sfb_indices: get_sfb_indices(),
 			fspeed_vals: get_fspeed(weights.lateral_penalty),
 			effort_map: get_effort_map(weights.heatmap),
@@ -186,25 +74,18 @@ impl LayoutAnalysis {
 
 	fn format_layout_str(layout_str: String) -> String {
 		layout_str
-			.replace("\n", "")
-			.replace("\r", "")
-			.replace(" ", "")
+			.split("\n")
+			.take(3)
+			.map(|line| {
+				line.split_whitespace()
+					.take(10)
+					.collect::<String>()
+			})
+			.collect::<String>()
 	}
 
-	pub fn layout_from_str(&mut self, layout_str: &str) -> Result<FastLayout> {
-		if layout_str.chars().count() != 30 {
-			bail!("layout has too many or too few keys")
-		}
-
-		let mut base = [' '; 30];
-		for (i, c) in layout_str.chars().enumerate() {
-			base[i] = c;
-		}
-		
-		Ok(FastLayout::from(base))
-	}
-
-	fn save_layout_stats(&self, layout: &FastLayout, name: &str) {
+	fn save_layout_stats<P>(&self, layout: &FastLayout, base_path: P, name: &str)
+		where P: AsRef<std::path::Path> {
 		let stats = self.get_layout_stats(layout);
 
 		let mut f = std::fs::OpenOptions::new()
@@ -229,7 +110,7 @@ impl LayoutAnalysis {
 					let content = std::fs::read_to_string(entry.path())?;
 					let layout_str = Self::format_layout_str(content);
 
-					if let Ok(mut layout) = self.layout_from_str(&layout_str) {
+					if let Ok(mut layout) = FastLayout::try_from(layout_str.as_str()) {
 						// self.save_layout_stats(&layout, name.as_str());
 						layout.score = self.score(&layout, usize::MAX);
 						res.insert(name, layout);
@@ -295,7 +176,7 @@ impl LayoutAnalysis {
 
 	pub fn analyze_str(&mut self, layout_str: &str) {
 		let layout_str = Self::format_layout_str(layout_str.to_string());
-		let layout = self.layout_from_str(&layout_str).unwrap();
+		let layout = FastLayout::try_from(layout_str.as_str()).unwrap();
 		self.analyze(&layout);
 	}
 
@@ -305,6 +186,7 @@ impl LayoutAnalysis {
 		} else {
 			self.placeholder_name(&layout).unwrap()
 		};
+
 		let mut f = std::fs::OpenOptions::new()
 			.write(true)
 			.create(true)
@@ -324,32 +206,6 @@ impl LayoutAnalysis {
 		Ok(())
 	}
 
-	fn heatmap_heat(&self, c: &char) -> String {
-		let complement = 215.0 - *self.language_data.characters
-			.get(c)
-			.unwrap_or_else(|| &0.0) * 1720.0;
-		let complement = complement.max(0.0) as u8;
-		let heat = rgb(215, complement, complement);
-		format!("{}", c.to_string().fg(heat))
-	}
-
-	pub fn print_heatmap(&self, layout: &FastLayout) -> String {
-		let mut print_str = String::new();
-
-		for (i, c) in layout.matrix.iter().enumerate() {
-			if i % 10 == 0 && i > 0 {
-				print_str.push('\n');
-			}
-			if (i + 5) % 10 == 0 {
-				print_str.push(' ');
-			}
-			print_str.push_str(self.heatmap_heat(c).as_str());
-			print_str.push(' ');
-		}
-
-		print_str
-	}
-
 	pub fn analyze(&self, layout: &FastLayout) {
 		let stats = self.get_layout_stats(layout);
 		let score = if layout.score == 0.000 {
@@ -358,7 +214,7 @@ impl LayoutAnalysis {
 			layout.score
 		};
 
-		let layout_str = self.print_heatmap(layout);
+		let layout_str = layout.to_string();
 		
 		println!("{}\n{}\nScore: {:.3}", layout_str, stats, score);
 	}
@@ -382,7 +238,7 @@ impl LayoutAnalysis {
 		for y in 0..3 {
 			for (n, layout) in [l1, l2].into_iter().enumerate() {
 				for x in 0..10 {
-					print!("{} ", self.heatmap_heat(&layout.matrix[x + 10*y]));
+					print!("{} ", layout.matrix[x + 10*y]);
 					if x == 4 {
 						print!(" ");
 					}
@@ -499,8 +355,8 @@ impl LayoutAnalysis {
 		let dsfb_ratio3 = self.weights.dsfb_ratio3;
 
 		for (PosPair(i1, i2), dist) in self.fspeed_vals {
-			let c1 = layout.c(i1);
-			let c2 = layout.c(i2);
+			let c1 = unsafe { layout.cu(i1) };
+			let c2 = unsafe { layout.cu(i2) };
 
 			let (pair, rev) = ([c1, c2], [c2, c1]);
 
@@ -563,28 +419,8 @@ impl LayoutAnalysis {
 
 	pub fn trigram_stats(&self, layout: &FastLayout, trigram_precision: usize) -> TrigramStats {
 		let mut freqs = TrigramStats::default();
-		for (trigram, freq) in self.language_data.trigrams.iter().take(trigram_precision) {
-			match layout.get_trigram_pattern(trigram) {
-				TrigramPattern::Alternate => freqs.alternates += freq,
-				TrigramPattern::AlternateSfs => freqs.alternates_sfs += freq,
-				TrigramPattern::Inroll => freqs.inrolls += freq,
-				TrigramPattern::Outroll => freqs.outrolls += freq,
-				TrigramPattern::Onehand => freqs.onehands += freq,
-				TrigramPattern::Redirect => freqs.redirects += freq,
-				TrigramPattern::BadRedirect => freqs.bad_redirects += freq,
-				TrigramPattern::Sfb => freqs.sfbs += freq,
-				TrigramPattern::BadSfb => freqs.bad_sfbs += freq,
-				TrigramPattern::Sft => freqs.sfts += freq,
-				TrigramPattern::Other => freqs.other += freq,
-				TrigramPattern::Invalid => freqs.invalid += freq
-			}
-		}
-		freqs
-	}
-
-	pub unsafe fn trigram_stats_unchecked(&self, layout: &FastLayout, trigram_precision: usize) -> TrigramStats {
-		let mut freqs = TrigramStats::default();
-		for (trigram, freq) in self.language_data.trigrams.iter().take(trigram_precision) {
+		for (trigram, freq) in self.language_data.trigrams.iter()
+			.take(trigram_precision) {
 			match layout.get_trigram_pattern(trigram) {
 				TrigramPattern::Alternate => freqs.alternates += freq,
 				TrigramPattern::AlternateSfs => freqs.alternates_sfs += freq,
