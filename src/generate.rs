@@ -38,7 +38,7 @@ impl LayoutCache {
 	}
 }
 
-type PerCharTrigrams = fxhash::FxHashMap<char, TrigramData>;
+static COLS: [usize; 6] = [0, 1, 2, 7, 8, 9];
 
 pub struct LayoutGeneration {
 	pub chars_for_generation: [char; 30],
@@ -491,9 +491,9 @@ impl LayoutGeneration {
 		for i in 0..k {
 			self.col_perms(layout, best, cache, best_score, k - 1);
 			if k % 2 == 0 {
-				self.accept_swap(layout, &PosPair(self.cols[i], self.cols[k - 1]), cache);
+				self.accept_swap(layout, &PosPair(COLS[i], COLS[k - 1]), cache);
 			} else {
-				self.accept_swap(layout, &PosPair(self.cols[0], self.cols[k - 1]), cache);
+				self.accept_swap(layout, &PosPair(COLS[0], COLS[k - 1]), cache);
 			}
 		}
 	}
