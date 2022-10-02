@@ -3,6 +3,7 @@
 #![feature(let_chains)]
 
 mod repl;
+mod tui;
 
 fn main() -> Result<(), String> {
 	repl::Repl::run()
