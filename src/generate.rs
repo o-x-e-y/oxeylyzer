@@ -1,5 +1,5 @@
 use std::hint::unreachable_unchecked;
-use core::option::Option;
+use std::path::Path;
 
 use smallmap::Map;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};

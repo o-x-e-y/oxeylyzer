@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::Path;
 use serde::Deserialize;
 use serde_json;
 
@@ -89,8 +90,9 @@ impl LanguageData {
 		Ok(LanguageData::from(data))
 	}
 
-	pub fn from_file(language: &str) -> Result<LanguageData> {
-		let file_path = format!("static/language_data/{}.json", language.to_lowercase());
+	pub fn from_file<P>(base_path: P, language: &str) -> Result<LanguageData>
+		where P: AsRef<Path> {
+		let file_path = base_path.as_ref().join(language.to_lowercase() + ".json");
 		let mut file = File::open(file_path)?;
 		
 		let mut contents = String::new();
