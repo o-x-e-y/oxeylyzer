@@ -9,7 +9,7 @@ mod tests {
 
 		load_default("test");
 
-		let data = LanguageData::from_file("test")
+		let data = LanguageData::from_file("static/language_data","test")
 			.expect("'test.json' in static/language_data/ was not created");
 		
 		assert!(data.language == "test");
@@ -35,27 +35,9 @@ mod tests {
 	}
 
 	#[test]
-	fn get_analysis() {
-        use analyze::LayoutAnalysis;
+	fn get_generator() {
 
-		let a = LayoutAnalysis::new("test", None);
+		let a = generate::LayoutGeneration::new("test", 1000, None);
 		assert!(a.is_ok());
-	}
-
-    // #[test]
-	fn caching() {
-		let g_opt = generate::LayoutGeneration::new(
-			"tr", 1000, None
-		);
-		assert!(!g_opt.is_err());
-
-		let g = g_opt.unwrap();
-
-		let mut l = g.generate();
-		let l_score = g.analysis.score(&l, 1000);
-		// let cache = g.initialize_cache(&l);
-		// let swap = PosPair(10, 19);
-		// let s1 = g.score_swap(&mut l, &swap, &cache);
-		// let s2 = g.score_swap(&mut l, &swap, &cache);
 	}
 }
