@@ -792,12 +792,19 @@ impl LayoutGeneration {
 		layout
 	}
 
-	pub fn generate_n(&mut self, amount: usize) {
+	pub fn generate_n_iter(&self, amount: usize) -> impl ParallelIterator<Item = FastLayout> + '_ {
+		let x = (0..amount)
+			.into_par_iter()
+			.map(|_| self.generate());
+		x
+	}
+
+	pub fn generate_n_iter_obsolete(&mut self, amount: usize) {
 		if amount == 0 {
 			return;
 		}
 
-		let mut layouts: Vec<(FastLayout, f64)> = Vec::with_capacity(amount);
+		let mut layouts: Vec<FastLayout> = Vec::with_capacity(amount);
 		let start = std::time::Instant::now();
 		
 		let pb = ProgressBar::new(amount as u64);
@@ -808,43 +815,26 @@ impl LayoutGeneration {
 		(0..amount)
 			.into_par_iter()
 			.progress_with(pb)
-			.map(|_| -> (FastLayout, f64) {
-				let layout = self.generate();
-				let score = self.analysis.score(&layout, usize::MAX);
-				(layout, score)
+			.map(|_| {
+				let mut layout = self.generate();
+				layout.score = self.score(&layout);
+				layout
 			}).collect_into_vec(&mut layouts);
 
 		println!("generating {} layouts took: {} seconds", amount, start.elapsed().as_secs());
-		layouts.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
-		for (layout, score) in layouts.iter().take(10) {
-			let printable = self.analysis.print_heatmap(layout);
-			println!("{}\nscore: {:.5}", printable, score);
+		layouts.sort_by(
+			|l1, l2| l2.score.partial_cmp(&l1.score).unwrap()
+		);
+
+		for (i, layout) in layouts.iter().enumerate().take(10) {
+			let printable = self.print_heatmap(layout);
+			println!("{}\n#{}, score: {:.5}", printable, i, layout.score);
 		}
 		
-		let temp_generated = layouts
-			.into_iter()
-			.map(|(x, _)| x.layout_str())
-			.collect::<Vec<String>>();
-		self.temp_generated = Some(temp_generated);
+		self.temp_generated = Some(layouts);
 	}
 
-	fn pinned_swaps(pins: &[usize]) -> Vec<PosPair> {
-		let mut map = [false; 30];
-		for i in 0..30 {
-			if pins.contains(&i) {
-				map[i] = true;
-			}
-		}
-		let mut res = Vec::new();
-		for ps in POSSIBLE_SWAPS {
-			if !map[ps.0] && !map[ps.1] {
-				res.push(ps);
-			}
-		}
-		res
-	}
-
-	pub fn generate_pinned(
+	pub fn generate_with_pins(
 		&self, based_on: &FastLayout, pins: &[usize], possible_swaps: Option<&[PosPair]>
 	) -> FastLayout {
 		let mut layout = FastLayout::random_pins(based_on.matrix, pins);
@@ -853,19 +843,31 @@ impl LayoutGeneration {
 		if let Some(ps) = possible_swaps {
 			self.optimize_cached(&mut layout, &mut cache, ps)
 		} else {
-			self.optimize_cached(&mut layout, &mut cache, &Self::pinned_swaps(pins))
+			self.optimize_cached(&mut layout, &mut cache, &pinned_swaps(pins))
 		};
 
+		layout.score = self.score(&layout);
 		layout
 	}
 
-	pub fn generate_n_pins(&mut self, amount: usize, based_on: FastLayout, pins: &[usize]) {
+	pub fn generate_n_with_pins_iter<'a>(
+		&'a self, amount: usize, based_on: FastLayout, pins: &'a[usize]
+	) -> impl ParallelIterator<Item = FastLayout> + '_ {
+		let possible_swaps = pinned_swaps(pins);
+		
+		let x = (0..amount)
+			.into_par_iter()
+			.map(move |_| self.generate_with_pins(
+				&based_on, pins, Some(&possible_swaps)
+			));
+		x
+	}
+
+	fn generate_n_with_pins_i(&self, amount: usize, based_on: FastLayout, pins: &[usize]) -> Vec<FastLayout> {
 		if amount == 0 {
-			return;
+			return Vec::new();
 		}
 
-		let possible_swaps = Self::pinned_swaps(pins);
-		let mut layouts: Vec<(FastLayout, f64)> = Vec::with_capacity(amount);
 		let start = std::time::Instant::now();
 		
 		let pb = ProgressBar::new(amount as u64);
@@ -873,29 +875,21 @@ impl LayoutGeneration {
 			.template("[{elapsed_precise}] [{bar:40.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
 			.progress_chars("=>-"));
 
-		(0..amount)
-			.into_par_iter()
+		let mut layouts = self.generate_n_with_pins_iter(amount, based_on, pins)
 			.progress_with(pb)
-			.map(|_| -> (FastLayout, f64) {
-				let layout = self.generate_pinned(&based_on, pins, Some(&possible_swaps));
-				let score = self.analysis.score(&layout, usize::MAX);
-				(layout, score)
-			}).collect_into_vec(&mut layouts);
+			.collect::<Vec<_>>();
 
 		println!("optmizing {} variants took: {} seconds", amount, start.elapsed().as_secs());
-		layouts.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+		layouts.sort_by(
+			|l1, l2| l2.score.partial_cmp(&l1.score).unwrap()
+		);
 		
-		for (layout, score) in layouts.iter().take(10) {
-			let printable = self.analysis.print_heatmap(layout);
-			println!("{}\nscore: {:.5}", printable, score);
+		for layout in layouts.iter().take(10) {
+			let printable = self.print_heatmap(layout);
+			println!("{}\nscore: {:.5}", printable, layout.score);
 		}
-
-		let temp_generated = layouts
-			.into_iter()
-			.map(|(x, _)| x.layout_str())
-			.collect::<Vec<String>>();
 		
-		self.temp_generated = Some(temp_generated);
+		layouts
 	}
 }
 
@@ -912,6 +906,12 @@ mod tests {
 	}
 
 	#[test]
+	fn progress_bar_test() {
+		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
+		GEN.generate_n_with_pins_i(400, qwerty, &[]);
+	}
+
+	#[test]
 	fn cached_scissors() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		let mut cache = GEN.initialize_cache(&qwerty);
@@ -919,11 +919,6 @@ mod tests {
 		for swap in POSSIBLE_SWAPS.iter() {
 			GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
-			assert!(
-				cache.scissors.approx_equal_dbg(
-					GEN.analysis.scissor_percent(&qwerty) * GEN.weights.scissors, 7
-				)
-			);
 			assert!(cache.scissors.approx_equal_dbg(GEN.scissor_score(&qwerty), 7));
 		}
 	}
