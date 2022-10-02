@@ -303,7 +303,7 @@ checksum = "9ff7415e9ae3fff1225851df9e0d9e4e5479f947619774677a63572e55e80eff"
 [[package]]
 name = "oxeylyzer"
 version = "0.1.0"
-source = "git+https://github.com/O-X-E-Y/oxeylyzer#4ccb33736cfd81d3a71f641ad3c2357f93a90b53"
+source = "git+https://github.com/O-X-E-Y/oxeylyzer#ed794e9c12294b57fbb8967b6ef2e0164c5e9901"
 dependencies = [
  "ansi_rgb",
  "anyhow",

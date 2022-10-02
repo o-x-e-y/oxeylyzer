@@ -16,6 +16,7 @@ pub struct Repl {
     language: String,
     gen: LayoutGeneration,
     saved: IndexMap<String, FastLayout>,
+    temp_generated: Vec<FastLayout>,
     pins: Vec<usize>
 }
 
@@ -39,6 +40,7 @@ impl Repl {
                 .map_err(|e| e.to_string())?,
             language,
             gen,
+            temp_generated: Vec::new(),
             pins: config.pins
         })
     }
@@ -227,16 +229,15 @@ impl Repl {
 	}
 
     fn get_nth(&self, nr: usize) -> Option<FastLayout> {
-        if let Some(temp_list) = &self.gen.temp_generated {
-            if nr < temp_list.len() {
-                let l = temp_list[nr].clone();
-                Some(l)
+        if nr < self.temp_generated.len() {
+            let l = self.temp_generated[nr].clone();
+            Some(l)
+        } else {
+            if self.temp_generated.len() == 0 {
+                println!("You haven't generated any layouts yet!");
             } else {
                 println!("That's not a valid index!");
-                None
             }
-        } else {
-            println!("You haven't generated any layouts yet!");
             None
         }
     }
@@ -264,7 +265,7 @@ impl Repl {
                 let count_str = new_m.value_of("COUNT").unwrap();
                 println!("generating {} layouts...", count_str);
                 let count = usize::from_str_radix(count_str, 10).map_err(|e| e.to_string())?;
-                generate_n(&self.gen, count);
+                self.temp_generated = generate_n(&self.gen, count);
             }
             Some(("improve", comp_m)) => {
                 let name = comp_m.value_of("LAYOUT_NAME").unwrap();
