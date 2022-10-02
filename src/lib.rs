@@ -12,3 +12,5 @@ pub mod weights;
 pub mod generate;
 pub mod translation;
 pub mod languages_cfg;
+
+pub use rayon;

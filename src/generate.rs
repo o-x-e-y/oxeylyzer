@@ -744,19 +744,20 @@ impl LayoutGeneration {
 
 	pub fn generate(&self) -> FastLayout {
 		let layout = FastLayout::random(self.chars_for_generation);
-		let mut layout = self.optimize(layout, &POSSIBLE_SWAPS);
+		let mut cache = self.initialize_cache(&layout);
+		
+		let mut layout = self.optimize(layout, &mut cache, &POSSIBLE_SWAPS);
 		layout.score = self.score(&layout);
 		layout
 	}
 
-	pub fn optimize(&self, mut layout: FastLayout, possible_swaps: &[PosPair]) -> FastLayout {
+	pub fn optimize(&self, mut layout: FastLayout, cache: &mut LayoutCache, possible_swaps: &[PosPair]) -> FastLayout {
 		let mut with_col_score = f64::MIN;
 		let mut optimized_score = f64::MIN / 2.0;
-		let mut cache = self.initialize_cache(&layout);
 
 		while with_col_score < optimized_score {
-			optimized_score = self.optimize_cached(&mut layout, &mut cache, possible_swaps);
-			with_col_score = self.optimize_cols(&mut layout, &mut cache, Some(optimized_score));
+			optimized_score = self.optimize_cached(&mut layout, cache, possible_swaps);
+			with_col_score = self.optimize_cols(&mut layout, cache, Some(optimized_score));
 		}
 
 		layout
@@ -769,7 +770,20 @@ impl LayoutGeneration {
 		x
 	}
 
-	pub fn generate_n_iter_obsolete(&mut self, amount: usize) {
+	pub fn generate_n_with_pins_iter<'a>(
+		&'a self, amount: usize, based_on: FastLayout, pins: &'a[usize]
+	) -> impl ParallelIterator<Item = FastLayout> + '_ {
+		let possible_swaps = pinned_swaps(pins);
+		
+		let x = (0..amount)
+			.into_par_iter()
+			.map(move |_| self.generate_with_pins(
+				&based_on, pins, Some(&possible_swaps)
+			));
+		x
+	}
+
+	fn generate_n_iter_obsolete(&mut self, amount: usize) {
 		if amount == 0 {
 			return;
 		}
@@ -818,19 +832,6 @@ impl LayoutGeneration {
 
 		layout.score = self.score(&layout);
 		layout
-	}
-
-	pub fn generate_n_with_pins_iter<'a>(
-		&'a self, amount: usize, based_on: FastLayout, pins: &'a[usize]
-	) -> impl ParallelIterator<Item = FastLayout> + '_ {
-		let possible_swaps = pinned_swaps(pins);
-		
-		let x = (0..amount)
-			.into_par_iter()
-			.map(move |_| self.generate_with_pins(
-				&based_on, pins, Some(&possible_swaps)
-			));
-		x
 	}
 
 	fn generate_n_with_pins_i(&self, amount: usize, based_on: FastLayout, pins: &[usize]) -> Vec<FastLayout> {
@@ -968,7 +969,8 @@ mod tests {
 		println!("optimized with cache:\n{}", GEN.print_heatmap(&qwerty_for_cached));
 		assert!(normal_score.approx_equal_dbg(best_cached_score, 7));
 
-		let with_cols = GEN.optimize(qwerty.clone(), &POSSIBLE_SWAPS);
+		let mut cache = GEN.initialize_cache(&qwerty);
+		let with_cols = GEN.optimize(qwerty.clone(), &mut cache, &POSSIBLE_SWAPS);
 
 		println!("optimized with cache and cols:\n{}", GEN.print_heatmap(&with_cols));
 	}
