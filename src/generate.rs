@@ -292,9 +292,10 @@ impl LayoutGeneration {
 
 	pub fn bigram_percent(&self, layout: &FastLayout, bigram_type: &str) -> f64 {
 		let data = match bigram_type {
-			"bigram" | "bigrams" | "sfb" | "sfbs" => &self.data.skipgrams,
-			"skipgram2" | "skipgrams2" | "dsfb2" | "dsfbs2" => &self.data.skipgrams,
-			"skipgram3" | "skipgrams3" | "dsfb3" | "dsfbs3" => &self.data.skipgrams,
+			"bigram" | "bigrams" | "sfb" | "sfbs" => &self.data.bigrams,
+			"skipgram" | "skipgrams" | "dsfb" | "dsfbs" => &self.data.skipgrams,
+			"skipgram2" | "skipgrams2" | "dsfb2" | "dsfbs2" => &self.data.skipgrams2,
+			"skipgram3" | "skipgrams3" | "dsfb3" | "dsfbs3" => &self.data.skipgrams3,
 			_ => panic!("bigram type {bigram_type} does not exist!")
 		};
 
