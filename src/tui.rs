@@ -57,7 +57,7 @@ pub fn generate_n_with_pins(
     
     for (i, layout) in layouts.iter().enumerate().take(10) {
         let printable = heatmap_string(&gen.data, layout);
-        println!("{}\n#{}, score: {:.5}", printable, i, layout.score);
+        println!("{}\nscore: {:.5} #{}", printable, layout.score, i);
     }
     
     layouts
@@ -88,7 +88,7 @@ pub fn generate_n(gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
     
     for (i, layout) in layouts.iter().enumerate().take(10) {
         let printable = heatmap_string(&gen.data, layout);
-        println!("{}\n#{}, score: {:.5}", printable, i, layout.score);
+        println!("{}\nscore: {:.5} #{}", printable, layout.score, i);
     }
     
     layouts
