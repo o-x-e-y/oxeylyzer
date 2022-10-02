@@ -185,3 +185,33 @@ impl ApproxEq for f64 {
 		a == b
 	}
 }
+
+pub(crate) fn is_kb_file(entry: &std::fs::DirEntry) -> bool {
+	if let Some(ext_os) = entry.path().extension() {
+		if let Some(ext) = ext_os.to_str() {
+			return ext == "kb"
+		}
+	}
+	false
+}
+
+pub(crate) fn layout_name(entry: &std::fs::DirEntry) -> Option<String> {
+	if let Some(name_os) = entry.path().file_stem() {
+		if let Some(name_str) = name_os.to_str() {
+			return Some(name_str.to_string())
+		}
+	}
+	None
+}
+
+pub(crate) fn format_layout_str(layout_str: String) -> String {
+	layout_str
+		.split("\n")
+		.take(3)
+		.map(|line| {
+			line.split_whitespace()
+				.take(10)
+				.collect::<String>()
+		})
+		.collect::<String>()
+}

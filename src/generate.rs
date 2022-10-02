@@ -239,37 +239,7 @@ impl LayoutGeneration {
 		}
 	}
 
-	fn is_kb_file(entry: &std::fs::DirEntry) -> bool {
-		if let Some(ext_os) = entry.path().extension() {
-			if let Some(ext) = ext_os.to_str() {
-				return ext == "kb"
-			}
-		}
-		false
-	}
-
-	fn layout_name(entry: &std::fs::DirEntry) -> Option<String> {
-		if let Some(name_os) = entry.path().file_stem() {
-			if let Some(name_str) = name_os.to_str() {
-				return Some(name_str.to_string())
-			}
-		}
-		None
-	}
-
-	fn format_layout_str(layout_str: String) -> String {
-		layout_str
-			.split("\n")
-			.take(3)
-			.map(|line| {
-				line.split_whitespace()
-					.take(10)
-					.collect::<String>()
-			})
-			.collect::<String>()
-	}
-
-	fn load_layouts<P>(&mut self, base_directory: P, language: &str) -> Result<IndexMap<String, FastLayout>>
+	pub fn load_layouts<P>(&mut self, base_directory: P, language: &str) -> Result<IndexMap<String, FastLayout>>
 		where P: AsRef<Path> {
 		let mut res: IndexMap<String, FastLayout> = IndexMap::new();
 		let language_dir_path = base_directory.as_ref().join(language);
@@ -277,17 +247,17 @@ impl LayoutGeneration {
 		if let Ok(paths) = std::fs::read_dir(&language_dir_path) {
 			let valid = paths
 				.filter(|p| {
-					p.is_ok_and(|entry| Self::is_kb_file(entry))
+					p.is_ok_and(|entry| is_kb_file(entry))
 				})
 				.filter(|p| p.is_ok())
 				.collect::<Vec<_>>();
 
 			for p in valid {
 				if let Ok(entry) = p &&
-				Self::is_kb_file(&entry) &&
-				let Some(name) = Self::layout_name(&entry) {
+				is_kb_file(&entry) &&
+				let Some(name) = layout_name(&entry) {
 					let content = std::fs::read_to_string(entry.path())?;
-					let layout_str = Self::format_layout_str(content);
+					let layout_str = format_layout_str(content);
 
 					if let Ok(mut layout) = FastLayout::try_from(layout_str.as_str()) {
 						// self.save_layout_stats(&layout, name.as_str());
