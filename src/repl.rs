@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use clap::{arg, command, Command};
+use getargs::Options;
 use indexmap::IndexMap;
 use oxeylyzer::{
     generate::LayoutGeneration,
@@ -11,6 +11,7 @@ use oxeylyzer::{
 };
 
 use crate::tui::*;
+use ArgumentType::*;
 
 pub struct Repl {
     language: String,
@@ -55,15 +56,11 @@ impl Repl {
                 continue;
             }
 
-            match env.respond(line) {
-                Ok(quit) => {
-                    if quit {
-                        break;
-                    }
-                }
+            match env.respond2(line) {
+                Ok(true) => break,
+                Ok(false) => continue,
                 Err(err) => {
-                    write!(std::io::stdout(), "{}", err).map_err(|e| e.to_string())?;
-                    std::io::stdout().flush().map_err(|e| e.to_string())?;
+                    println!("{err}");
                 }
             }
         }
@@ -106,15 +103,7 @@ impl Repl {
 		Err("Could not find a good placeholder name for the layout.".to_string())
 	}
 
-	// pub fn analyze_str(&mut self, layout_str: &str) {
-	// 	let layout_str = Self::format_layout_str(layout_str.to_string());
-	// 	let layout = FastLayout::try_from(layout_str.as_str()).unwrap();
-	// 	self.analyze(&layout);
-	// }
-
-	pub fn save(
-        &mut self, mut layout: FastLayout, name: Option<String>
-    ) -> Result<(), String> {
+	pub fn save(&mut self, mut layout: FastLayout, name: Option<String>) -> Result<(), String> {
 		let new_name = if let Some(n) = name {
 			n.replace(" ", "_")
 		} else {
@@ -242,66 +231,77 @@ impl Repl {
         }
     }
 
-    fn save_match(&mut self, save_m: &clap::ArgMatches) {
-        let n_str = save_m.value_of("NR").unwrap();
-        if let Ok(nr) = usize::from_str_radix(n_str, 10) {
-            if let Some(layout) = self.get_nth(nr) {
-                if let Some(name) = save_m.value_of("NAME") {
-                    self.save(layout, Some(name.to_string())).unwrap();
-                } else {
-                    self.save(layout, None).unwrap();
-                }
-            }
-        }
+    pub fn double_freq(&self) -> f64 {
+        self.gen.data.bigrams
+            .iter()
+            .filter(|(bg, _)| bg[0] == bg[1] )
+            .map(|(_, &f)| f)
+            .sum::<f64>()
     }
 
-    fn respond(&mut self, line: &str) -> Result<bool, String> {
+    fn respond2(&mut self, line: &str) -> Result<bool, String> {
         let args = shlex::split(line).ok_or("error: Invalid quoting")?;
-        let matches = self.cli()
-            .try_get_matches_from(&args)
-            .map_err(|e| e.to_string())?;
-        match matches.subcommand() {
-            Some(("generate", new_m)) => {
-                let count_str = new_m.value_of("COUNT").unwrap();
-                println!("generating {} layouts...", count_str);
-                let count = usize::from_str_radix(count_str, 10).map_err(|e| e.to_string())?;
-                self.temp_generated = generate_n(&self.gen, count);
+        let mut opts = Options::new(args.iter().map(String::as_str));
+        match opts.next_positional() {
+            Some("generate") | Some("gen") | Some("g") => {
+                if let Some(count_str) = opts.next_positional()
+                && let Ok(count) = usize::from_str_radix(count_str, 10) {
+                    println!("generating {} layouts...", count_str);
+                    self.temp_generated = generate_n(&self.gen, count);
+                } else {
+                    print_error("generate", &[R("amount")]);
+                }
             }
-            Some(("improve", comp_m)) => {
-                let name = comp_m.value_of("LAYOUT_NAME").unwrap();
-                let amount_str = comp_m.value_of("AMOUNT").unwrap();
-                if let Ok(amount) = usize::from_str_radix(amount_str, 10) {
+            Some("improve") | Some("i") => {
+                if let Some(name) = opts.next_positional()
+                && let Some(amount_str) = opts.next_positional()
+                && let Ok(amount) = usize::from_str_radix(amount_str, 10) {
                     if let Some(l) = self.layout_by_name(name) {
                         generate_n_with_pins(&self.gen, amount, l.clone(), &self.pins);
-                    }
-                }
-            }
-            Some(("rank", _)) => {
-                self.rank();
-            }
-            Some(("analyze", new_m)) => {
-                let name_or_nr = new_m.value_of("LAYOUT_NAME_OR_NR").unwrap();
-                if let Ok(nr) = usize::from_str_radix(name_or_nr, 10) {
-                    if let Some(layout) = self.get_nth(nr) {
-                        self.analyze(&layout);
+                    } else {
+                        println!("'{name}' does not exist!")
                     }
                 } else {
-                    self.analyze_name(name_or_nr);
+                    print_error("improve", &[R("name"), R("amount")]);
                 }
             }
-            Some(("ngram", occ_m)) => {
-                let ngram = occ_m.value_of("NGRAM").unwrap();
-                println!("{}", get_ngram_info(&self.gen.data, ngram));
+            Some("rank") => self.rank(),
+            Some("analyze") | Some("layout") | Some("a") => {
+                if let Some(name_or_nr) = opts.next_positional() {
+                    if let Ok(nr) = usize::from_str_radix(name_or_nr, 10) {
+                        if let Some(layout) = self.get_nth(nr) {
+                            self.analyze(&layout);
+                        }
+                    } else {
+                        self.analyze_name(name_or_nr);
+                    }
+                } else {
+                    print_error("analyze", &[R("name or number")]);
+                }
             }
-            Some(("compare", new_m)) => {
-                let layout1 = new_m.value_of("LAYOUT_1").unwrap();
-                let layout2 = new_m.value_of("LAYOUT_2").unwrap();
-                self.compare_name(layout1, layout2);
+            Some("compare") | Some("c") | Some("comp") | Some("cmopare") | Some("comprae") => {
+                if let Some(layout1) = opts.next_positional()
+                && let Some(layout2) = opts.next_positional() {
+                    self.compare_name(layout1, layout2);
+                } else {
+                    print_error("compare", &[R("layout 1"), R("layout 2")]);
+                }
             }
-            Some(("language", lang_m)) => {
+            Some("ngram") | Some("occ") | Some("n") => {
+                if let Some(ngram) = opts.next_positional() {
+                    println!("{}", get_ngram_info(&self.gen.data, ngram));
+                } else {
+                    print_error("ngram", &[R("ngram")]);
+                }
+            }
+            Some("load") => {
+                if let Some(language) = opts.next_positional() {
+                    load_text::load_default(language);
+                }
+            }
+            Some("language") | Some("lanugage") | Some("langauge") | Some("lang") | Some("l") => {
                 let config = Config::new();
-
-                match lang_m.value_of("LANGUAGE") {
+                match opts.next_positional() {
                     Some(language) => {
                         if let Ok(generator) = LayoutGeneration::new(
                             language,
@@ -312,23 +312,18 @@ impl Repl {
                             self.language = language.to_string();
                             self.gen = generator;
                             
-                            let double_freq = self.gen.data.bigrams
-                                .iter()
-                                .filter(|(bg, _)| bg[0] == bg[1] )
-                                .map(|(_, &f)| f)
-                                .sum::<f64>();
                             println!(
                                 "Set language to {}. Sfr: {:.2}%",
-                                language, double_freq * 100.0
+                                language, self.double_freq() * 100.0
                             );
                         } else {
                             println!("Could not load {}", language);
                         }
-                    },
+                    }
                     None => println!("Current language: {}", self.language)
                 }
             }
-            Some(("languages", _)) => {
+            Some("languages") | Some("langs") => {
                 for entry in std::fs::read_dir("static/language_data").unwrap() {
                     if let Ok(p) = entry {
                         let name = p
@@ -342,7 +337,7 @@ impl Repl {
                     }
                 }
             }
-            Some(("reload", _)) => {
+            Some("reload") | Some("r") => {
                 let config = Config::new();
 
                 if let Ok(generator) = LayoutGeneration::new(
@@ -357,167 +352,145 @@ impl Repl {
                     println!("Could not load {}", self.language);
                 }
             }
-            Some(("save", save_m)) => {
-                self.save_match(save_m);
-            }
-            Some(("load", load_m)) => {
-                if let Some(language) = load_m.value_of("LANGUAGE") {
-                    load_text::load_default(language);
+            Some("save") | Some("s") => {
+                if let Some(n_str) = opts.next_positional()
+                && let Ok(nr) = usize::from_str_radix(n_str, 10) {
+                    if let Some(layout) = self.get_nth(nr) {
+                        let name = opts.next_positional().map(str::to_string);
+                        self.save(layout, name).unwrap();
+                    }
+                } else {
+                    print_error("save", &[R("index"), O("name")])
                 }
             }
-            Some(("quit", _)) => {
-                println!("Exiting anlyzer...");
-                return Ok(true);
+            Some("quit") | Some("exit") | Some("q") => {
+                println!("Exiting analyzer...");
+                return Ok(true)
             }
-            Some((name, _new_m)) => println!("{name} is not a valid command!"),
-            None => unreachable!("subcommand required"),
+            Some("help") | Some("--help") | Some("h") | Some("-h") => {
+                match opts.next_positional() {
+                    Some("generate") | Some("gen") | Some("g") => {
+                        print_help(
+                            "generate", 
+                            "(g, gen) Generate a number of layouts and shows the best 10, All layouts generated are accessible until reloading or quiting.",
+                            &[R("amount")]
+                        )
+                    }
+                    Some("improve") | Some("i") => {
+                        print_help(
+                            "improve",
+                            "(i) Save the top <number> result that was generated.",
+                            &[R("name"), R("amount")]
+                        )
+                    }
+                    Some("rank") => {
+                        print_help(
+                            "rank",
+                            "(sort) Rank all layouts in set language by score using values set from 'config.toml'",
+                            &[]
+                        )
+                    }
+                    Some("analyze") | Some("layout") | Some("a") => {
+                        print_help(
+                            "analyze",
+                            "(a, layout) Show details of layout.",
+                            &[R("name or number")]
+                        )
+                    }
+                    Some("compare") | Some("c") | Some("cmp") | Some("cmopare") | Some("comprae") => {
+                        print_help(
+                            "compare",
+                            "(c, cmp) Compare 2 layouts.",
+                            &[R("layout 1"), R("layout 2")]
+                        )
+                    }
+                    Some("ngram") | Some("occ") | Some("n") => {
+                        print_help(
+                            "ngram",
+                            "(n, occ) Gives information about a certain ngram. for 2 letter ones, skipgram info will be provided as well.",
+                            &[R("ngram")]
+                        )
+                    }
+                    Some("load") => {
+                        print_help(
+                            "load",
+                            "Generates corpus for <language>. Will be include everything but spaces if the language is not known.",
+                            &[R("language")]
+                        )
+                    }
+                    Some("language") | Some("lanugage") | Some("langauge") | Some("lang") | Some("l") => {
+                        print_help(
+                            "language",
+                            "(l, lang) Sets a language to be used for analysis.",
+                            &[R("language")]
+                        )
+                    }
+                    Some("languages") | Some("langs") => {
+                        print_help(
+                            "languages",
+                            "(langs) Shows available languages.",
+                            &[]
+                        )
+                    }
+                    Some("reload") | Some("r") => {
+                        print_help(
+                            "reload",
+                            "(r) Reloads all data with the current language. Loses temporary layouts.",
+                            &[]
+                        )
+                    }
+                    Some("save") | Some("s") => {
+                        print_help(
+                            "save",
+                            "(s) Saves the top <number> result that was generated. Starts from 1 up to the number generated.",
+                            &[R("index"), O("name")]
+                        )
+                    }
+                    Some("quit") | Some("exit") | Some("q") => {
+                        print_help(
+                            "quit",
+                            "(q) Quit the repl",
+                            &[]
+                        )
+                    }
+                    Some("help") | Some("--help") | Some("h") | Some("-h") => {
+                        print_help(
+                            "help",
+                            "Print this message or the help of the given subcommand(s)",
+                            &[O("subcommand")]
+                        )
+                    }
+                    Some(c) => println!("error: the subcommand '{c}' wasn't recognized"),
+                    None => {
+                        println!(concat!(
+                            "commands:",
+                            "    analyze      (a, layout) Show details of layout\n",
+                            "    compare      (c, comp) Compare 2 layouts\n",
+                            "    generate     (g, gen) Generate a number of layouts and shows the best 10, All layouts\n",
+                            "                     generated are accessible until reloading or quiting.\n",
+                            "    help         Print this message or the help of the given subcommand(s)\n",
+                            "    improve      (i, optimize) Save the top <NR> result that was generated. Starts from 1, Takes\n",
+                            "                     negative values\n",
+                            "    language     (l, lang) Set a language to be used for analysis. Loads corpus when not present\n",
+                            "    languages    (langs) Show available languages\n",
+                            "    load         Generates corpus for <language>. Will be exclude spaces from source if the\n",
+                            "                     language isn't known\n",
+                            "    ngram        (occ) Gives information about a certain ngram. for 2 letter ones, skipgram info\n",
+                            "                     will be provided as well.\n",
+                            "    quit         (q) Quit the repl\n",
+                            "    rank         (sort) Rank all layouts in set language by score using values set from\n",
+                            "                     'config.toml'\n",
+                            "    reload       (r) Reloads all data with the current language. Loses temporary layouts.\n",
+                            "    save         (s) Save the top <NR> result that was generated. Starts from 1 up to the number\n",
+                            "                     generated, Takes negative values\n"
+                        ));
+                    }
+                }
+            }
+            Some(c) => println!("error: the command '{c}' wasn't recognized"),
+            None => {}
         }
-
+        
         Ok(false)
     }
-
-    fn cli(&self) -> Command<'static> {
-        // strip out usage
-        const REPL_TEMPLATE: &str = "\
-            {all-args}
-        ";
-        // strip out name/version
-        const COMMAND_TEMPLATE: &str = "\
-            {about-with-newline}\n\
-            {usage-heading}\n    {usage}\n\
-            \n\
-            {all-args}{after-help}\
-        ";
-
-        command!("repl")
-            .multicall(true)
-            .arg_required_else_help(true)
-            .subcommand_required(true)
-            .subcommand_value_name("APPLET")
-            .subcommand_help_heading("APPLETS")
-            .help_template(REPL_TEMPLATE)
-            .subcommand(
-                command!("rank")
-                    .alias("sort")
-                    .about("(sort) Rank all layouts in set language by score using values set from 'config.toml'")
-                    .help_template(COMMAND_TEMPLATE),
-            )
-            .subcommand(
-                command!("analyze")
-                    .aliases(&["a", "layout"])
-                    .arg(
-                        arg!(<LAYOUT_NAME_OR_NR>)
-                    )
-                    .about("(a, layout) Show details of layout")
-                    .help_template(COMMAND_TEMPLATE)
-            )
-            .subcommand(
-                command!("compare")
-                    .aliases(&["c", "comp", "cmopare", "comprae"])
-                    .arg(
-                        arg!(<LAYOUT_1>)
-                    )
-                    .arg(
-                        arg!(<LAYOUT_2>)
-                    )
-                    .about("(c, comp) Compare 2 layouts")
-                    .help_template(COMMAND_TEMPLATE)
-            )
-            .subcommand(
-                command!("language")
-                    .aliases(&["l", "lang", "lanugage", "langauge"])
-                    .arg(
-                        arg!([LANGUAGE])
-                    )
-                    .help_template(COMMAND_TEMPLATE)
-                    .about("(l, lang) Set a language to be used for analysis. Loads corpus when not present")
-            )
-            .subcommand(
-                command!("languages")
-                .aliases(&["langs", "lanugages", "langauges"])
-                .help_template(COMMAND_TEMPLATE)
-                .about("(langs) Show available languages")
-            )
-            .subcommand(
-                command!("ngram")
-                .aliases(&["n","occ"])
-                .help_template(COMMAND_TEMPLATE) 
-                .arg(
-                        arg!(<NGRAM>)
-                )
-                .about("(occ) Gives information about a certain ngram. for 2 letter ones, skipgram info will be provided as well.")
-            )
-            .subcommand(
-                command!("reload")
-                .alias("r")
-                .help_template(COMMAND_TEMPLATE)
-                .about("(r) Reloads all data with the current language. Loses temporary layouts. ")
-            )
-            .subcommand(
-                command!("generate")
-                    .aliases(&["g", "gen"])
-                    .arg(
-                        arg!(<COUNT>)
-                    )
-                    .help_template(COMMAND_TEMPLATE)
-                    .about("(g, gen) Generate a number of layouts and shows the best 10, All layouts generated are accessible until reloading or quiting. ")
-            )
-            .subcommand(
-                command!("improve")
-                    .aliases(&["i", "optimize"])
-                    .arg(
-                        arg!(<LAYOUT_NAME>)
-                    )
-                    .arg(
-                        arg!(<AMOUNT>)
-                    )
-                    .help_template(COMMAND_TEMPLATE)
-                    .about("(i, optimize) Save the top <NR> result that was generated. Starts from 1, Takes negative values")
-            )
-            .subcommand(
-                command!("save")
-                .alias("s")
-                .arg(
-                    arg!(<NR>)
-                )
-                .arg(
-                    arg!([NAME])
-                )
-                .help_template(COMMAND_TEMPLATE)
-                .about("(s) Save the top <NR> result that was generated. Starts from 1 up to the number generated, Takes negative values")
-            )
-            .subcommand(
-                command!("load")
-                .arg(
-                    arg!(<LANGUAGE>)
-                )
-                .help_template(COMMAND_TEMPLATE)
-                .about("Generates corpus for <language>. Will be exclude spaces from source if the language isn't known")
-            )
-            // .subcommand(
-            //     command!("passthrough")
-            //     .alias("pass")
-            //     .arg(
-            //         arg!(<LANGUAGE>)
-            //     )
-            //     .help_template(COMMAND_TEMPLATE)
-            //     .about("Loads corpus as passthrough for <language> in static/language_data_pass")
-            // )
-            .subcommand(
-                command!("quit")
-                    .aliases(&["exit","q"])
-                    .about("(q) Quit the repl")
-                    .help_template(COMMAND_TEMPLATE),
-            )
-    }
-}
-
-fn readline() -> Result<String, String> {
-    write!(std::io::stdout(), "> ").map_err(|e| e.to_string())?;
-    std::io::stdout().flush().map_err(|e| e.to_string())?;
-    let mut buf = String::new();
-    std::io::stdin()
-        .read_line(&mut buf)
-        .map_err(|e| e.to_string())?;
-    Ok(buf)
 }

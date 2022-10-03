@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use oxeylyzer::generate::LayoutGeneration;
 use oxeylyzer::language_data::LanguageData;
 use oxeylyzer::rayon::iter::ParallelIterator;
@@ -5,6 +7,16 @@ use oxeylyzer::layout::*;
 
 use ansi_rgb::{rgb, Colorable};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+
+pub fn readline() -> Result<String, String> {
+    write!(std::io::stdout(), "> ").map_err(|e| e.to_string())?;
+    std::io::stdout().flush().map_err(|e| e.to_string())?;
+    let mut buf = String::new();
+    std::io::stdin()
+        .read_line(&mut buf)
+        .map_err(|e| e.to_string())?;
+    Ok(buf)
+}
 
 pub fn heatmap_heat(data: &LanguageData, c: &char) -> String {
     let complement = 215.0 - *data.characters.get(c).unwrap_or_else(|| &0.0) * 1720.0;
@@ -41,7 +53,7 @@ pub fn generate_n_with_pins(
     
     let pb = ProgressBar::new(amount as u64);
     pb.set_style(ProgressStyle::default_bar()
-        .template("[{elapsed_precise}] [{wide_bar:white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
+        .template("[{elapsed_precise}] [{wide_bar:.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
         .expect("couldn't initialize the progress bar template")
         .progress_chars("=>-"));
 
@@ -125,4 +137,54 @@ pub fn get_ngram_info(data: &LanguageData, ngram: &str) -> String {
         }
         _ => "Invalid ngram! It must be 1, 2 or 3 chars long.".to_string()
     }
+}
+
+pub(crate) enum ArgumentType<'a> {
+    R(&'a str),
+    O(&'a str)
+}
+
+impl<'a> ArgumentType<'a> {
+    pub(crate) fn is_required(&self) -> bool {
+        match *self {
+            Self::R(_) => true,
+            Self::O(_) => false
+        }
+    }
+
+    pub(crate) fn parse(&self) -> String {
+        match *self {
+            Self::R(s) => format!("<{s}>"),
+            Self::O(s) => format!("[{s}]")
+        }
+    }
+}
+
+fn usage(command_name: &str, args: &[ArgumentType]) -> String {
+    let args_left_right = args.into_iter()
+        .map(ArgumentType::parse)
+        .collect::<Vec<_>>()
+        .join(" ");
+    
+    format!("USAGE:\n    {command_name} {args_left_right}")
+}
+
+pub(crate) fn print_help(command_name: &str, about: &str, args: &[ArgumentType]) {
+    println!("{about}\n\n{}\n", usage(command_name, args));
+}
+
+pub(crate) fn print_error(command_name: &str, args: &[ArgumentType]) {
+    let plural = if args.len() > 1 { "s were" } else { " was" };
+    
+    let args_top_down = args.into_iter()
+        .filter(|a| a.is_required())
+        .map(ArgumentType::parse)
+        .collect::<Vec<_>>()
+        .join("\n    ");
+
+    println!(concat!(
+        "error: The following required argument{} not provided:\n    {}\n\n{}",
+        "\n\nFor more information try 'help'"),
+        plural, args_top_down, usage(command_name, args)
+    );
 }

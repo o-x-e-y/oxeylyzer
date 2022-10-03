@@ -1,1 +1,2 @@
-1.75
+
+# rustflags = ["-Z", "share-generics=y"]
