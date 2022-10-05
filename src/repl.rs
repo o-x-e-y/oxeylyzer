@@ -11,6 +11,7 @@ use oxeylyzer::{
 };
 
 use crate::tui::*;
+use crate::commands::*;
 use ArgumentType::*;
 
 pub struct Repl {
@@ -56,7 +57,7 @@ impl Repl {
                 continue;
             }
 
-            match env.respond2(line) {
+            match env.respond(line) {
                 Ok(true) => break,
                 Ok(false) => continue,
                 Err(err) => {
@@ -199,8 +200,8 @@ impl Repl {
 		),
 			format!("{:.3}%", s1.sfb*100.0), s2.sfb*100.0,
 			format!("{:.3}%", s1.dsfb*100.0), s2.dsfb*100.0,
-			format!("{:.3}%", s1.fspeed * 100.0), s2.fspeed * 100.0,
-			format!("{:.3}", s1.scissors*100.0), s2.scissors*100.0,
+			format!("{:.3}", s1.fspeed*10.0), s2.fspeed*10.0,
+			format!("{:.3}%", s1.scissors*100.0), s2.scissors*100.0,
 			format!("{:.2}%", ts1.inrolls*100.0), ts2.inrolls*100.0,
 			format!("{:.2}%", ts1.outrolls*100.0), ts2.outrolls*100.0,
 			format!("{:.2}%", (ts1.inrolls + ts1.outrolls)*100.0), (ts2.inrolls + ts2.outrolls)*100.0,
@@ -239,7 +240,7 @@ impl Repl {
             .sum::<f64>()
     }
 
-    fn respond2(&mut self, line: &str) -> Result<bool, String> {
+    fn respond(&mut self, line: &str) -> Result<bool, String> {
         let args = shlex::split(line).ok_or("error: Invalid quoting")?;
         let mut opts = Options::new(args.iter().map(String::as_str));
         match opts.next_positional() {
@@ -257,7 +258,7 @@ impl Repl {
                 && let Some(amount_str) = opts.next_positional()
                 && let Ok(amount) = usize::from_str_radix(amount_str, 10) {
                     if let Some(l) = self.layout_by_name(name) {
-                        generate_n_with_pins(&self.gen, amount, l.clone(), &self.pins);
+                        self.temp_generated = generate_n_with_pins(&self.gen, amount, l.clone(), &self.pins);
                     } else {
                         println!("'{name}' does not exist!")
                     }
@@ -311,6 +312,10 @@ impl Repl {
                         ) {
                             self.language = language.to_string();
                             self.gen = generator;
+                            self.saved = self.gen.load_layouts(
+                                "static/layouts",
+                                language
+                            ).expect("couldn't load layouts lol");
                             
                             println!(
                                 "Set language to {}. Sfr: {:.2}%",
@@ -348,6 +353,10 @@ impl Repl {
                 ) {
                     self.gen = generator;
                     self.pins = config.pins;
+                    self.saved = self.gen.load_layouts(
+                        "static/layouts",
+                        self.language.as_str()
+                    ).expect("couldn't load layouts lol");
                 } else {
                     println!("Could not load {}", self.language);
                 }
@@ -442,7 +451,7 @@ impl Repl {
                     Some("save") | Some("s") => {
                         print_help(
                             "save",
-                            "(s) Saves the top <number> result that was generated. Starts from 1 up to the number generated.",
+                            "(s) Saves the top <number> result that was generated. Starts from 0 up to the number generated.",
                             &[R("index"), O("name")]
                         )
                     }
@@ -463,7 +472,7 @@ impl Repl {
                     Some(c) => println!("error: the subcommand '{c}' wasn't recognized"),
                     None => {
                         println!(concat!(
-                            "commands:",
+                            "commands:\n",
                             "    analyze      (a, layout) Show details of layout\n",
                             "    compare      (c, comp) Compare 2 layouts\n",
                             "    generate     (g, gen) Generate a number of layouts and shows the best 10, All layouts\n",

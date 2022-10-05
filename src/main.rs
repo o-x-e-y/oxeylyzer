@@ -4,6 +4,7 @@
 
 mod repl;
 mod tui;
+mod commands;
 
 fn main() -> Result<(), String> {
 	repl::Repl::run()
