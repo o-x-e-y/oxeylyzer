@@ -10,8 +10,8 @@ trigram_precision = 1000
 
 [weights]
 heatmap = 1.5
-lateral_penalty = 1.0
 fspeed = 14.0
+lateral_penalty = 1.0
 dsfb_ratio = 0.11
 scissors = 6.0
 inrolls = 1.5
