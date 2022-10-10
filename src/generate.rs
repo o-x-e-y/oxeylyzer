@@ -481,25 +481,31 @@ impl LayoutGeneration {
 	}
 
 	#[inline]
+	fn pair_fspeed(&self, layout: &FastLayout, PosPair(i1, i2): &PosPair, dist: f64) -> f64 {
+		let c1 = unsafe { layout.cu(*i1) };
+		let c2 = unsafe { layout.cu(*i2) };
+		let mut res = 0.0;
+
+		res += self.weighted_bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
+		res += self.weighted_bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
+		res
+	}
+
+	#[inline(always)]
 	pub(self) const unsafe fn col_to_start_len(col: usize) -> (usize, usize) {
 		*[(0, 3), (3, 3), (6, 3), (18, 15), (33, 15), (9, 3), (12, 3), (15, 3)].get_unchecked(col)
 	}
 
+	#[inline]
 	fn col_fspeed(&self, layout: &FastLayout, col: usize) -> f64 {
 		let (start, len) = unsafe { Self::col_to_start_len(col) };
-
 		let mut res = 0.0;
 
 		for i in start..(start+len) {
-			let (PosPair(i1, i2), dist) = self.fspeed_vals[i];
+			let (pair, dist) = unsafe { self.fspeed_vals.get_unchecked(i) };
 
-			let c1 = unsafe { layout.cu(i1) };
-			let c2 = unsafe { layout.cu(i2) };
-
-			res += self.weighted_bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
-			res += self.weighted_bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
+			res += self.pair_fspeed(layout, pair, *dist);
 		}
-
 		res
 	}
 
