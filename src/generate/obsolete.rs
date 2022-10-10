@@ -26,6 +26,39 @@ impl LayoutGeneration {
     }
 
     #[allow(dead_code)]
+    fn col_fspeed_before(&self, layout: &FastLayout, col: usize) -> f64 {
+		let (start, len) = unsafe { Self::col_to_start_len(col) };
+
+		let mut res = 0.0;
+		let dsfb_ratio = self.weights.dsfb_ratio;
+		let dsfb_ratio2 = self.weights.dsfb_ratio2;
+		let dsfb_ratio3 = self.weights.dsfb_ratio3;
+
+		for i in start..(start+len) {
+			let (PosPair(i1, i2), dist) = self.fspeed_vals[i];
+
+			let c1 = unsafe { layout.cu(i1) };
+			let c2 = unsafe { layout.cu(i2) };
+
+			let (pair, rev) = ([c1, c2], [c2, c1]);
+
+			res += self.data.bigrams.get(&pair).unwrap_or_else(|| &0.0) * dist;
+			res += self.data.bigrams.get(&rev).unwrap_or_else(|| &0.0) * dist;
+
+			res += self.data.skipgrams.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			res += self.data.skipgrams.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+
+			res += self.data.skipgrams2.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio2;
+			res += self.data.skipgrams2.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio2;
+
+			res += self.data.skipgrams3.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio3;
+			res += self.data.skipgrams3.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio3;
+		}
+
+		res * self.weights.fspeed
+	}
+
+    #[allow(dead_code)]
     pub(crate) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> f64 {
         unsafe { layout.swap_pair_no_bounds(swap) };
         let score = self.score_with_precision(&layout, 1000);

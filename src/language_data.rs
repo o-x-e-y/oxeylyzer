@@ -63,6 +63,7 @@ pub struct LanguageData {
 	pub skipgrams: BigramData,
 	pub skipgrams2: BigramData,
 	pub skipgrams3: BigramData,
+	pub weighted_bigrams: BigramData,
 	pub trigrams: TrigramData,
 	pub language: String
 }
@@ -76,10 +77,13 @@ impl From<LanguageDataInter> for LanguageData {
 		let skipgrams2 = inter.get_bigram_data(&inter.skipgrams2);
 		let skipgrams3 = inter.get_bigram_data(&inter.skipgrams3);
 
+		let weighted_bigrams = FxHashMap::default();
+
 		let trigrams = inter.get_trigram_data(&inter.trigrams);
 
 		Self {
-			characters, bigrams, skipgrams, skipgrams2, skipgrams3, trigrams, language: inter.language,
+			characters, bigrams, skipgrams, skipgrams2, skipgrams3,
+			weighted_bigrams, trigrams, language: inter.language,
 		}
 	}
 }

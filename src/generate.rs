@@ -3,13 +3,14 @@ use std::path::Path;
 
 use fxhash::FxHashMap;
 use indexmap::IndexMap;
+use itertools::Itertools;
 use smallmap::Map;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use anyhow::Result;
 
 use crate::utility::*;
 use crate::trigram_patterns::TrigramPattern;
-use crate::language_data::{TrigramData, LanguageData};
+use crate::language_data::{BigramData, TrigramData, LanguageData};
 use crate::layout::*;
 use crate::weights::{Weights, Config};
 
@@ -181,10 +182,11 @@ pub struct LayoutGeneration {
 	scissor_indices: [PosPair; 15],
 	i_to_col: [usize; 30],
 
+	weighted_bigrams: BigramData,
+	per_char_trigrams: PerCharTrigrams,
+
 	pub weights: Weights,
 	pub layouts: IndexMap<String, FastLayout>,
-	pub per_char_trigrams: PerCharTrigrams,
-	//pub analysis: LayoutAnalysis,
 }
 
 impl LayoutGeneration {
@@ -209,6 +211,7 @@ impl LayoutGeneration {
 				Self {
 					language: language.to_string(),
 					chars_for_generation,
+					weighted_bigrams: Self::weighted_bigrams(&data, &weights),
 					per_char_trigrams: Self::per_char_trigrams(
 						&data.trigrams,
 						possible_chars.as_ref(),
@@ -342,6 +345,24 @@ impl LayoutGeneration {
 		trigram_score - effort - fspeed_usage - scissors
 	}
 
+	fn weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
+		let chars = data.characters.iter()
+			.map(|(c, _)| *c)
+			.collect::<Vec<char>>();
+		
+		chars.iter().cartesian_product(chars.iter())
+			.map(|(&c1, &c2)| {
+				let bigram = [c1, c2];
+				let sfb = data.bigrams.get(&bigram).unwrap_or(&0.0);
+				let dsfb = data.skipgrams.get(&bigram).unwrap_or(&0.0) * weights.dsfb_ratio;
+				let dsfb2 = data.skipgrams2.get(&bigram).unwrap_or(&0.0) * weights.dsfb_ratio2;
+				let dsfb3 = data.skipgrams3.get(&bigram).unwrap_or(&0.0) * weights.dsfb_ratio3;
+				(bigram, (sfb + dsfb + dsfb2 + dsfb3) * weights.fspeed)
+			})
+			.filter(|(_, f)| *f != 0.0)
+			.collect()
+	}
+
 	fn per_char_trigrams(trigrams: &TrigramData, possible: &[char], trigram_precision: usize) -> PerCharTrigrams {
 		let mut n_trigrams = trigrams.clone();
 		n_trigrams.truncate(trigram_precision);
@@ -468,9 +489,6 @@ impl LayoutGeneration {
 		let (start, len) = unsafe { Self::col_to_start_len(col) };
 
 		let mut res = 0.0;
-		let dsfb_ratio = self.weights.dsfb_ratio;
-		let dsfb_ratio2 = self.weights.dsfb_ratio2;
-		let dsfb_ratio3 = self.weights.dsfb_ratio3;
 
 		for i in start..(start+len) {
 			let (PosPair(i1, i2), dist) = self.fspeed_vals[i];
@@ -478,22 +496,11 @@ impl LayoutGeneration {
 			let c1 = unsafe { layout.cu(i1) };
 			let c2 = unsafe { layout.cu(i2) };
 
-			let (pair, rev) = ([c1, c2], [c2, c1]);
-
-			res += self.data.bigrams.get(&pair).unwrap_or_else(|| &0.0) * dist;
-			res += self.data.bigrams.get(&rev).unwrap_or_else(|| &0.0) * dist;
-
-			res += self.data.skipgrams.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
-			res += self.data.skipgrams.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
-
-			res += self.data.skipgrams2.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio2;
-			res += self.data.skipgrams2.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio2;
-
-			res += self.data.skipgrams3.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio3;
-			res += self.data.skipgrams3.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio3;
+			res += self.weighted_bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
+			res += self.weighted_bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0) * dist;
 		}
 
-		res * self.weights.fspeed
+		res
 	}
 
 	#[inline]
@@ -782,8 +789,9 @@ use nanorand::Rng;
 	fn cached_totals() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		let mut cache = GEN.initialize_cache(&qwerty);
+		let mut rng = nanorand::tls_rng();
 
-		for swap in POSSIBLE_SWAPS.iter().cycle().take(10000) {
+		for swap in (0..).map(|_| &POSSIBLE_SWAPS[rng.generate_range(0..435)]).take(10000) {
 			GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
 			assert!(cache.scissors.approx_eq_dbg(GEN.scissor_score(&qwerty), 7));
@@ -816,12 +824,11 @@ use nanorand::Rng;
 	}
 
 	#[test]
-	fn score_arbitrary_swaps() {
+	fn score_swaps_no_accept() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		let mut cache = GEN.initialize_cache(&qwerty);
-		let mut rng = nanorand::tls_rng();
 
-		for swap in (0..).map(|_| &POSSIBLE_SWAPS[rng.generate_range(0..435)]).take(10000) {
+		for swap in POSSIBLE_SWAPS.iter() {
 			let score_normal = GEN.score_swap(&mut qwerty, swap);
 			let score_cached = GEN.score_swap_cached(&mut qwerty, swap, &mut cache);
 		
