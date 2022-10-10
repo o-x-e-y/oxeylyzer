@@ -1,7 +1,7 @@
 #![feature(fs_try_exists)]
 #![feature(exclusive_range_pattern)]
 #![feature(let_chains)]
-#![feature(is_some_with, const_slice_index)]
+#![feature(const_slice_index)]
 
 pub mod language_data;
 pub mod load_text;

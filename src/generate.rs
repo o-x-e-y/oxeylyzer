@@ -481,9 +481,9 @@ impl LayoutGeneration {
 	}
 
 	#[inline]
-	fn pair_fspeed(&self, layout: &FastLayout, PosPair(i1, i2): &PosPair, dist: f64) -> f64 {
-		let c1 = unsafe { layout.cu(*i1) };
-		let c2 = unsafe { layout.cu(*i2) };
+	fn pair_fspeed(&self, layout: &FastLayout, pair: &PosPair, dist: f64) -> f64 {
+		let c1 = unsafe { layout.cu(pair.0) };
+		let c2 = unsafe { layout.cu(pair.1) };
 		let mut res = 0.0;
 
 		res += self.weighted_bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0) * dist;
@@ -540,114 +540,121 @@ impl LayoutGeneration {
 	}
 
 	fn score_swap_cached(&self, layout: &mut FastLayout, swap: &PosPair, cache: &LayoutCache) -> f64 {
-		let trigrams_start = self.trigram_char_score(layout, swap);
+		unsafe {
+			let trigrams_start = self.trigram_char_score(layout, swap);
 
-		unsafe { layout.swap_pair_no_bounds(swap) };
+			layout.swap_pair_no_bounds(swap);
 
-		let PosPair(i1, i2) = *swap;
+			let PosPair(i1, i2) = *swap;
 
-		let col1 = self.i_to_col[i1];
-		let col2 = self.i_to_col[i2];
+			let col1 = *self.i_to_col.get_unchecked(i1);
+			let col2 = *self.i_to_col.get_unchecked(i2);
 
-		let fspeed_score = if col1 == col2 {
-			let fspeed = self.col_fspeed(layout, col1);
-			let new = cache.fspeed_total - cache.fspeed[col1] + fspeed;
+			let fspeed_score = if col1 == col2 {
+				let fspeed = self.col_fspeed(layout, col1);
+				let new = cache.fspeed_total - cache.fspeed.get_unchecked(col1) + fspeed;
 
-			new
-		} else {
-			let fspeed1 = self.col_fspeed(layout, col1);
-			let fspeed2 = self.col_fspeed(layout, col2);
-			let new = cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + fspeed1 + fspeed2;
-			
-			new
-		};
+				new
+			} else {
+				let fspeed1 = self.col_fspeed(layout, col1);
+				let fspeed2 = self.col_fspeed(layout, col2);
+				cache.fspeed_total - cache.fspeed.get_unchecked(col1)
+					- cache.fspeed.get_unchecked(col2) + fspeed1 + fspeed2
+			};
 
-		let usage_score = if col1 == col2 {
-			let usage = self.col_usage(layout, col1);
-			cache.usage_total - cache.usage[col1] + usage
-		} else {
-			let usage1 = self.col_usage(layout, col1);
-			let usage2 = self.col_usage(layout, col2);
-			cache.usage_total - cache.usage[col1] - cache.usage[col2] + usage1 + usage2
-		};
+			let usage_score = if col1 == col2 {
+				let usage = self.col_usage(layout, col1);
+				cache.usage_total - cache.usage.get_unchecked(col1) + usage
+			} else {
+				let usage1 = self.col_usage(layout, col1);
+				let usage2 = self.col_usage(layout, col2);
+				cache.usage_total - cache.usage.get_unchecked(col1)
+					- cache.usage.get_unchecked(col2) + usage1 + usage2
+			};
 
-		let effort1 = self.char_effort(layout, i1);
-		let effort2 = self.char_effort(layout, i2);
-		let effort_score = cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
+			let effort1 = self.char_effort(layout, i1);
+			let effort2 = self.char_effort(layout, i2);
+			let effort_score = cache.effort_total - cache.effort.get_unchecked(i1)
+				- cache.effort.get_unchecked(i2) + effort1 + effort2;
 
-		let trigrams_end = self.trigram_char_score(layout, &swap);
-		let trigrams_score = cache.trigrams_total - trigrams_start + trigrams_end;
+			let trigrams_end = self.trigram_char_score(layout, &swap);
+			let trigrams_score = cache.trigrams_total - trigrams_start + trigrams_end;
 
-		let scissors_score = if swap.affects_scissor() {
-			self.scissor_score(layout)
-		} else {
-			cache.scissors
-		};
+			let scissors_score = if swap.affects_scissor() {
+				self.scissor_score(layout)
+			} else {
+				cache.scissors
+			};
 
-		unsafe { layout.swap_pair_no_bounds(swap) };
+			layout.swap_pair_no_bounds(swap);
 
-		trigrams_score - scissors_score - effort_score - usage_score - fspeed_score
-
+			trigrams_score - scissors_score - effort_score - usage_score - fspeed_score
+		}
 	}
 
 	fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
-		let trigrams_start = self.trigram_char_score(layout, swap);
+		unsafe {
+			let trigrams_start = self.trigram_char_score(layout, swap);
 
-		unsafe { layout.swap_pair_no_bounds(swap) };
+			layout.swap_pair_no_bounds(swap);
 
-		let PosPair(i1, i2) = *swap;
+			let PosPair(i1, i2) = *swap;
 
-		let col1 = self.i_to_col[i1];
-		let col2 = self.i_to_col[i2];
+			let col1 = *self.i_to_col.get_unchecked(i1);
+			let col2 = *self.i_to_col.get_unchecked(i2);
 
-		cache.fspeed_total = if col1 == col2 {
-			let fspeed = self.col_fspeed(layout, col1);
-			let total = cache.fspeed_total - cache.fspeed[col1] + fspeed;
+			cache.fspeed_total = if col1 == col2 {
+				let fspeed = self.col_fspeed(layout, col1);
+				let total = cache.fspeed_total - cache.fspeed.get_unchecked(col1) + fspeed;
 
-			cache.fspeed[col1] = fspeed;
+				*cache.fspeed.get_unchecked_mut(col1) = fspeed;
 
-			total
-		} else {
-			let fspeed1 = self.col_fspeed(layout, col1);
-			let fspeed2 = self.col_fspeed(layout, col2);
-			let total = cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2]
-				+ fspeed1 + fspeed2;
+				total
+			} else {
+				let fspeed1 = self.col_fspeed(layout, col1);
+				let fspeed2 = self.col_fspeed(layout, col2);
+				let total = cache.fspeed_total - cache.fspeed.get_unchecked(col1)
+				- cache.fspeed.get_unchecked(col2) + fspeed1 + fspeed2;
 
-			cache.fspeed[col1] = fspeed1;
-			cache.fspeed[col2] = fspeed2;
+				*cache.fspeed.get_unchecked_mut(col1) = fspeed1;
+				*cache.fspeed.get_unchecked_mut(col2) = fspeed2;
 
-			total
-		};
+				total
+			};
 
-		cache.usage_total = if col1 == col2 {
-			let usage = self.col_usage(layout, col1);
-			let total = cache.usage_total - cache.usage[col1] + usage;
+			cache.usage_total = if col1 == col2 {
+				let usage = self.col_usage(layout, col1);
+				let total = cache.usage_total - cache.usage.get_unchecked(col1) + usage;
 
-			cache.usage[col1] = usage;
+				*cache.usage.get_unchecked_mut(col1) = usage;
+				
+				total
+			} else {
+				let usage1 = self.col_usage(layout, col1);
+				let usage2 = self.col_usage(layout, col2);
+				let total = cache.usage_total - cache.usage.get_unchecked(col1)
+					- cache.usage.get_unchecked(col2) + usage1 + usage2;
+
+				*cache.usage.get_unchecked_mut(col1) = usage1;
+				*cache.usage.get_unchecked_mut(col2) = usage2;
+
+				total
+			};
+
+			let effort1 = self.char_effort(layout, i1);
+			let effort2 = self.char_effort(layout, i2);
+			cache.effort_total = cache.effort_total - cache.effort.get_unchecked(i1)
+				- cache.effort.get_unchecked(i2) + effort1 + effort2;
 			
-			total
-		} else {
-			let usage1 = self.col_usage(layout, col1);
-			let usage2 = self.col_usage(layout, col2);
-			let total = cache.usage_total - cache.usage[col1] - cache.usage[col2] + usage1 + usage2;
+			*cache.effort.get_unchecked_mut(i1) = effort1;
+			*cache.effort.get_unchecked_mut(i2) = effort2;
 
-			cache.usage[col1] = usage1;
-			cache.usage[col2] = usage2;
+			let trigrams_end = self.trigram_char_score(layout, &swap);
+			cache.trigrams_total = cache.trigrams_total - trigrams_start + trigrams_end;
 
-			total
-		};
-
-		let effort1 = self.char_effort(layout, i1);
-		let effort2 = self.char_effort(layout, i2);
-		cache.effort_total = cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
-		cache.effort[i1] = effort1;
-		cache.effort[i2] = effort2;
-
-		let trigrams_end = self.trigram_char_score(layout, &swap);
-		cache.trigrams_total = cache.trigrams_total - trigrams_start + trigrams_end;
-
-		if swap.affects_scissor() {
-			cache.scissors = self.scissor_score(layout);
+			if swap.affects_scissor() {
+				cache.scissors = self.scissor_score(layout);
+			}
 		}
 	}
 
@@ -789,6 +796,13 @@ use nanorand::Rng;
 
 	lazy_static!{
 		pub static ref GEN: LayoutGeneration = LayoutGeneration::new("english", "static", 1000, None).unwrap();
+	}
+
+	#[allow(dead_code)]
+	fn fspeed_per_pair() {
+		for (pair, dist) in GEN.fspeed_vals {
+			println!("({}, {}) <-> ({}, {}): {dist}", pair.0%10, pair.0/10, pair.1%10, pair.1/10);
+		}
 	}
 
 	#[test]
