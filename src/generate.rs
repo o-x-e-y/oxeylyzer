@@ -110,6 +110,8 @@ fn format_fspeed(finger_speed: &[f64]) -> String {
 pub struct LayoutStats {
 	pub sfb: f64,
 	pub dsfb: f64,
+	pub dsfb2: f64,
+	pub dsfb3: f64,
 	pub scissors: f64,
 	pub trigram_stats: TrigramStats,
 	pub fspeed: f64,
@@ -119,9 +121,10 @@ pub struct LayoutStats {
 impl std::fmt::Display for LayoutStats {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(
-			f, concat!("Sfb:  {:.3}%\nDsfb: {:.3}%\nFinger Speed: {:.3}\n",
-			"    [{}]\nScissors: {:.3}%\n\n{}"),
-			self.sfb * 100.0, self.dsfb * 100.0, self.fspeed * 10.0, format_fspeed(&self.finger_speed),
+			f, concat!("Sfb:  {:.3}%\nDsfb: {:.3}%\nDsfb2: {:.3}%\nDsfb3: {:.3}%\n",
+			"Finger Speed: {:.3}\n    [{}]\nScissors: {:.3}%\n\n{}"),
+			self.sfb * 100.0, self.dsfb * 100.0, self.dsfb2 * 100.0, self.dsfb3 * 100.0,
+			self.fspeed * 10.0, format_fspeed(&self.finger_speed),
 			self.scissors * 100.0, self.trigram_stats
 		)
 	}
@@ -279,13 +282,15 @@ impl LayoutGeneration {
 	pub fn get_layout_stats(&self, layout: &FastLayout) -> LayoutStats {
 		let sfb = self.bigram_percent(layout, "sfbs");
 		let dsfb = self.bigram_percent(layout, "skipgrams");
+		let dsfb2 = self.bigram_percent(layout, "skipgrams2");
+		let dsfb3 = self.bigram_percent(layout, "skipgrams3");
 		let cache = self.initialize_cache(layout);
 		let fspeed = cache.fspeed_total;
 		let finger_speed = cache.fspeed;
 		let scissors = self.scissor_score(layout) / self.weights.scissors;
 		let trigram_stats = self.trigram_stats(layout, usize::MAX);
 		
-		LayoutStats { sfb, dsfb, fspeed, finger_speed, scissors, trigram_stats }
+		LayoutStats { sfb, dsfb, dsfb2, dsfb3, fspeed, finger_speed, scissors, trigram_stats }
 	}
 
 	pub fn bigram_percent(&self, layout: &FastLayout, bigram_type: &str) -> f64 {
