@@ -72,7 +72,6 @@ pub fn get_effort_map(heatmap: f64) -> [f64; 30] {
 pub fn get_fspeed(lat_multiplier: f64) -> [(PosPair, f64); 48] {
     let mut res = Vec::new();
     for (b, dist) in get_sfb_indices().iter().zip(get_distances(lat_multiplier)) {
-		// println!("{}: {}", b, dist);
         res.push((*b, dist));
     }
     res.try_into().unwrap()
@@ -91,20 +90,14 @@ fn get_distances(lat_multiplier: f64) -> [f64; 48] {
         for c in [
 			(0, (0i32, 0)), (1, (0i32, 1)), (2, (0, 2)), (3, (1, 0)), (4, (1, 1)), (5, (1, 2))
 		].iter().combinations(2) {
-            let (_i1, xy1) = c[0];
-            let (_i2, xy2) = c[1];
+            let (_, xy1) = c[0];
+            let (_, xy2) = c[1];
 
-			// if i == 0 && (*i1 >= 4 && *i2 < 4 || *i2 >= 4 && *i1 < 4) && *i1 + *i2 != 9 {
-			// 	res.push(0.0);
-			// } else if i == 0 && *i1 + *i2 == 9 {
-			// 	res.push(3.5);
-			// } else {
-				let x_dist = (xy1.0 - xy2.0) as f64;
-				let y_dist = (xy1.1 - xy2.1) as f64;
-				let distance = (x_dist.powi(2)*lat_multiplier + y_dist.powi(2)).powf(0.65);
-				
-				res.push(distance);
-			// }
+			let x_dist = (xy1.0 - xy2.0) as f64;
+			let y_dist = (xy1.1 - xy2.1) as f64;
+			let distance = (x_dist.powi(2)*lat_multiplier + y_dist.powi(2)).powf(0.65);
+			
+			res.push(distance);
         }
     }
     res.try_into().unwrap()
