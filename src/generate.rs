@@ -460,17 +460,12 @@ impl LayoutGeneration {
 	}
 
 	#[inline]
-	pub(self) fn col_to_start_len(col: usize) -> (usize, usize) {
-		match col {
-			0 | 1 | 2 => (col * 3, 3),
-			3 | 4 => (18 + ((col - 3) * 15), 15),
-			5 | 6 | 7 => ((col - 2) * 3, 3),
-			_ => unsafe { unreachable_unchecked() }
-		}
+	pub(self) const unsafe fn col_to_start_len(col: usize) -> (usize, usize) {
+		*[(0, 3), (3, 3), (6, 3), (18, 15), (33, 15), (9, 3), (12, 3), (15, 3)].get_unchecked(col)
 	}
 
 	fn col_fspeed(&self, layout: &FastLayout, col: usize) -> f64 {
-		let (start, len) = Self::col_to_start_len(col);
+		let (start, len) = unsafe { Self::col_to_start_len(col) };
 
 		let mut res = 0.0;
 		let dsfb_ratio = self.weights.dsfb_ratio;
