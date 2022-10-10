@@ -771,6 +771,7 @@ mod obsolete;
 mod tests {
 	use super::*;
 	use lazy_static::lazy_static;
+use nanorand::Rng;
 	use crate::utility::ApproxEq;
 
 	lazy_static!{
@@ -778,19 +779,26 @@ mod tests {
 	}
 
 	#[test]
-	fn cached_scissors() {
+	fn cached_totals() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		let mut cache = GEN.initialize_cache(&qwerty);
 
-		for swap in POSSIBLE_SWAPS.iter() {
+		for swap in POSSIBLE_SWAPS.iter().cycle().take(10000) {
 			GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
-			assert!(cache.scissors.approx_equal_dbg(GEN.scissor_score(&qwerty), 7));
+			assert!(cache.scissors.approx_eq_dbg(GEN.scissor_score(&qwerty), 7));
+			assert!(cache.effort_total.approx_eq_dbg(GEN.effort_score(&qwerty), 7));
+			assert!(cache.usage_total.approx_eq_dbg(GEN.usage_score(&qwerty), 7));
+			assert!(cache.fspeed_total.approx_eq_dbg(GEN.fspeed_score(&qwerty), 7));
+			assert!(cache.trigrams_total.approx_eq_dbg(
+				GEN.trigram_score_iter(&qwerty, GEN.data.trigrams.iter().take(1000)), 7)
+			);
+			assert!(cache.total_score().approx_eq_dbg(GEN.score_with_precision(&qwerty, 1000), 7));
 		}
 	}
 
 	#[test]
-	fn can_a_cache_swap() {
+	fn best_found_swap() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		let cache = GEN.initialize_cache(&qwerty);
 		
@@ -799,7 +807,7 @@ mod tests {
 			let (Some(best_swap_cached), best_score_cached) =
 			GEN.best_swap_cached(&mut qwerty, &cache, None, &POSSIBLE_SWAPS) {
 				
-			if best_score_normal.approx_equal_dbg(best_score_cached, 7) {
+			if best_score_normal.approx_eq_dbg(best_score_cached, 7) {
 				assert_eq!(best_swap_normal, best_swap_cached);
 			} else {
 				println!("scores not the same")
@@ -811,40 +819,16 @@ mod tests {
 	fn score_arbitrary_swaps() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		let mut cache = GEN.initialize_cache(&qwerty);
+		let mut rng = nanorand::tls_rng();
 
-		for swap in POSSIBLE_SWAPS.iter() {
+		for swap in (0..).map(|_| &POSSIBLE_SWAPS[rng.generate_range(0..435)]).take(10000) {
 			let score_normal = GEN.score_swap(&mut qwerty, swap);
 			let score_cached = GEN.score_swap_cached(&mut qwerty, swap, &mut cache);
 		
-			assert!(score_normal.approx_equal_dbg(score_cached, 7));
+			assert!(score_normal.approx_eq_dbg(score_cached, 7));
 		}
 	}
-
-	#[test]
-	fn accept_swaps() {
-		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		let mut cache = GEN.initialize_cache(&qwerty);
-
-		assert!(cache.fspeed.iter().sum::<f64>().approx_equal(cache.fspeed_total, 7));
-		assert!(cache.total_score().approx_equal(GEN.score_with_precision(&qwerty, 1000), 7));
-
-		for swap in POSSIBLE_SWAPS.iter() {
-			GEN.accept_swap(&mut qwerty, swap, &mut cache);
-			println!("swap: {swap}");
-
-			assert!(cache.fspeed.iter().sum::<f64>().approx_equal(cache.fspeed_total, 7));
-			assert!(cache.total_score().approx_equal(GEN.score_with_precision(&qwerty, 1000), 7));
-		}
-	}
-
-	#[test]
-	fn test_col_fspeed() {
-		let reference = [(0, 3), (3, 3), (6, 3), (18, 15), (33, 15), (9, 3), (12, 3), (15, 3)];
-		for i in 0..8 {
-			let test = LayoutGeneration::col_to_start_len(i);
-			assert_eq!(test, reference[i]);
-		}
-	}
+	
 
 	#[test]
 	fn optimize_qwerty() {
@@ -862,7 +846,7 @@ mod tests {
 			GEN.optimize_cached(&mut qwerty_for_cached, &mut cache, &POSSIBLE_SWAPS);
 
 		println!("optimized with cache:\n{}", qwerty_for_cached);
-		assert!(normal_score.approx_equal_dbg(best_cached_score, 7));
+		assert!(normal_score.approx_eq_dbg(best_cached_score, 7));
 
 		let mut cache = GEN.initialize_cache(&qwerty);
 		let with_cols = GEN.optimize(qwerty.clone(), &mut cache, &POSSIBLE_SWAPS);

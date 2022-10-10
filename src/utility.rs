@@ -163,7 +163,7 @@ pub fn chars_for_generation(language: &str) -> [char; 30] {
 pub trait ApproxEq {
 	fn approx_equal(self, other: f64, dec: u8) -> bool;
 
-	fn approx_equal_dbg(self, other: f64, dec: u8) -> bool;
+	fn approx_eq_dbg(self, other: f64, dec: u8) -> bool;
 }
 
 impl ApproxEq for f64 {
@@ -174,7 +174,7 @@ impl ApproxEq for f64 {
 		a == b
 	}
 
-	fn approx_equal_dbg(self, other: f64, dec: u8) -> bool {
+	fn approx_eq_dbg(self, other: f64, dec: u8) -> bool {
 		let factor = 10.0f64.powi(dec as i32);
 		let a = (self * factor).trunc();
 		let b = (other * factor).trunc();

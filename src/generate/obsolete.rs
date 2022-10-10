@@ -64,4 +64,19 @@ impl LayoutGeneration {
 
         layout
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn effort_score(&self, layout: &FastLayout) -> f64 {
+        (0..layout.matrix.len()).map(|i| self.char_effort(layout, i)).sum()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn usage_score(&self, layout: &FastLayout) -> f64 {
+        (0..8).map(|i| self.col_usage(layout, i)).sum()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn fspeed_score(&self, layout: &FastLayout) -> f64 {
+        (0..8).map(|i| self.col_fspeed(layout, i)).sum()
+    }
 }
