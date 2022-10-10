@@ -330,7 +330,8 @@ impl TextData {
 mod tests {
     use super::*;
 
-    #[test]
+    //#[test]
+    #[allow(dead_code)]
     fn test_load_language() {
         let translator = Translator::new()
             .language("english").unwrap()

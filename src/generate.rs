@@ -121,11 +121,10 @@ pub struct LayoutStats {
 impl std::fmt::Display for LayoutStats {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(
-			f, concat!("Sfb:  {:.3}%\nDsfb: {:.3}%\nDsfb2: {:.3}%\nDsfb3: {:.3}%\n",
-			"Finger Speed: {:.3}\n    [{}]\nScissors: {:.3}%\n\n{}"),
-			self.sfb * 100.0, self.dsfb * 100.0, self.dsfb2 * 100.0, self.dsfb3 * 100.0,
-			self.fspeed * 10.0, format_fspeed(&self.finger_speed),
-			self.scissors * 100.0, self.trigram_stats
+			f, concat!("Sfb:  {:.3}%\nDsfb: {:.3}%\nFinger Speed: {:.3}\n",
+			"    [{}]\nScissors: {:.3}%\n\n{}"),
+			self.sfb * 100.0, self.dsfb * 100.0, self.fspeed * 10.0,
+			format_fspeed(&self.finger_speed), self.scissors * 100.0, self.trigram_stats
 		)
 	}
 }
