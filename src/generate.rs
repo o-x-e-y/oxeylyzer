@@ -247,21 +247,16 @@ impl LayoutGeneration {
 
 		if let Ok(paths) = std::fs::read_dir(&language_dir_path) {
 			let valid = paths
-				.filter(|p| {
-					p.is_ok_and(|entry| is_kb_file(entry))
-				})
-				.filter(|p| p.is_ok())
+				.flatten()
+				.filter(|p| is_kb_file(p))
 				.collect::<Vec<_>>();
 
-			for p in valid {
-				if let Ok(entry) = p &&
-				is_kb_file(&entry) &&
-				let Some(name) = layout_name(&entry) {
+			for entry in valid {
+				if let Some(name) = layout_name(&entry) {
 					let content = std::fs::read_to_string(entry.path())?;
 					let layout_str = format_layout_str(content);
 
 					if let Ok(mut layout) = FastLayout::try_from(layout_str.as_str()) {
-						// self.save_layout_stats(&layout, name.as_str());
 						layout.score = self.score(&layout);
 						res.insert(name, layout);
 					} else {
