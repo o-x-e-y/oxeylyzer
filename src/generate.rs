@@ -521,7 +521,7 @@ impl LayoutGeneration {
 
 		res.scissors = self.scissor_score(layout);
 
-		res.trigrams_total = self.trigram_score_iter(layout, &self.data.trigrams);
+		res.trigrams_total = self.trigram_score_iter(layout, self.data.trigrams.iter().take(1000));
 
 		res
 	}
