@@ -146,7 +146,9 @@ pub struct LayoutCache {
 	fspeed_total: f64,
 
 	// trigrams: FxHashMap<(char, Option<char>), f64>,
-	trigrams_total: f64
+	trigrams_total: f64,
+
+	total_score: f64
 }
 
 impl LayoutCache {
@@ -536,12 +538,12 @@ impl LayoutGeneration {
 
 		res.trigrams_total = self.trigram_score_iter(layout, self.data.trigrams.iter().take(1000));
 
+		res.total_score = res.total_score();
+		
 		res
 	}
 
 	fn score_swap_cached(&self, layout: &mut FastLayout, swap: &PosPair, cache: &LayoutCache) -> f64 {
-			let trigrams_start = self.trigram_char_score(layout, swap);
-
 			unsafe { layout.swap_no_bounds(swap) };
 
 			let PosPair(i1, i2) = *swap;
@@ -576,16 +578,24 @@ impl LayoutGeneration {
 			let effort_score = cache.effort_total - cache.effort[i1]
 				- cache.effort[i2] + effort1 + effort2;
 
-			let trigrams_end = self.trigram_char_score(layout, &swap);
-			let trigrams_score = cache.trigrams_total - trigrams_start + trigrams_end;
-
 			let scissors_score = if swap.affects_scissor() {
 				self.scissor_score(layout)
 			} else {
 				cache.scissors
 			};
 
-			unsafe { layout.swap_no_bounds(swap) };
+			let new_heur = cache.trigrams_total - scissors_score - effort_score - usage_score - fspeed_score;
+
+			let trigrams_score = if cache.total_score < (new_heur + new_heur.abs() * 0.2) {
+				let trigrams_end = self.trigram_char_score(layout, swap);
+				unsafe { layout.swap_no_bounds(swap) };
+				let trigrams_start = self.trigram_char_score(layout, swap);
+				
+				cache.trigrams_total - trigrams_start + trigrams_end
+			} else {
+				unsafe { layout.swap_no_bounds(swap) };
+				return f64::MIN + 1000.0;
+			};
 
 			trigrams_score - scissors_score - effort_score - usage_score - fspeed_score
 	}
@@ -652,6 +662,8 @@ impl LayoutGeneration {
 		if swap.affects_scissor() {
 			cache.scissors = self.scissor_score(layout);
 		}
+
+		cache.total_score = cache.total_score();
 	}
 
 	pub fn best_swap_cached(
@@ -686,7 +698,7 @@ impl LayoutGeneration {
 	}
 
 	fn optimize_cols(&self, layout: &mut FastLayout, cache: &mut LayoutCache, score: Option<f64>) -> f64 {
-		let mut best_score = score.unwrap_or_else(|| cache.total_score());
+		let mut best_score = score.unwrap_or_else(|| cache.total_score);
 
 		let mut best = layout.clone();
 		self.col_perms(layout, &mut best, cache, &mut best_score, 6);
@@ -706,7 +718,7 @@ impl LayoutGeneration {
 		k: usize
 	) {
 		if k == 1 {
-			let new_score = cache.total_score();
+			let new_score = cache.total_score;
 			if new_score > *best_score {
 				*best_score = new_score;
 				*best = layout.clone();
@@ -817,7 +829,7 @@ use nanorand::Rng;
 			assert!(cache.trigrams_total.approx_eq_dbg(
 				GEN.trigram_score_iter(&qwerty, GEN.data.trigrams.iter().take(1000)), 7)
 			);
-			assert!(cache.total_score().approx_eq_dbg(GEN.score_with_precision(&qwerty, 1000), 7));
+			assert!(cache.total_score.approx_eq_dbg(GEN.score_with_precision(&qwerty, 1000), 7));
 		}
 	}
 
@@ -848,7 +860,7 @@ use nanorand::Rng;
 			let score_normal = GEN.score_swap(&mut qwerty, swap);
 			let score_cached = GEN.score_swap_cached(&mut qwerty, swap, &mut cache);
 		
-			assert!(score_normal.approx_eq_dbg(score_cached, 7));
+			assert!(score_cached == f64::MIN + 1000.0 || score_normal.approx_eq_dbg(score_cached, 7));
 		}
 	}
 	
