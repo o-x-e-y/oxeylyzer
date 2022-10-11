@@ -29,11 +29,11 @@ pub trait Layout<T: Copy + Default> {
 
 	fn swap(&mut self, i1: usize, i2: usize) -> Option<()>;
 
-	unsafe fn swap_no_bounds(&mut self, i1: usize, i2: usize);
+	unsafe fn swap_xy_no_bounds(&mut self, i1: usize, i2: usize);
 
 	fn swap_pair(&mut self, pair: &PosPair) -> Option<()>;
 
-	unsafe fn swap_pair_no_bounds(&mut self, pair: &PosPair);
+	unsafe fn swap_no_bounds(&mut self, pair: &PosPair);
 
 	unsafe fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize);
 
@@ -128,12 +128,12 @@ impl Layout<char> for FastLayout {
 		FastLayout::from(layout_chars)
 	}
 
-	#[inline]
+	#[inline(always)]
 	fn c(&self, i: usize) -> char {
 		self.matrix[i]
 	}
 
-	#[inline]
+	#[inline(always)]
 	unsafe fn cu(&self, i: usize) -> char {
 		*self.matrix.get_unchecked(i)
 	}
@@ -162,8 +162,8 @@ impl Layout<char> for FastLayout {
 		}
 	}
 
-	#[inline]
-	unsafe fn swap_no_bounds(&mut self, i1: usize, i2: usize) {
+	#[inline(always)]
+	unsafe fn swap_xy_no_bounds(&mut self, i1: usize, i2: usize) {
 		let char1 = self.cu(i1);
 		let char2 = self.cu(i2);
 
@@ -174,20 +174,20 @@ impl Layout<char> for FastLayout {
 		self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
 	}
 
-	#[inline]
+	#[inline(always)]
 	fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
 		self.swap(pair.0, pair.1)
 	}
 
-	#[inline]
-	unsafe fn swap_pair_no_bounds(&mut self, pair: &PosPair) {
-		self.swap_no_bounds(pair.0, pair.1);
+	#[inline(always)]
+	unsafe fn swap_no_bounds(&mut self, pair: &PosPair) {
+		self.swap_xy_no_bounds(pair.0, pair.1);
 	}
 
 	unsafe fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize) {
-		self.swap_no_bounds(col1, col2);
-		self.swap_no_bounds(col1 + 10, col2 + 10);
-		self.swap_no_bounds(col1 + 20, col2 + 20);
+		self.swap_xy_no_bounds(col1, col2);
+		self.swap_xy_no_bounds(col1 + 10, col2 + 10);
+		self.swap_xy_no_bounds(col1 + 20, col2 + 20);
 	}
 
 	fn swap_indexes(&mut self) {
@@ -260,7 +260,7 @@ mod tests {
 	#[test]
 	fn swap_no_bounds() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		unsafe { qwerty.swap_no_bounds(9, 12) };
+		unsafe { qwerty.swap_xy_no_bounds(9, 12) };
 		assert_eq!(qwerty.layout_str(), "qwertyuiodaspfghjkl;zxcvbnm,./".to_string());
 	}
 
@@ -285,7 +285,7 @@ mod tests {
 	fn swap_pair_no_bounds() {
 		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
 		let new_swap = PosPair::new(0, 29);
-		unsafe { qwerty.swap_pair_no_bounds(&new_swap) };
+		unsafe { qwerty.swap_no_bounds(&new_swap) };
 		assert_eq!(qwerty.layout_str(), "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string());
 	}
 

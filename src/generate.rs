@@ -542,7 +542,7 @@ impl LayoutGeneration {
 	fn score_swap_cached(&self, layout: &mut FastLayout, swap: &PosPair, cache: &LayoutCache) -> f64 {
 			let trigrams_start = self.trigram_char_score(layout, swap);
 
-			unsafe { layout.swap_pair_no_bounds(swap) };
+			unsafe { layout.swap_no_bounds(swap) };
 
 			let PosPair(i1, i2) = *swap;
 
@@ -585,7 +585,7 @@ impl LayoutGeneration {
 				cache.scissors
 			};
 
-			unsafe { layout.swap_pair_no_bounds(swap) };
+			unsafe { layout.swap_no_bounds(swap) };
 
 			trigrams_score - scissors_score - effort_score - usage_score - fspeed_score
 	}
@@ -593,7 +593,7 @@ impl LayoutGeneration {
 	fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
 		let trigrams_start = self.trigram_char_score(layout, swap);
 
-		unsafe { layout.swap_pair_no_bounds(swap) };
+		unsafe { layout.swap_no_bounds(swap) };
 
 		let PosPair(i1, i2) = *swap;
 
