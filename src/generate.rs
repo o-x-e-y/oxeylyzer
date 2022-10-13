@@ -14,6 +14,11 @@ use crate::language_data::{BigramData, TrigramData, LanguageData};
 use crate::layout::*;
 use crate::weights::{Weights, Config};
 
+#[cfg(test)]
+static PRUNED_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+#[cfg(test)]
+static NOT_PRUNED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 #[derive(Clone, Default)]
 pub struct TrigramStats {
 	pub alternates: f64,
@@ -586,13 +591,17 @@ impl LayoutGeneration {
 
 			let new_heur = cache.trigrams_total - scissors_score - effort_score - usage_score - fspeed_score;
 
-			let trigrams_score = if cache.total_score < (new_heur + new_heur.abs() * 0.2) {
+			let trigrams_score = if cache.total_score < (new_heur + new_heur.abs() * -0.04) {
 				let trigrams_end = self.trigram_char_score(layout, swap);
 				unsafe { layout.swap_no_bounds(swap) };
 				let trigrams_start = self.trigram_char_score(layout, swap);
+				#[cfg(test)]
+				NOT_PRUNED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 				
 				cache.trigrams_total - trigrams_start + trigrams_end
 			} else {
+				#[cfg(test)]
+				PRUNED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 				unsafe { layout.swap_no_bounds(swap) };
 				return f64::MIN + 1000.0;
 			};
@@ -799,6 +808,7 @@ mod obsolete;
 mod tests {
 	use super::*;
 	use lazy_static::lazy_static;
+	use std::sync::atomic::Ordering;
 use nanorand::Rng;
 	use crate::utility::ApproxEq;
 
@@ -811,6 +821,34 @@ use nanorand::Rng;
 		for (pair, dist) in GEN.fspeed_vals {
 			println!("({}, {}) <-> ({}, {}): {dist}", pair.0%10, pair.0/10, pair.1%10, pair.1/10);
 		}
+	}
+
+	#[test]
+	fn prune_heuristic_correctness() {
+		//has been tested with 10000 runs
+		let runs = 100;
+
+		for _ in 0..runs {
+			let mut layout = FastLayout::random(GEN.chars_for_generation);
+			let cache = GEN.initialize_cache(&layout);
+			
+			if let (Some(best_swap_normal), best_score_normal) =
+				GEN.best_swap(&mut layout, None, &POSSIBLE_SWAPS) &&
+				let (Some(best_swap_cached), best_score_cached) =
+				GEN.best_swap_cached(&mut layout, &cache, None, &POSSIBLE_SWAPS) {
+					
+				if best_score_normal.approx_eq_dbg(best_score_cached, 7) {
+					assert_eq!(best_swap_normal, best_swap_cached);
+				}
+			}
+		}
+		println!(
+			"pruned {} times.\nRecalculated trigrams {} times.\namount pruned: {:.2}%\n analyzed {} swaps",
+			PRUNED_COUNT.load(Ordering::Relaxed),
+			435 * runs - PRUNED_COUNT.load(Ordering::Relaxed),
+			(PRUNED_COUNT.load(Ordering::Relaxed) as f64) / (435.0 * runs as f64) * 100.0,
+			435 * runs
+		);
 	}
 
 	#[test]
