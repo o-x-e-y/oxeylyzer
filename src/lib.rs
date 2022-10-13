@@ -14,3 +14,4 @@ pub mod translation;
 pub mod languages_cfg;
 
 pub use rayon;
+pub use serde;
