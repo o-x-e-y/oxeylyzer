@@ -223,10 +223,10 @@ impl TranslatorBuilder {
             "akl" | "english" | "english2" | "toki_pona" | "indonesian" | "reddit" => Ok(self),
             "albanian" => Ok(self
                 .letters("çë")
-        ),
+            ),
             "bokmal" | "nynorsk" | "danish" => Ok(self
                 .letters("åøæ")
-        ),
+            ),
             "czech" => Ok(self
                 .to_multiple(vec![
                     ('č', "*c"), ('ď', "*d"), ('é', "*x"), ('ň', "*n"), ('ó', "*o"), ('ř', "*r"),
@@ -235,6 +235,9 @@ impl TranslatorBuilder {
                     ('Š', "*s"), ('Ť', "*t"), ('Ů', "*u"), ('Ú', "*b"), ('Ý', "*y"), ('Ž', "*z")
                 ])
                 .letters("áíě")
+            ),
+            "dan-en70-30" => Ok(self
+                .letters("åøæ")
             ),
             "dutch" => Ok(self.letters("áèéçëíîó")),
             "dutch_repeat" => Ok(self.letters("áèéçëíîó@")),
