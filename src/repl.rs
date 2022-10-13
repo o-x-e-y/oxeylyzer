@@ -232,7 +232,7 @@ impl Repl {
         }
     }
 
-    pub fn double_freq(&self) -> f64 {
+    pub fn sfr_freq(&self) -> f64 {
         self.gen.data.bigrams
             .iter()
             .filter(|(bg, _)| bg[0] == bg[1] )
@@ -319,7 +319,7 @@ impl Repl {
                             
                             println!(
                                 "Set language to {}. Sfr: {:.2}%",
-                                language, self.double_freq() * 100.0
+                                language, self.sfr_freq() * 100.0
                             );
                         } else {
                             println!("Could not load {}", language);
