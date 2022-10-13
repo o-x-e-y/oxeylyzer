@@ -224,7 +224,7 @@ impl TranslatorBuilder {
             "albanian" => Ok(self
                 .letters("çë")
         ),
-            "bokmal" | "nynorsk" => Ok(self
+            "bokmal" | "nynorsk" | "danish" => Ok(self
                 .letters("åøæ")
         ),
             "czech" => Ok(self
