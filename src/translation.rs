@@ -239,6 +239,11 @@ impl TranslatorBuilder {
             "dan-en70-30" => Ok(self
                 .letters("åøæ")
             ),
+            "dan-en70-30a" => Ok(self
+                .to_multiple(vec![
+                    ('å', "*a"), ('ø', "*o"), ('æ', "*e")
+                ])
+            ),
             "dutch" => Ok(self.letters("áèéçëíîó")),
             "dutch_repeat" => Ok(self.letters("áèéçëíîó@")),
             "english_repeat" => Ok(self.keep_same("@")),
