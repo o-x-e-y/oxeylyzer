@@ -1,6 +1,6 @@
 pins = """
-..... ..x..
-xxxx. ..xxx
+..... .....
+..... .....
 ..... .....
 """
 
@@ -14,8 +14,8 @@ fspeed = 14.0
 lateral_penalty = 1.0
 dsfb_ratio = 0.11
 scissors = 6.0
-inrolls = 1.5
-outrolls = 1.25
+inrolls = 2.1
+outrolls = 1.9
 onehands = 0.9
 alternates = 0.9
 alternates_sfs = 0.6
@@ -25,7 +25,7 @@ bad_redirects = 5.0
 [weights.max_finger_use]
 penalty = 2.5
 pinky = 9.0
-ring = 16.5
+ring = 16.7
 middle = 20.0
 index = 19.0
 
