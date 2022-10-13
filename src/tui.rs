@@ -53,7 +53,7 @@ pub fn generate_n_with_pins(
     
     let pb = ProgressBar::new(amount as u64);
     pb.set_style(ProgressStyle::default_bar()
-        .template("[{elapsed_precise}] [{wide_bar:.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
+        .template("[{elapsed_precise}] [{wide_bar:.white/white}] [eta: {eta:}] - {per_sec:>11} {pos:>6}/{len}")
         .expect("couldn't initialize the progress bar template")
         .progress_chars("=>-"));
 
@@ -84,7 +84,7 @@ pub fn generate_n(gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
     
     let pb = ProgressBar::new(amount as u64);
     pb.set_style(ProgressStyle::default_bar()
-        .template("[{elapsed_precise}] [{wide_bar:.white/white}] [eta: {eta}] - {per_sec:>4} {pos:>6}/{len}")
+        .template("[{elapsed_precise}] [{wide_bar:.white/white}] [eta: {eta}] - {per_sec:>10} {pos:>6}/{len}")
         .expect("couldn't initialize the progress bar template")
         .progress_chars("=>-"));
 
