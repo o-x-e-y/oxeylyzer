@@ -16,10 +16,7 @@ use smartstring::{SmartString, Compact};
 const TWO_MB: u64 = 1024 * 1024 * 2;
 
 pub fn load_raw(language: &str) {
-    let translator = Translator::new()
-        .raw()
-        .build();
-    load_data(language, translator).unwrap();
+    load_data(language, Translator::raw()).unwrap();
 }
 
 pub fn load_default(language: &str) {
@@ -174,7 +171,7 @@ impl From<(TextNgrams<5>, Translator, &str)> for TextData {
             let translated = translator.translate(s.as_str());
             
             let mut it_count = if let Some(f) = translator.table.get(&pentagram[0]) {
-                f.len()
+                f.chars().count()
             } else { 0 };
 
             match translated.chars().count() {
