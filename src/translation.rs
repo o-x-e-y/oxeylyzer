@@ -182,10 +182,14 @@ impl<'a> TranslatorBuilder<'a> {
         for letter in letters.chars() {
             self.table.insert(letter, Cow::from(letter.to_string()));
 
-            let upper_string = String::from_iter(letter.to_uppercase());
+            let mut upper_string = letter.to_uppercase();
 
-            let new_upper = upper_string.chars().next().unwrap();
-            self.table.insert(new_upper, Cow::from(letter.to_string()));
+            if upper_string.clone().count() == 1 {
+                let uppercase_letter = upper_string.next().unwrap();
+                
+                let shifted = String::from_iter([' ', letter]);
+                self.one_multiple(uppercase_letter, shifted.as_str());
+            }
         }
         self
     }
