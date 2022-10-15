@@ -1,24 +1,25 @@
-use std::collections::HashMap;
-use std::borrow::Cow;
+use smartstring::{SmartString, Compact};
 use anyhow::Result;
+use fxhash::FxHashMap;
 
-pub struct Translator<'a> {
-    pub table: HashMap<char, Cow<'a, str>>,
+pub struct Translator {
+    pub table: FxHashMap<char, SmartString<Compact>>,
     pub is_raw: bool,
     pub(crate) ignore_unknown: bool,
     pub(crate) is_empty: bool,
     pub(crate) multiple_val: f64
 }
 
-impl<'a> Default for Translator<'a> {
+impl Default for Translator {
     fn default() -> Self {
-        Translator::new()
+        let mut translator = Translator::new();
+        translator
 		    .default_formatting()
 		    .build()
     }
 }
 
-impl<'a> std::ops::Add for Translator<'a> {
+impl std::ops::Add for Translator {
     type Output = Self;
 
     ///the table of the FIRST argument takes priority over the SECOND.
@@ -29,7 +30,7 @@ impl<'a> std::ops::Add for Translator<'a> {
             self.ignore_unknown |= rhs.ignore_unknown;
             self.multiple_val = (self.multiple_val + rhs.multiple_val) / 2.0;
 
-            let base = &Cow::from(" ");
+            let base = &SmartString::<Compact>::from(" ");
             for (from, to) in rhs.table {
                 let original = self.table.get(&from);
                 if original.is_none() || original == Some(base) {
@@ -41,22 +42,22 @@ impl<'a> std::ops::Add for Translator<'a> {
     }
 }
 
-impl<'a> Translator<'a> {
-    pub fn new() -> TranslatorBuilder<'a> {
+impl Translator {
+    pub fn new() -> TranslatorBuilder {
         TranslatorBuilder {
-            table: HashMap::new(),
+            table: FxHashMap::default(),
             is_raw: false,
             ignore_unknown: false
         }
     }
 
-    pub fn language(language: &'a str) -> Result<Self> {
+    pub fn language(language: &str) -> Result<Self> {
         Ok(Self::new()
             .language(language)?
             .build())
     }
 
-    pub fn language_or_default(language: &'a str) -> Self {
+    pub fn language_or_default(language: &str) -> Self {
         if let Ok(t) = Self::language(language) {
             t
         } else {
@@ -64,7 +65,7 @@ impl<'a> Translator<'a> {
         }
     }
 
-    pub fn language_or_raw(language: &'a str) -> Self {
+    pub fn language_or_raw(language: &str) -> Self {
         if let Ok(t) = Self::language(language) {
             t
         } else {
@@ -81,11 +82,11 @@ impl<'a> Translator<'a> {
             .build()
     }
 
-    pub fn translate(&self, s: &str) -> Cow<'a, str> {
+    pub fn translate(&self, s: &str) -> SmartString<Compact> {
         let mut res: String;
 
         if self.is_empty {
-            return Cow::from(s);
+            return SmartString::<Compact>::from(s);
         } else if self.multiple_val == 0.0 {
             res = String::with_capacity(s.len()); 
         } else {
@@ -113,17 +114,17 @@ impl<'a> Translator<'a> {
         }
 
         res.shrink_to_fit();
-        Cow::from(res)
+        SmartString::<Compact>::from(res)
 	}
 }
 
-pub struct TranslatorBuilder<'a> {
-    table: HashMap<char, Cow<'a, str>>,
+pub struct TranslatorBuilder {
+    table: FxHashMap<char, SmartString<Compact>>,
     is_raw: bool,
     ignore_unknown: bool
 }
 
-impl<'a> TranslatorBuilder<'a> {
+impl TranslatorBuilder {
     pub fn keep_unknown(&mut self) -> &mut Self {
         self.ignore_unknown = false;
         self
@@ -131,28 +132,33 @@ impl<'a> TranslatorBuilder<'a> {
 
     pub fn to_nothing(&mut self, to_nothing: &str) -> &mut Self {
         for c in to_nothing.chars() {
-            self.table.insert(c, Cow::from(""));
+            self.table.insert(c, SmartString::<Compact>::from(""));
         }
         self
     }
 
     pub fn to_space(&mut self, to_string: &str) -> &mut Self {
         for c in to_string.chars() {
-            self.table.insert(c, Cow::from(" "));
+            self.table.insert(c, SmartString::<Compact>::from(" "));
         }
         self
     }
 
     pub fn many_different_to_one(&mut self, from: &str, to: char) -> &mut Self {
         for c in from.chars() {
-            self.table.insert(c, Cow::from(to.to_string()));
+            self.table.insert(c, SmartString::<Compact>::from(to));
         }
+        self
+    }
+
+    pub fn keep_one(&mut self, keep: char) -> &mut Self {
+        self.table.insert(keep, SmartString::<Compact>::from(keep));
         self
     }
 
     pub fn keep(&mut self, keep: &str) -> &mut Self {
         for c in keep.chars() {
-            self.table.insert(c, Cow::from(c.to_string()));
+            self.table.insert(c, SmartString::<Compact>::from(c));
         }
         self
     }
@@ -160,53 +166,65 @@ impl<'a> TranslatorBuilder<'a> {
     pub fn one_to_one(&mut self, from: &str, to: &str) -> &mut Self {
         assert_eq!(from.chars().count(), to.chars().count());
 
-        for (s, d) in from.chars().zip(to.chars()) {
-            self.table.insert(s, Cow::from(d.to_string()));
+        for (f, t) in from.chars().zip(to.chars()) {
+            self.table.insert(f, SmartString::<Compact>::from(t));
         }
         self
     }
 
-    pub fn one_multiple(&mut self, from: char, to: &'static str) -> &mut Self {
-        self.table.insert(from, Cow::from(to));
+    pub fn one_multiple(&mut self, from: char, to: &str) -> &mut Self {
+        self.table.insert(from, SmartString::<Compact>::from(to));
         self
     }
 
-    pub fn to_multiple(&mut self, trans: Vec<(char, &'static str)>) -> &mut Self {
-        for (s, d) in trans {
-            self.table.insert(s, Cow::from(d));
+    #[inline(always)]
+    fn one_multiple_smartstr(&mut self, from: char, to: SmartString<Compact>) -> &mut Self {
+        self.table.insert(from, to);
+        self
+    }
+
+    pub fn to_multiple(&mut self, trans: Vec<(char, &str)>) -> &mut Self {
+        for (f, t) in trans {
+            self.table.insert(f, SmartString::<Compact>::from(t));
+        }
+        self
+    }
+
+    pub fn letter_to_lowercase(&mut self, letter: char) -> &mut Self {
+        self.table.insert(letter, SmartString::<Compact>::from(letter));
+
+        let mut upper_string = letter.to_uppercase();
+
+        if upper_string.clone().count() == 1 {
+            let uppercase_letter = upper_string.next().unwrap();
+            
+            let shifted = SmartString::<Compact>::from_iter([' ', letter]);
+            self.one_multiple_smartstr(uppercase_letter, shifted);
         }
         self
     }
 
     pub fn letters_to_lowercase(&mut self, letters: &str) -> &mut Self {
         for letter in letters.chars() {
-            self.table.insert(letter, Cow::from(letter.to_string()));
-
-            let mut upper_string = letter.to_uppercase();
-
-            if upper_string.clone().count() == 1 {
-                let uppercase_letter = upper_string.next().unwrap();
-                
-                let shifted = String::from_iter([' ', letter]);
-                self.one_multiple(uppercase_letter, shifted.as_str());
-            }
+            self.letter_to_lowercase(letter);
         }
         self
     }
 
     pub fn raw(&mut self) -> &mut Self {
-        let mut letters = String::new();
-        for i in 128u32..66_666 {
-            if let Some(c) = char::from_u32(i)
-            && c.is_alphabetic() {
-                letters.push(c);
+        for i in 128u32..75_000 {
+            if let Some(c) = char::from_u32(i) && c.is_alphabetic() {
+                if c.is_lowercase() {
+                    self.letter_to_lowercase(c);
+                } else {
+                    self.keep_one(c);
+                }
             }
         }
-
+        
         self.is_raw = true;
 
         self
-            .letters_to_lowercase(letters.as_str())
             .alphabet_lower()
             .punct_lower()
             .normalize_punct()
@@ -214,8 +232,8 @@ impl<'a> TranslatorBuilder<'a> {
 
     pub fn custom_unshift(&mut self, upper_version: &str, lower_version: &str) -> &mut Self {
         for (upper, lower) in upper_version.chars().zip(lower_version.chars()) {
-            let shifted = String::from_iter([' ', lower]);
-            self.one_multiple(upper, shifted.as_str());
+            let shifted = SmartString::<Compact>::from_iter([' ', lower]);
+            self.one_multiple_smartstr(upper, shifted);
         }
 
         self
@@ -418,19 +436,21 @@ mod tests {
 
     const ALPHABET: &str =       "abcdefghijklmnopqrstuvwxyz";
     const ALPHABET_UPPER: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const ALPHABET_SHIFTED: &str = " a b c d e f g h i j k l m n o p q r s t u v w x y z";
     const NUMS: &str =           "1234567890";
     const NUMS_UPPER: &str =     "!@#$%^&*()";
-    const SYMBOLS: &str =        "`[]/=-\\',.;";
-    const SYMBOLS_UPPER: &str =  "~{}?+_|\"<>:";
+    const SYMBOLS: &str =        " ` [ ] / = - \\ ' , . ;";
+    const SYMBOLS_SHIFTED: &str =  "~{}?+_|\"<>:";
     
     #[test]
     fn test_translate_default() {
         let translator = Translator::default();
 
-        assert_eq!(translator.translate(ALPHABET), translator.translate(ALPHABET_UPPER));
+        assert_eq!(translator.translate(ALPHABET), ALPHABET);
+        assert_eq!(translator.translate(ALPHABET_SHIFTED), translator.translate(ALPHABET_UPPER));
         assert_eq!(translator.translate(NUMS), "          ");
         assert_eq!(translator.translate(NUMS_UPPER), "          ");
-        assert_eq!(translator.translate(SYMBOLS), translator.translate(SYMBOLS_UPPER));
+        assert_eq!(translator.translate(SYMBOLS), translator.translate(SYMBOLS_SHIFTED));
         assert_eq!(translator.translate("žø"), "  ");
         assert_eq!(translator.translate("…"), "...");
         assert_eq!(translator.translate("«´»÷‘“”’–ʹ͵"), "'''/''''-''");
@@ -449,10 +469,10 @@ mod tests {
     #[test]
     fn test_multiple() {
         let translator = Translator::new()
-            .to_multiple(vec![('Ž', "*z")])
+            .to_multiple(vec![('Ž', "* z")])
             .letters_to_lowercase("aď")
             .build();
         
-        assert_eq!(translator.translate("ŽAaØ ď"), "*zaa  ď");
+        assert_eq!(translator.translate("ŽAaØ ď"), "* z aa  ď");
     }
 }
