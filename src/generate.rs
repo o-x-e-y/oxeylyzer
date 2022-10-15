@@ -189,7 +189,7 @@ pub struct LayoutGeneration {
 
 	fspeed_vals: [(PosPair, f64); 48],
 	effort_map: [f64; 30],
-	scissor_indices: [PosPair; 15],
+	scissor_indices: [PosPair; 17],
 	i_to_col: [usize; 30],
 
 	weighted_bigrams: BigramData,
@@ -826,7 +826,7 @@ use nanorand::Rng;
 	#[test]
 	fn prune_heuristic_correctness() {
 		//has been tested with 10000 runs
-		let runs = 100;
+		let runs = 200;
 
 		for _ in 0..runs {
 			let mut layout = FastLayout::random(GEN.chars_for_generation);

@@ -8,7 +8,7 @@ pub struct PosPair(pub usize, pub usize);
 
 const AFFECTS_SCISSOR: [bool; 30] = [
 	true, true, true, true, true, true, true, true, true, true,
-	false, true, false, false, false, false, false, false, true, false,
+	true, true, false, false, false, false, false, false, true, true,
 	true, true, true, false, true, false, false, true, true, true
 ];
 
@@ -120,11 +120,14 @@ pub fn get_sfb_indices() -> [PosPair; 48] {
 	res.try_into().unwrap()
 }
 
-pub fn get_scissor_indices() -> [PosPair; 15] {
+pub fn get_scissor_indices() -> [PosPair; 17] {
 	let mut res: Vec<PosPair> = Vec::new();
 	//these two are top pinky to ring homerow
 	res.push(PosPair(0, 11));
 	res.push(PosPair(9, 18));
+	//these two are pinky home to ring bottom
+	res.push(PosPair(10, 21));
+	res.push(PosPair(19, 28));
 	//these four are inner index stretches
 	res.push(PosPair(2, 24));
 	res.push(PosPair(22, 4));
