@@ -99,7 +99,7 @@ impl From<&str> for TextNgrams<5> {
             .tuple_windows::<(_, _, _, _, _)>();
 
         while let Some((c1, c2, c3, c4, c5)) = chars.next() {
-            *ngrams.entry([c1, c2, c3, c4, c5]).or_insert_with(|| 0) += 1;
+            ngrams.entry([c1, c2, c3, c4, c5]).and_modify(|e| *e += 1).or_insert(1);
         }
         
         Self { ngrams }
@@ -109,7 +109,7 @@ impl From<&str> for TextNgrams<5> {
 impl<const N: usize> TextNgrams<N> {
     fn combine_with(mut self, rhs: Self) -> Self {
         for (trigram, freq) in rhs.ngrams.into_iter() {
-            *self.ngrams.entry(trigram).or_insert_with(|| 0) += freq;
+            self.ngrams.entry(trigram).and_modify(|e| *e += freq).or_insert(freq);
         }
         self
     }
@@ -259,44 +259,38 @@ impl TextData {
     }
 
     pub(crate) fn add_character(&mut self, c1: char, freq: f64) {
-        *self.characters
-            .entry(String::from(c1))
-            .or_insert_with(|| 0.0) += freq;
+        self.characters.entry(String::from(c1))
+            .and_modify(|e| *e += freq).or_insert(freq);
         self.char_sum += freq;
     }
 
     pub(crate) fn add_bigram(&mut self, bigram: [char; 2], freq: f64) {
-        *self.bigrams
-            .entry(String::from_iter(bigram))
-            .or_insert_with(|| 0.0) += freq;
+        self.bigrams.entry(String::from_iter(bigram))
+            .and_modify(|e| *e += freq).or_insert(freq);
         self.bigram_sum += freq;
     }
 
     pub(crate) fn add_skipgram(&mut self, skipgram: [char; 2], freq: f64) {
-        *self.skipgrams
-            .entry(String::from_iter(skipgram))
-            .or_insert_with(|| 0.0) += freq;
+        self.skipgrams.entry(String::from_iter(skipgram))
+            .and_modify(|e| *e += freq).or_insert(freq);
         self.skipgram_sum += freq;
     }
 
     pub(crate) fn add_skipgram2(&mut self, skipgram: [char; 2], freq: f64) {
-        *self.skipgrams2
-            .entry(String::from_iter(skipgram))
-            .or_insert_with(|| 0.0) += freq;
+        self.skipgrams2.entry(String::from_iter(skipgram))
+            .and_modify(|e| *e += freq).or_insert(freq);
         self.skipgram2_sum += freq;
     }
 
     pub(crate) fn add_skipgram3(&mut self, skipgram: [char; 2], freq: f64) {
-        *self.skipgrams3
-            .entry(String::from_iter(skipgram))
-            .or_insert_with(|| 0.0) += freq;
+        self.skipgrams3.entry(String::from_iter(skipgram))
+            .and_modify(|e| *e += freq).or_insert(freq);
         self.skipgram3_sum += freq;
     }
 
     pub(crate) fn add_trigram(&mut self, trigram: [char; 3], freq: f64) {
-        *self.trigrams
-            .entry(String::from_iter(trigram))
-            .or_insert_with(|| 0.0) += freq;
+        self.trigrams.entry(String::from_iter(trigram))
+            .and_modify(|e| *e += freq).or_insert(freq);
         self.trigram_sum += freq;
     }
 
