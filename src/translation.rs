@@ -212,6 +212,16 @@ impl<'a> TranslatorBuilder<'a> {
             .normalize_punct()
     }
 
+    pub fn custom_unshift(&mut self, upper_version: &str, lower_version: &str) -> &mut Self {
+        for (upper, lower) in upper_version.chars().zip(lower_version.chars()) {
+            let shifted = String::from_iter([' ', lower]);
+            self.one_multiple(upper, shifted.as_str());
+        }
+
+        self
+            .keep("[]/=-\\',.;`")
+    }
+
     pub fn punct_lower(&mut self) -> &mut Self {
         for (upper, lower) in "{}?+_|\"<>:~".chars().zip("[]/=-\\',.;`".chars()) {
             let shifted = String::from_iter([' ', lower]);
