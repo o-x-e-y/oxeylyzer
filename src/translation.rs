@@ -2,15 +2,15 @@ use std::collections::HashMap;
 use std::borrow::Cow;
 use anyhow::Result;
 
-pub struct Translator {
-    pub table: HashMap<char, Cow<'static, str>>,
+pub struct Translator<'a> {
+    pub table: HashMap<char, Cow<'a, str>>,
     pub is_raw: bool,
     pub(crate) ignore_unknown: bool,
     pub(crate) is_empty: bool,
     pub(crate) multiple_val: f64
 }
 
-impl Default for Translator {
+impl<'a> Default for Translator<'a> {
     fn default() -> Self {
         Translator::new()
 		    .default_formatting()
@@ -18,7 +18,7 @@ impl Default for Translator {
     }
 }
 
-impl std::ops::Add for Translator {
+impl<'a> std::ops::Add for Translator<'a> {
     type Output = Self;
 
     ///the table of the FIRST argument takes priority over the SECOND.
@@ -41,8 +41,8 @@ impl std::ops::Add for Translator {
     }
 }
 
-impl Translator {
-    pub fn new() -> TranslatorBuilder {
+impl<'a> Translator<'a> {
+    pub fn new() -> TranslatorBuilder<'a> {
         TranslatorBuilder {
             table: HashMap::new(),
             is_raw: false,
@@ -50,13 +50,13 @@ impl Translator {
         }
     }
 
-    pub fn language(language: &str) -> Result<Self> {
+    pub fn language(language: &'a str) -> Result<Self> {
         Ok(Self::new()
             .language(language)?
             .build())
     }
 
-    pub fn language_or_default(language: &str) -> Self {
+    pub fn language_or_default(language: &'a str) -> Self {
         if let Ok(t) = Self::language(language) {
             t
         } else {
@@ -64,7 +64,7 @@ impl Translator {
         }
     }
 
-    pub fn language_or_raw(language: &str) -> Self {
+    pub fn language_or_raw(language: &'a str) -> Self {
         if let Ok(t) = Self::language(language) {
             t
         } else {
@@ -81,7 +81,7 @@ impl Translator {
             .build()
     }
 
-    pub fn translate<'a>(&self, s: &'a str) -> Cow<'a, str> {
+    pub fn translate(&self, s: &str) -> Cow<'a, str> {
         let mut res: String;
 
         if self.is_empty {
@@ -117,13 +117,13 @@ impl Translator {
 	}
 }
 
-pub struct TranslatorBuilder {
-    table: HashMap<char, Cow<'static, str>>,
+pub struct TranslatorBuilder<'a> {
+    table: HashMap<char, Cow<'a, str>>,
     is_raw: bool,
     ignore_unknown: bool
 }
 
-impl TranslatorBuilder {
+impl<'a> TranslatorBuilder<'a> {
     pub fn keep_unknown(&mut self) -> &mut Self {
         self.ignore_unknown = false;
         self
