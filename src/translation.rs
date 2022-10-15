@@ -219,7 +219,7 @@ impl<'a> TranslatorBuilder<'a> {
         }
 
         self
-            .keep("[]/=-\\',.;`")
+            .keep(lower_version)
     }
 
     pub fn punct_lower(&mut self) -> &mut Self {
