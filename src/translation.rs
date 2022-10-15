@@ -18,6 +18,29 @@ impl Default for Translator {
     }
 }
 
+impl std::ops::Add for Translator {
+    type Output = Self;
+
+    ///the table of the FIRST argument takes priority over the SECOND.
+    fn add(mut self, rhs: Self) -> Self::Output {
+        self.is_empty |= rhs.is_empty;
+        if !self.is_empty {
+            self.is_raw |= rhs.is_raw;
+            self.ignore_unknown |= rhs.ignore_unknown;
+            self.multiple_val = (self.multiple_val + rhs.multiple_val) / 2.0;
+
+            let base = &Cow::from(" ");
+            for (from, to) in rhs.table {
+                let original = self.table.get(&from);
+                if original.is_none() || original == Some(base) {
+                    self.table.insert(from, to);
+                }
+            }
+        }
+        self
+    }
+}
+
 impl Translator {
     pub fn new() -> TranslatorBuilder {
         TranslatorBuilder {
