@@ -213,9 +213,13 @@ impl<'a> TranslatorBuilder<'a> {
     }
 
     pub fn punct_lower(&mut self) -> &mut Self {
+        for (upper, lower) in "{}?+_|\"<>:~".chars().zip("[]/=-\\',.;`".chars()) {
+            let shifted = String::from_iter([' ', lower]);
+            self.one_multiple(upper, shifted.as_str());
+        }
+
         self
             .keep("[]/=-\\',.;`")
-            .one_to_one("{}?+_|\"<>:~", "[]/=-\\',.;`")
     }
 
     pub fn alphabet_lower(&mut self) -> &mut Self {
