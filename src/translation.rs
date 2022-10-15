@@ -143,21 +143,21 @@ impl TranslatorBuilder {
         self
     }
 
-    pub fn to_one(&mut self, from: &str, to: char) -> &mut Self {
+    pub fn many_different_to_one(&mut self, from: &str, to: char) -> &mut Self {
         for c in from.chars() {
             self.table.insert(c, Cow::from(to.to_string()));
         }
         self
     }
 
-    pub fn keep_same(&mut self, keep: &str) -> &mut Self {
+    pub fn keep(&mut self, keep: &str) -> &mut Self {
         for c in keep.chars() {
             self.table.insert(c, Cow::from(c.to_string()));
         }
         self
     }
 
-    pub fn to_another(&mut self, from: &str, to: &str) -> &mut Self {
+    pub fn one_to_one(&mut self, from: &str, to: &str) -> &mut Self {
         assert_eq!(from.chars().count(), to.chars().count());
 
         for (s, d) in from.chars().zip(to.chars()) {
@@ -178,7 +178,7 @@ impl TranslatorBuilder {
         self
     }
 
-    pub fn letters(&mut self, letters: &str) -> &mut Self {
+    pub fn letters_to_lowercase(&mut self, letters: &str) -> &mut Self {
         for letter in letters.chars() {
             self.table.insert(letter, Cow::from(letter.to_string()));
 
@@ -202,7 +202,7 @@ impl TranslatorBuilder {
         self.is_raw = true;
 
         self
-            .letters(letters.as_str())
+            .letters_to_lowercase(letters.as_str())
             .alphabet_lower()
             .punct_lower()
             .normalize_punct()
@@ -210,16 +210,16 @@ impl TranslatorBuilder {
 
     pub fn punct_lower(&mut self) -> &mut Self {
         self
-            .keep_same("[]/=-\\',.;`")
-            .to_another("{}?+_|\"<>:~", "[]/=-\\',.;`")
+            .keep("[]/=-\\',.;`")
+            .one_to_one("{}?+_|\"<>:~", "[]/=-\\',.;`")
     }
 
     pub fn alphabet_lower(&mut self) -> &mut Self {
-        self.letters("abcdefghijklmnopqrstuvwxyz")
+        self.letters_to_lowercase("abcdefghijklmnopqrstuvwxyz")
     }
 
     pub fn number_symbols_lower(&mut self) -> &mut Self {
-        self.to_another("!@#$%^&*()", "1234567890")
+        self.one_to_one("!@#$%^&*()", "1234567890")
     }
 
     pub fn ascii_lower(&mut self) -> &mut Self {
@@ -230,7 +230,7 @@ impl TranslatorBuilder {
 
     pub fn normalize_punct(&mut self) -> &mut Self {
         self
-            .to_another("«´»÷‘“”’–ʹ͵","'''/''''-''")
+            .one_to_one("«´»÷‘“”’–ʹ͵","'''/''''-''")
             .one_multiple('…', "...")
     }
 
@@ -245,10 +245,10 @@ impl TranslatorBuilder {
         match language.to_lowercase().as_str() {
             "akl" | "english" | "english2" | "toki_pona" | "indonesian" | "reddit" => Ok(self),
             "albanian" => Ok(self
-                .letters("çë")
+                .letters_to_lowercase("çë")
             ),
             "bokmal" | "nynorsk" | "danish" => Ok(self
-                .letters("åøæ")
+                .letters_to_lowercase("åøæ")
             ),
             "czech" => Ok(self
                 .to_multiple(vec![
@@ -257,28 +257,28 @@ impl TranslatorBuilder {
                     ('Č', "*c"), ('Ď', "*d"), ('É', "*x"), ('Ň', "*n"), ('Ó', "*o"), ('Ř', "*r"),
                     ('Š', "*s"), ('Ť', "*t"), ('Ů', "*u"), ('Ú', "*b"), ('Ý', "*y"), ('Ž', "*z")
                 ])
-                .letters("áíě")
+                .letters_to_lowercase("áíě")
             ),
             "dan-en70-30" => Ok(self
-                .letters("åøæ")
+                .letters_to_lowercase("åøæ")
             ),
             "dan-en70-30a" => Ok(self
                 .to_multiple(vec![
                     ('å', "*a"), ('ø', "*o"), ('æ', "*e")
                 ])
             ),
-            "dutch" => Ok(self.letters("áèéçëíîó")),
-            "dutch_repeat" => Ok(self.letters("áèéçëíîó@")),
-            "english_repeat" => Ok(self.keep_same("@")),
-            "english_th" => Ok(self.letters("þ")),
+            "dutch" => Ok(self.letters_to_lowercase("áèéçëíîó")),
+            "dutch_repeat" => Ok(self.letters_to_lowercase("áèéçëíîó@")),
+            "english_repeat" => Ok(self.keep("@")),
+            "english_th" => Ok(self.letters_to_lowercase("þ")),
             "esperanto" => Ok(self
-                .letters("ŝĝĉŭĵĥ")
+                .letters_to_lowercase("ŝĝĉŭĵĥ")
             ),
             "finnish" => Ok(self
-                .letters("åäö")
+                .letters_to_lowercase("åäö")
             ),
             "finnish_repeat" => Ok(self
-                .letters("åäö@")
+                .letters_to_lowercase("åäö@")
             ),
             "french" | "french_qu" | "test" => Ok(self
                 .to_multiple(vec![
@@ -290,15 +290,15 @@ impl TranslatorBuilder {
                     ('ë', "* e"), ('ï', "* i"), ('ö', "* o"), ('ü', "* u"), ('Ä', "* a"), ('Ë', "* e"),
                     ('Ï', "* i"), ('Ö', "* o"), ('Ü', "* u")
                 ])
-                .letters("éà")
+                .letters_to_lowercase("éà")
             ),
-            "german" => Ok(self.letters("äöüß")),
+            "german" => Ok(self.letters_to_lowercase("äöüß")),
             "hungarian" => Ok(self
                 .to_multiple(vec![
                     ('í', "*i"), ('ü', "*u"), ('ú', "* u"), ('ű', "* u"), ('Í', "*i"), ('Ü', "*u"),
                     ('Ú', "* u"), ('Ű', "* u")
                 ])
-                .letters("áéöóő")
+                .letters_to_lowercase("áéöóő")
             ),
             "italian" => Ok(self
                 .to_multiple(vec![
@@ -308,8 +308,8 @@ impl TranslatorBuilder {
             ),
             "korean" => Ok(self
                 .to_space("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-                .keep_same("ㅣㅡㅜㅏㅊㅈㅅㅂㅁㄹㄷㄴㄱㅇㅋㅌㅍㅐㅑㅓㅕㅗㅎㅔㅛㅠ")
-                .to_another("ㄲㄸㅆㅃㅉㅒㅖ", "ㄱㄷㅅㅂㅈㅐㅔ")
+                .keep("ㅣㅡㅜㅏㅊㅈㅅㅂㅁㄹㄷㄴㄱㅇㅋㅌㅍㅐㅑㅓㅕㅗㅎㅔㅛㅠ")
+                .one_to_one("ㄲㄸㅆㅃㅉㅒㅖ", "ㄱㄷㅅㅂㅈㅐㅔ")
                 .to_multiple(vec![
                     ('ㄳ', "ㄱㅅ"), ('ㅥ', "ㄴㄴ"), ('ㅦ', "ㄴㄷ"), ('ㅧ', "ㄴㅅ"), ('ㄵ', "ㄴㅈ"),
                     ('ㄶ', "ㄴㅎ"), ('ㄺ', "ㄹㄱ"), ('ㅩ', "ㄹㄱㅅ"), ('ㅪ', "ㄹㄷ"), ('ㄻ', "ㄹㅁ"),
@@ -325,7 +325,7 @@ impl TranslatorBuilder {
             ),
             "luxembourgish" => Ok(self
                 .to_multiple(vec![
-                    ('q', " œ"), ('e', " ´"), ('u', " ¨"), ('i', " ˆ"), ('s', " ß"), ('d', " ∂"),
+                    ('œ', " "), ('e', " ´"), ('u', " ¨"), ('i', " ˆ"), ('s', " ß"), ('d', " ∂"),
                     ('c', " ç")
                 ])
             ),
@@ -333,10 +333,10 @@ impl TranslatorBuilder {
                 .to_multiple(vec![
                     ('ą', "*a"), ('ó', "*o"), ('ź', "*z"), ('ś', "*s"), ('ć', "*c"), ('ń', "*n")
                 ])
-                .letters("łęż")
+                .letters_to_lowercase("łęż")
             ),
             "russian" => Ok(self
-                .letters("абвгдеёжзийклмнопрстуфхцчшщъыьэюя")
+                .letters_to_lowercase("абвгдеёжзийклмнопрстуфхцчшщъыьэюя")
                 .to_space("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
             ),
             "spanish" => Ok(self
@@ -347,7 +347,7 @@ impl TranslatorBuilder {
                 ])
             ),
             "swedish" => Ok(
-                self.letters("äåö")
+                self.letters_to_lowercase("äåö")
             ),
             "welsh" => Ok(self
                 .to_multiple(vec![
@@ -355,7 +355,7 @@ impl TranslatorBuilder {
                     ('ŷ', "*y"), ('Â', "*a"), ('Ê', "*e"), ('Î', "*i"), ('Ô', "*o"), ('Û', "*u"),
                     ('Ŵ', "*w"), ('Ŷ', "*y")
                 ])
-                .letters("ΔⳐ")
+                .letters_to_lowercase("ΔⳐ")
             ),
             "welsh_pure" => Ok(self
                 .to_multiple(vec![
@@ -432,7 +432,7 @@ mod tests {
     fn test_multiple() {
         let translator = Translator::new()
             .to_multiple(vec![('Ž', "*z")])
-            .letters("aď")
+            .letters_to_lowercase("aď")
             .build();
         
         assert_eq!(translator.translate("ŽAaØ ď"), "*zaa  ď");
