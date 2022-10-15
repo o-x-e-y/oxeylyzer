@@ -190,9 +190,9 @@ impl TranslatorBuilder {
         self
     }
 
-    pub fn to_multiple_with_string(&mut self, trans: Vec<(char, String)>) -> &mut Self {
+    pub fn to_multiple_string(&mut self, trans: &Vec<(char, String)>) -> &mut Self {
         for (f, t) in trans {
-            self.table.insert(f, SmartString::<Compact>::from(t));
+            self.table.insert(*f, SmartString::<Compact>::from(t));
         }
         self
     }
