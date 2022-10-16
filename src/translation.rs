@@ -50,12 +50,14 @@ impl Translator {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn language(language: &str) -> Result<Self> {
         Ok(Self::new()
             .language(language)?
             .build())
     }
 
+     #[allow(dead_code)]
     pub(crate) fn language_or_default(language: &str) -> Self {
         if let Ok(t) = Self::language(language) {
             t
@@ -64,6 +66,7 @@ impl Translator {
         }
     }
 
+     #[allow(dead_code)]
     pub(crate) fn language_or_raw(language: &str) -> Self {
         if let Ok(t) = Self::language(language) {
             t

@@ -19,6 +19,7 @@ pub fn load_raw(language: &str) {
     load_data(language, Translator::raw(true)).unwrap();
 }
 
+#[allow(dead_code)]
 pub(crate) fn load_default(language: &str) {
     let translator = Translator::language_or_raw(language);
 	if let Err(error) = load_data(language, translator) {
@@ -26,6 +27,7 @@ pub(crate) fn load_default(language: &str) {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn load_all_default() -> Result<()> {
     let start_total = Instant::now();
 
