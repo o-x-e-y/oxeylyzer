@@ -1,13 +1,12 @@
-use smartstring::{SmartString, Compact};
+use smartstring::{SmartString, Compact, LazyCompact};
 use anyhow::Result;
 use fxhash::FxHashMap;
 
+#[derive(Clone)]
 pub struct Translator {
     pub table: FxHashMap<char, SmartString<Compact>>,
     pub is_raw: bool,
-    pub(crate) ignore_unknown: bool,
-    pub(crate) is_empty: bool,
-    pub(crate) multiple_val: f64
+    pub(crate) is_empty: bool
 }
 
 impl Default for Translator {
@@ -22,14 +21,12 @@ impl Default for Translator {
 impl std::ops::Add for Translator {
     type Output = Self;
 
-    ///the table of the FIRST argument takes priority over the SECOND.
+    ///the table of the FIRST translator takes priority over the SECOND.
     fn add(mut self, rhs: Self) -> Self::Output {
         self.is_empty |= rhs.is_empty;
-        if !self.is_empty {
-            self.is_raw |= rhs.is_raw;
-            self.ignore_unknown |= rhs.ignore_unknown;
-            self.multiple_val = (self.multiple_val + rhs.multiple_val) / 2.0;
+        self.is_raw |= rhs.is_raw;
 
+        if !self.is_empty {
             let base = &SmartString::<Compact>::from(" ");
             for (from, to) in rhs.table {
                 let original = self.table.get(&from);
@@ -37,8 +34,11 @@ impl std::ops::Add for Translator {
                     self.table.insert(from, to);
                 }
             }
+            self
+        } else {
+            self.table = rhs.table;
+            self
         }
-        self
     }
 }
 
@@ -46,8 +46,7 @@ impl Translator {
     pub fn new() -> TranslatorBuilder {
         TranslatorBuilder {
             table: FxHashMap::default(),
-            is_raw: false,
-            ignore_unknown: false
+            is_raw: false
         }
     }
 
@@ -65,71 +64,40 @@ impl Translator {
         }
     }
 
-    pub fn language_or_raw(language: &str) -> Self {
+    pub(crate) fn language_or_raw(language: &str) -> Self {
         if let Ok(t) = Self::language(language) {
             t
         } else {
-            Self::raw()
+            Self::raw(true)
         }
     }
 
-    pub fn raw() -> Self {
+    pub fn raw(unshift_chars: bool) -> Self {
         Translator::new()
-            .raw()
-            .ascii_lower()
-            .normalize_punct()
-            .keep_unknown()
+            .raw(unshift_chars)
             .build()
     }
 
-    pub fn translate(&self, s: &str) -> SmartString<Compact> {
-        let mut res: String;
+    pub fn translate(&self, s: &str) -> SmartString<LazyCompact> {
+        let mut res = SmartString::<LazyCompact>::new();
 
-        if self.is_empty {
-            return SmartString::<Compact>::from(s);
-        } else if self.multiple_val == 0.0 {
-            res = String::with_capacity(s.len()); 
-        } else {
-            let f64_len = s.len() as f64;
-            let length = f64_len + f64_len / (0.025 * self.multiple_val);
-            res = String::with_capacity(length as usize);
-        }
-
-        if self.ignore_unknown {
-            for c in s.chars() {
-                if let Some(replacement) = self.table.get(&c) {
-                    res.push_str(replacement);
-                } else {
-                    res.push(c);
-                }
-            }
-        } else {
-            for c in s.chars() {
-                if let Some(replacement) = self.table.get(&c) {
-                    res.push_str(replacement);
-                } else  {
-                    res.push(' ');
-                }
+        for c in s.chars() {
+            if let Some(replacement) = self.table.get(&c) {
+                res.push_str(replacement);
+            } else {
+                res.push(' ');
             }
         }
-
-        res.shrink_to_fit();
-        SmartString::<Compact>::from(res)
+        res
 	}
 }
 
 pub struct TranslatorBuilder {
     table: FxHashMap<char, SmartString<Compact>>,
-    is_raw: bool,
-    ignore_unknown: bool
+    is_raw: bool
 }
 
 impl TranslatorBuilder {
-    pub fn keep_unknown(&mut self) -> &mut Self {
-        self.ignore_unknown = false;
-        self
-    }
-
     pub fn to_nothing(&mut self, to_nothing: &str) -> &mut Self {
         for c in to_nothing.chars() {
             self.table.insert(c, SmartString::<Compact>::from(""));
@@ -218,23 +186,29 @@ impl TranslatorBuilder {
         self
     }
 
-    pub fn raw(&mut self) -> &mut Self {
-        for i in 128u32..75_000 {
-            if let Some(c) = char::from_u32(i) && c.is_alphabetic() {
-                if c.is_lowercase() {
-                    self.letter_to_lowercase(c);
-                } else {
+    pub fn raw(&mut self, unshift_chars: bool) -> &mut Self {
+        self.is_raw = true;
+        self.normalize_punct();
+
+        if unshift_chars {
+            for i in 128u32..75_000 {
+                if let Some(c) = char::from_u32(i) && c.is_alphabetic() {
+                    if c.is_lowercase() {
+                        self.letter_to_lowercase(c);
+                    } else {
+                        self.keep_one(c);
+                    }
+                }
+            }
+            self.ascii_lower()
+        } else {
+            for i in 0u32..75_000 {
+                if let Some(c) = char::from_u32(i) && !c.is_control() {
                     self.keep_one(c);
                 }
             }
+            self
         }
-        
-        self.is_raw = true;
-
-        self
-            .alphabet_lower()
-            .punct_lower()
-            .normalize_punct()
     }
 
     pub fn custom_unshift(&mut self, upper_version: &str, lower_version: &str) -> &mut Self {
@@ -407,28 +381,11 @@ impl TranslatorBuilder {
         }
     }
 
-    fn check_multiple_val(&self) -> f64 {
-        // assume a 2.5% occurence of every 1 -> n translation to be safe
-        // subtract from total length with a factor of 0.1 in case of a 1 -> 0 translation
-
-        let mut res = 0.0;
-        for (_, trans) in self.table.iter() {
-            if trans.len() > 0 {
-                res += trans.len() as f64 - 1.0;
-            } else {
-                res -= 0.1;
-            }
-        }
-        res
-    }
-
     pub fn build(&mut self) -> Translator {
         Translator {
             is_empty: self.table.len() == 0,
-            is_raw: self.is_raw,
-            ignore_unknown: self.ignore_unknown,
-            multiple_val: self.check_multiple_val(),
-            table: std::mem::take(&mut self.table)
+            table: std::mem::take(&mut self.table),
+            is_raw: self.is_raw
         }
     }
 }
@@ -462,7 +419,7 @@ mod tests {
     #[test]
     fn test_keep_all() {
         let translator = Translator::new()
-            .keep_unknown()
+            .raw(false)
             .build();
         
         assert_eq!(translator.translate("ŽAamong us"), "ŽAamong us");
@@ -477,5 +434,22 @@ mod tests {
             .build();
         
         assert_eq!(translator.translate("ŽAaØ ď"), "* z aa  ď");
+    }
+
+    #[test]
+    fn add_translators_together() {
+        let t1 = Translator::new()
+            .one_multiple('a', "abc")
+            .one_to_one("b", "_")
+            .build();
+        let t2 = Translator::new()
+            .one_multiple('c', "cba")
+            .one_to_one("b", "-")
+            .build();
+
+        let t3 = t1.clone() + t2.clone();
+        let t4 = t2 + t1;
+        assert_eq!(t3.translate("abcd"), "abc_cba ");
+        assert_eq!(t4.translate("abcd"), "abc-cba ");
     }
 }
