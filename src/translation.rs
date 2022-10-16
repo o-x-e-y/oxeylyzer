@@ -51,13 +51,13 @@ impl Translator {
         }
     }
 
-    pub fn language(language: &str) -> Result<Self> {
+    pub(crate) fn language(language: &str) -> Result<Self> {
         Ok(Self::new()
             .language(language)?
             .build())
     }
 
-    pub fn language_or_default(language: &str) -> Self {
+    pub(crate) fn language_or_default(language: &str) -> Self {
         if let Ok(t) = Self::language(language) {
             t
         } else {
@@ -247,7 +247,7 @@ impl TranslatorBuilder {
             .keep(lower_version)
     }
 
-    pub fn punct_lower(&mut self) -> &mut Self {
+    pub(crate) fn punct_lower(&mut self) -> &mut Self {
         for (upper, lower) in "{}?+_|\"<>:~".chars().zip("[]/=-\\',.;`".chars()) {
             let shifted = String::from_iter([' ', lower]);
             self.one_multiple(upper, shifted.as_str());
@@ -257,33 +257,29 @@ impl TranslatorBuilder {
             .keep("[]/=-\\',.;`")
     }
 
-    pub fn alphabet_lower(&mut self) -> &mut Self {
+    pub(crate) fn alphabet_lower(&mut self) -> &mut Self {
         self.letters_to_lowercase("abcdefghijklmnopqrstuvwxyz")
     }
 
-    pub fn number_symbols_lower(&mut self) -> &mut Self {
-        self.one_to_one("!@#$%^&*()", "1234567890")
-    }
-
-    pub fn ascii_lower(&mut self) -> &mut Self {
+    pub(crate) fn ascii_lower(&mut self) -> &mut Self {
         self
             .punct_lower()
             .alphabet_lower()
     }
 
-    pub fn normalize_punct(&mut self) -> &mut Self {
+    pub(crate) fn normalize_punct(&mut self) -> &mut Self {
         self
             .one_to_one("«´»÷‘“”’–ʹ͵","'''/''''-''")
             .one_multiple('…', "...")
     }
 
-    pub fn default_formatting(&mut self) -> &mut Self {
+    pub(crate) fn default_formatting(&mut self) -> &mut Self {
         self
             .ascii_lower()
             .normalize_punct()
     }
 
-    pub fn language(&mut self, language: &str) -> Result<&mut Self> {
+    pub(crate) fn language(&mut self, language: &str) -> Result<&mut Self> {
         self.default_formatting();
         match language.to_lowercase().as_str() {
             "akl" | "english" | "english2" | "toki_pona" | "indonesian" | "reddit" => Ok(self),

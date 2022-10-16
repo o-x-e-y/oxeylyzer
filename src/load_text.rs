@@ -19,14 +19,14 @@ pub fn load_raw(language: &str) {
     load_data(language, Translator::raw()).unwrap();
 }
 
-pub fn load_default(language: &str) {
+pub(crate) fn load_default(language: &str) {
     let translator = Translator::language_or_raw(language);
 	if let Err(error) = load_data(language, translator) {
         println!("{language} failed to update: '{error}'");
     }
 }
 
-pub fn load_all_default() -> Result<()> {
+pub(crate) fn load_all_default() -> Result<()> {
     let start_total = Instant::now();
 
     std::fs::read_dir(format!("static/text/"))?
