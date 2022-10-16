@@ -1,0 +1,18 @@
+based_on = ["default"]
+
+[multiple]
+uppercase_versions = true # this tries to create a transposition for Č, Ď etc as well.
+list = [
+    ["č", "*c"],
+    ["ď", "*d"],
+    ["é", "*x"],
+    ["ň", "*n"],
+    ["ó", "*o"],
+    ["ř", "*r"],
+    ["š", "*s"],
+    ["ť", "*t"],
+    ["ů", "*u"],
+    ["ú", "*b"],
+    ["ý", "*y"],
+    ["ž", "*z"]
+]

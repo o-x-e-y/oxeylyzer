@@ -129,6 +129,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "084c6b182b01dec54ff12986b9cc8859a9b0d92b074f878c382a4481a070e66e"
 
 [[package]]
+name = "glob"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -187,10 +193,14 @@ version = "0.1.0"
 dependencies = [
  "ansi_rgb",
  "getargs",
+ "glob",
  "indexmap",
  "indicatif",
  "oxeylyzer",
+ "serde",
+ "serde_json",
  "shlex",
+ "toml",
 ]
 
 [[package]]
@@ -248,7 +258,7 @@ checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 [[package]]
 name = "oxeylyzer"
 version = "0.1.0"
-source = "git+https://github.com/O-X-E-Y/oxeylyzer#fddde3773fc279054a83ec3b1ec7f509e50196f7"
+source = "git+https://github.com/O-X-E-Y/oxeylyzer#85d2bb37efd730e05dfc24b9cb883ee109bff1ff"
 dependencies = [
  "anyhow",
  "file-chunker",
@@ -267,9 +277,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.46"
+version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94e2ef8dbfc347b10c094890f778ee2e36ca9bb4262e86dc99cd217e35f3470b"
+checksum = "5ea3d908b0e36316caf9e9e2c4625cdde190a7e6f440d794667ed17a1855e725"
 dependencies = [
  "unicode-ident",
 ]
@@ -398,8 +408,7 @@ dependencies = [
 [[package]]
 name = "smartstring"
 version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
+source = "git+https://github.com/O-X-E-Y/smartstring#bb0c2fa6f6ba34d33672bf18f3098fa006e20df1"
 dependencies = [
  "autocfg",
  "static_assertions",

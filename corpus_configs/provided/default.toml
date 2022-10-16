@@ -1,0 +1,18 @@
+letters_to_lowercase = "abcdefghijklmnopqrstuvwxyz"
+
+[punct_unshifted]
+from = "{}?+_|\"<>:~“”«»"
+to =   "[]/=-\\',.;`''''"
+
+[one_to_one]
+from = "´÷‘’–ʹ͵"
+to =   "'/''-''"
+
+[to_multiple]
+list = [
+  ["…", "..."],
+]
+
+
+
+

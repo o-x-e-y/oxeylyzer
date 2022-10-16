@@ -6,3 +6,5 @@ static/stats
 static/layouts/cringe
 *.py
 static/language_data/reddit.json
+__pycache__
+make_release.py
