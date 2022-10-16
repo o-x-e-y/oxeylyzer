@@ -23,8 +23,8 @@ impl std::ops::Add for Translator {
 
     ///the table of the FIRST translator takes priority over the SECOND.
     fn add(mut self, rhs: Self) -> Self::Output {
-        self.is_empty |= rhs.is_empty;
         self.is_raw |= rhs.is_raw;
+        self.is_empty &= rhs.is_empty;
 
         if !self.is_empty {
             let base = &SmartString::<Compact>::from(" ");
@@ -451,8 +451,16 @@ mod tests {
             .build();
 
         let t3 = t1.clone() + t2.clone();
-        let t4 = t2 + t1;
+        let t4 = t2 + t1.clone();
+        
         assert_eq!(t3.translate("abcd"), "abc_cba ");
         assert_eq!(t4.translate("abcd"), "abc-cba ");
+
+        let t_empty = Translator::new().build();
+        let t5 = t1.clone() + t_empty.clone();
+        let t6 = t_empty + t1;
+        
+        assert_eq!(t5.translate("abcd"), "abc_  ");
+        assert_eq!(t5.translate("abcd"), t6.translate("abcd"));
     }
 }
