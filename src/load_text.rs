@@ -320,72 +320,41 @@ impl TextData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::*;
 
-    //#[test]
-    #[allow(dead_code)]
-    fn test_load_language() {
-        let translator = Translator::new()
-            .language("english").unwrap()
-            .build();
+	#[test]
+	fn load_language_data() {
+        use language_data::*;
+
+		load_default("test");
+
+		let data = LanguageData::from_file("static/language_data","test")
+			.expect("'test.json' in static/language_data/ was not created");
+		
+		assert!(data.language == "test");
+
+		let total_c = 1.0/data.characters.iter().map(|&(_, f)| f).reduce(f64::min).unwrap();
         
-        let data = load_data("test", translator).unwrap();
+        assert_eq!(data.characters.get(&'e'), Some(&(2.0/total_c)));
+        assert_eq!(data.characters.get(&'\''), Some(&(1.0/total_c)));
 
-        let reference = serde_json::from_str::<TextData>(
-            "{
-                \"language\": \"test\",
-                \"characters\": {
-                    \".\": 0.6,
-                    \"=\": 0.1,
-                    \"`\": 0.1,
-                    \"a\": 0.1,
-                    \"b\": 0.1
-                },
-                \"bigrams\": {
-                    \"..\": 0.6666666666666666,
-                    \"a.\": 0.16666666666666666,
-                    \"b`\": 0.16666666666666666
-                },
-                \"skipgrams\": {
-                    \"..\": 0.6666666666666666,
-                    \"a.\": 0.3333333333333333
-                },
-                \"skipgrams2\": {
-                    \"..\": 0.6666666666666666,
-                    \"a.\": 0.3333333333333333
-                },
-                \"skipgrams3\": {
-                    \"..\": 0.6666666666666666,
-                    \"a.\": 0.3333333333333333
-                },
-                \"trigrams\": {
-                    \"...\": 0.6666666666666666,
-                    \"a..\": 0.3333333333333333
-                }
-            }"
-        ).unwrap();
+        let total_b = 1.0/data.bigrams.iter().map(|(_, &f)| f).reduce(f64::min).unwrap();
 
-        assert_eq!(reference.language, data.language);
-        for (c, freq) in reference.characters.iter() {
-            assert!((*data.characters.get(c).unwrap() - freq).abs() < 0.000000001);
-        }
+        assert_eq!(data.bigrams.get(&['\'', '*']), Some(&(1.0/total_b)));
+        assert_eq!(data.bigrams.get(&['1', ':']), None);
 
-        for (c, freq) in reference.bigrams.iter() {
-            assert!((*data.bigrams.get(c).unwrap() - freq).abs() < 0.000000001);
-        }
-        for (c, freq) in reference.skipgrams.iter() {
-            assert!((*data.skipgrams.get(c).unwrap() - freq).abs() < 0.000000001);
-        }
-        for (c, freq) in reference.trigrams.iter() {
-            assert!((*data.trigrams.get(c).unwrap() - freq).abs() < 0.000000001);
-        }
-        assert!(data.characters.len() == reference.characters.len());
-        assert!(data.bigrams.len() == reference.bigrams.len());
-        assert!(data.skipgrams.len() == reference.skipgrams.len());
-        assert!(data.trigrams.len() == reference.trigrams.len());
+		let total_s = 1.0/data.skipgrams.iter().map(|(_, &f)| f).reduce(f64::min).unwrap();
 
-        assert!(data.characters.into_iter().map(|(_, f)| f).sum::<f64>() - 1.0 < 0.000000001);
-        assert!(data.bigrams.into_iter().map(|(_, f)| f).sum::<f64>() - 1.0 < 0.000000001);
-        assert!(data.skipgrams.into_iter().map(|(_, f)| f).sum::<f64>() - 1.0 < 0.000000001);
-        assert!(data.trigrams.into_iter().map(|(_, f)| f).sum::<f64>() - 1.0 < 0.000000001);
-    }
+		assert_eq!(data.skipgrams.get(&[';', 'd']), Some(&(1.0/total_s)));
+		assert_eq!(data.skipgrams.get(&['*', 'e']), Some(&(1.0/total_s)));
+		assert_eq!(data.skipgrams.get(&['t', 'e']), Some(&(1.0/total_s)));
+		assert_eq!(data.skipgrams.get(&['\'', 't']), None);
+	}
+
+	#[test]
+	fn get_generator() {
+
+		let a = generate::LayoutGeneration::new("test", "static", 1000, None);
+		assert!(a.is_ok());
+	}
 }
