@@ -16,7 +16,7 @@ use smartstring::{SmartString, Compact};
 const TWO_MB: u64 = 1024 * 1024 * 2;
 
 pub fn load_raw(language: &str) {
-    load_data(language, Translator::raw()).unwrap();
+    load_data(language, Translator::raw(true)).unwrap();
 }
 
 pub(crate) fn load_default(language: &str) {
