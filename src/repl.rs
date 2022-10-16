@@ -12,6 +12,7 @@ use oxeylyzer::{
 
 use crate::tui::*;
 use crate::commands::*;
+use crate::corpus_transposition::CorpusConfig;
 use ArgumentType::*;
 
 pub struct Repl {
@@ -242,10 +243,11 @@ impl Repl {
 
     fn respond(&mut self, line: &str) -> Result<bool, String> {
         let args = shlex::split(line).ok_or("error: Invalid quoting")?;
-        let mut opts = Options::new(args.iter().map(String::as_str));
-        match opts.next_positional() {
+        let mut args = Options::new(args.iter().map(String::as_str));
+
+        match args.next_positional() {
             Some("generate") | Some("gen") | Some("g") => {
-                if let Some(count_str) = opts.next_positional()
+                if let Some(count_str) = args.next_positional()
                 && let Ok(count) = usize::from_str_radix(count_str, 10) {
                     println!("generating {} layouts...", count_str);
                     self.temp_generated = generate_n(&self.gen, count);
@@ -254,8 +256,8 @@ impl Repl {
                 }
             }
             Some("improve") | Some("i") => {
-                if let Some(name) = opts.next_positional()
-                && let Some(amount_str) = opts.next_positional()
+                if let Some(name) = args.next_positional()
+                && let Some(amount_str) = args.next_positional()
                 && let Ok(amount) = usize::from_str_radix(amount_str, 10) {
                     if let Some(l) = self.layout_by_name(name) {
                         self.temp_generated = generate_n_with_pins(&self.gen, amount, l.clone(), &self.pins);
@@ -268,7 +270,7 @@ impl Repl {
             }
             Some("rank") => self.rank(),
             Some("analyze") | Some("layout") | Some("a") => {
-                if let Some(name_or_nr) = opts.next_positional() {
+                if let Some(name_or_nr) = args.next_positional() {
                     if let Ok(nr) = usize::from_str_radix(name_or_nr, 10) {
                         if let Some(layout) = self.get_nth(nr) {
                             self.analyze(&layout);
@@ -281,28 +283,52 @@ impl Repl {
                 }
             }
             Some("compare") | Some("c") | Some("comp") | Some("cmopare") | Some("comprae") => {
-                if let Some(layout1) = opts.next_positional()
-                && let Some(layout2) = opts.next_positional() {
+                if let Some(layout1) = args.next_positional()
+                && let Some(layout2) = args.next_positional() {
                     self.compare_name(layout1, layout2);
                 } else {
                     print_error("compare", &[R("layout 1"), R("layout 2")]);
                 }
             }
             Some("ngram") | Some("occ") | Some("n") => {
-                if let Some(ngram) = opts.next_positional() {
+                if let Some(ngram) = args.next_positional() {
                     println!("{}", get_ngram_info(&self.gen.data, ngram));
                 } else {
                     print_error("ngram", &[R("ngram")]);
                 }
             }
             Some("load") => {
-                if let Some(language) = opts.next_positional() {
-                    load_text::load_default(language);
+                use getargs::Opt::*;
+                let opt1 = args.next_opt();
+
+                if matches!(opt1, Ok(Some(Short('a'))) | Ok(Some(Long("all")))) {
+                    for (language, config) in CorpusConfig::all() {
+                        println!("loading data for language: {language}...");
+                        load_text::load_data(language.as_str(), config.translator());
+                    }
+                } else if let Some(language) = args.next_positional() {
+                    let opt2 = args.next_opt();
+                    if matches!(opt1, Ok(Some(Short('r'))) | Ok(Some(Long("raw"))))
+                    || matches!(opt2, Ok(Some(Short('r'))) | Ok(Some(Long("raw")))) {
+                        println!("loading raw data for language: {language}...");
+                        load_text::load_raw(language);
+                    } else {
+                        let preferred_folder = args.next_positional();
+                        let translator = CorpusConfig::new_translator(language, preferred_folder);
+                        
+                        println!("loading data for {language}...");
+                        load_text::load_data(language, translator);
+                    }
+                } else {
+                    print_error(
+                        "load",
+                        &[R("language"), O("preferred_config_folder"), A("raw")]
+                    );
                 }
             }
             Some("language") | Some("lanugage") | Some("langauge") | Some("lang") | Some("l") => {
                 let config = Config::new();
-                match opts.next_positional() {
+                match args.next_positional() {
                     Some(language) => {
                         if let Ok(generator) = LayoutGeneration::new(
                             language,
@@ -362,10 +388,10 @@ impl Repl {
                 }
             }
             Some("save") | Some("s") => {
-                if let Some(n_str) = opts.next_positional()
+                if let Some(n_str) = args.next_positional()
                 && let Ok(nr) = usize::from_str_radix(n_str, 10) {
                     if let Some(layout) = self.get_nth(nr) {
-                        let name = opts.next_positional().map(str::to_string);
+                        let name = args.next_positional().map(str::to_string);
                         self.save(layout, name).unwrap();
                     }
                 } else {
@@ -377,7 +403,7 @@ impl Repl {
                 return Ok(true)
             }
             Some("help") | Some("--help") | Some("h") | Some("-h") => {
-                match opts.next_positional() {
+                match args.next_positional() {
                     Some("generate") | Some("gen") | Some("g") => {
                         print_help(
                             "generate", 
@@ -424,7 +450,7 @@ impl Repl {
                         print_help(
                             "load",
                             "Generates corpus for <language>. Will be include everything but spaces if the language is not known.",
-                            &[R("language")]
+                            &[R("language"), O("preferred_config_folder"), A("raw")]
                         )
                     }
                     Some("language") | Some("lanugage") | Some("langauge") | Some("lang") | Some("l") => {

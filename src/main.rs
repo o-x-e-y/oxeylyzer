@@ -5,6 +5,7 @@
 mod repl;
 mod tui;
 mod commands;
+mod corpus_transposition;
 
 fn main() -> Result<(), String> {
 	repl::Repl::run()
