@@ -1,21 +1,26 @@
 #[derive(Debug)]
 pub(crate) enum ArgumentType<'a> {
     R(&'a str),
-    O(&'a str)
+    O(&'a str),
+    A(&'a str)
 }
 
 impl<'a> ArgumentType<'a> {
     pub(crate) fn is_required(&self) -> bool {
         match *self {
             Self::R(_) => true,
-            Self::O(_) => false
+            _ => false
         }
     }
 
     pub(crate) fn parse(&self) -> String {
         match *self {
             Self::R(s) => format!("<{s}>"),
-            Self::O(s) => format!("[{s}]")
+            Self::O(s) => format!("[{s}]"),
+            Self::A(s) => {
+                let first = s.chars().next().unwrap();
+                format!("[-{first}/--{s}]")
+            }
         }
     }
 }
