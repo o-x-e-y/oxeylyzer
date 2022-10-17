@@ -1,2 +1,0 @@
-
-# rustflags = ["-Z", "share-generics=y"]

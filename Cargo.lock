@@ -258,7 +258,7 @@ checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 [[package]]
 name = "oxeylyzer"
 version = "0.1.0"
-source = "git+https://github.com/O-X-E-Y/oxeylyzer#85d2bb37efd730e05dfc24b9cb883ee109bff1ff"
+source = "git+https://github.com/O-X-E-Y/oxeylyzer#d6eccf8def22dfc3a55d3328937887f29e6fda28"
 dependencies = [
  "anyhow",
  "file-chunker",

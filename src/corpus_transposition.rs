@@ -32,6 +32,7 @@ impl std::ops::Add for OneToOne {
 
 #[derive(Deserialize)]
 struct CorpusConfigLoad {
+    source_language: Option<String>,
     // #[serde(from = "OneOrMany<_>")]
     #[serde(default)]
     based_on: Vec<String>,
@@ -70,6 +71,7 @@ impl CorpusConfigLoad {
         } else {
             Self::check_for_language(language)
         };
+
         if let Ok(preferred_folder) = preferred_folder {
             let file_name = format!("{language}.toml");
             let path = PathBuf::from("corpus_configs")
@@ -92,6 +94,7 @@ impl CorpusConfigLoad {
 }
 
 pub struct CorpusConfig {
+    source_language: String,
     based_on: Vec<String>,
     letters_to_lowercase: String,
     punct_unshifted: OneToOne,
@@ -109,6 +112,7 @@ impl CorpusConfig {
         //     None => Vec::new()
         // };
         Ok(Self {
+            source_language: loaded.source_language.unwrap_or_else(|| language.to_string()),
             based_on: loaded.based_on,
             letters_to_lowercase: loaded.letters_to_lowercase,
             punct_unshifted: loaded.punct_unshifted,
