@@ -591,10 +591,11 @@ impl LayoutGeneration {
 
 			let new_heur = cache.trigrams_total - scissors_score - effort_score - usage_score - fspeed_score;
 
-			let trigrams_score = if cache.total_score < (new_heur + new_heur.abs() * 0.0) {
+			let trigrams_score = if cache.total_score < (f64::MAX) { //new_heur + new_heur.abs() * 0.0) {
 				let trigrams_end = self.trigram_char_score(layout, swap);
 				unsafe { layout.swap_no_bounds(swap) };
 				let trigrams_start = self.trigram_char_score(layout, swap);
+
 				#[cfg(test)]
 				NOT_PRUNED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 				
@@ -602,6 +603,7 @@ impl LayoutGeneration {
 			} else {
 				#[cfg(test)]
 				PRUNED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+				
 				unsafe { layout.swap_no_bounds(swap) };
 				return f64::MIN + 1000.0;
 			};
