@@ -195,10 +195,14 @@ impl TranslatorBuilder {
 
         if unshift_chars {
             for i in 128u32..75_000 {
-                if let Some(c) = char::from_u32(i) && c.is_alphabetic() {
-                    if c.is_lowercase() {
-                        self.letter_to_lowercase(c);
-                    } else {
+                if let Some(c) = char::from_u32(i) {
+                    if c.is_alphabetic() {
+                        if c.is_lowercase() {
+                            self.letter_to_lowercase(c);
+                        } else {
+                            self.keep_one(c);
+                        }
+                    } else if !c.is_control() {
                         self.keep_one(c);
                     }
                 }
