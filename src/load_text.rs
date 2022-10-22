@@ -56,8 +56,8 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
             (FileChunker::new(&f).unwrap(), count as usize)
         })
         .collect::<Vec<_>>();
-    
-    let texts = chunkers.par_iter()
+
+    let quingrams = chunkers.par_iter()
         .flat_map(|(chunker, count)| {
             chunker.chunks(*count, Some(' ')).unwrap()
         })
@@ -66,22 +66,12 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
                 Make sure all files in the directory are valid utf-8."
             )
         )
-        .map(|s| {
-            let mut buf = [' '; 5];
-            for (i, c) in s.chars().rev().take(5).enumerate() {
-                buf[4 - i] = c;
-            }
-            (s, SmartString::<LazyCompact>::from_iter(buf) + "     ")
-        })
-        .collect::<Vec<_>>();
-
-        let quingrams = texts.par_iter()
-            .map(|(s, last5)|
-                TextNgrams::<5>::from((*s, last5.as_str()))
-            )
-            .reduce(
-                || TextNgrams::default(),
-                |accum, new| accum.combine_with(new)
+        .map(|s|
+            TextNgrams::<5>::from(s)
+        )
+        .reduce(
+            || TextNgrams::default(),
+            |accum, new| accum.combine_with(new)
         );
 
     TextData::from((quingrams, language, translator)).save(is_raw)?;
@@ -91,46 +81,27 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
 }
 
 #[derive(Default, Debug)]
-pub struct TextNgrams<'a, const N: usize> {
-    pub ngrams: HashMap<&'a str, usize>,
+pub struct TextNgrams<const N: usize> {
+    pub ngrams: HashMap<[char; N], usize>,
 }
 
-impl<'a, const N: usize> From<(&'a str, &'a str)> for TextNgrams<'a, N> {
-    fn from((s, s_end): (&'a str, &'a str)) -> Self {
-        let mut pentagrams = HashMap::new();
-
-        let start_i = s.char_indices()
-            .map(|(i, _)| i);
-        let end_i = s.char_indices()
-            .skip(N)
-            .map(|(i, _)| i);
-        
-        let iter_first = start_i.zip(end_i)
-            .map(|(i1, i2)| &s[i1..i2]);
-
-        let start_i = s_end.char_indices()
-            .map(|(i, _)| i);
-        let end_i = s_end.char_indices()
-            .skip(N)
-            .map(|(i, _)| i);
-
-        let iter = iter_first.chain(
-            start_i.zip(end_i)
-                .map(|(i1, i2)| &s_end[i1..i2])
-        );
-
-        for s in iter {
-            pentagrams.entry(s).and_modify(|p| *p += 1).or_insert(1);
-        }
-        
-        Self { ngrams: pentagrams }
+impl From<&str> for TextNgrams<5> {
+    fn from(s: &str) -> Self {
+        let mut quingrams = HashMap::new();
+        for q in s.chars()
+            .chain([' ', ' ', ' ', ' '])
+            .tuple_windows::<(_, _, _, _, _)>()
+            .map(|(c1, c2, c3, c4, c5)| [c1, c2, c3, c4, c5]) {
+                quingrams.entry(q).and_modify(|f| *f += 1).or_insert(1);
+            }
+        Self { ngrams: quingrams }
     }
 }
 
-impl<'a, const N: usize> TextNgrams<'a, N> {
+impl<const N: usize> TextNgrams<N> {
     fn combine_with(mut self, rhs: Self) -> Self {
         for (trigram, freq) in rhs.ngrams.into_iter() {
-            self.ngrams.entry(trigram).and_modify(|e| *e += freq).or_insert(freq);
+            self.ngrams.entry(trigram).and_modify(|f| *f += freq).or_insert(freq);
         }
         self
     }
@@ -193,13 +164,14 @@ impl TextData {
     }
 }
 
-impl From<(TextNgrams<'_, 5>, &str, Translator)> for TextData {
+impl From<(TextNgrams<5>, &str, Translator)> for TextData {
     fn from((ngrams, language, translator): (TextNgrams<5>, &str, Translator)) -> Self {
         let mut res = TextData::new(language);
 
         for (quingram, freq) in ngrams.ngrams.into_iter() {
-            let translated = translator.translate(quingram);
-            let first_char = quingram.chars().next().unwrap();
+            let q = SmartString::<LazyCompact>::from_iter(quingram);
+            let translated = translator.translate(q.as_str());
+            let first_char = quingram[0];
             
             let it_count = if let Some(f) = translator.table.get(&first_char) {
                 f.chars().count()
@@ -355,12 +327,12 @@ mod tests {
     #[test]
     fn from_textngrams() {
         let mut ngrams = TextNgrams::<5>::default();
-        ngrams.ngrams.insert("Amogu", 1);
-        ngrams.ngrams.insert("mogus", 1);
-        ngrams.ngrams.insert("ogus", 1);
-        ngrams.ngrams.insert("gus", 1);
-        ngrams.ngrams.insert("us", 1);
-        ngrams.ngrams.insert("s", 1);
+        ngrams.ngrams.insert(['A', 'm', 'o', 'g', 'u'], 1);
+        ngrams.ngrams.insert(['m', 'o', 'g', 'u', 's'], 1);
+        ngrams.ngrams.insert(['o', 'g', 'u', 's', ' '], 1);
+        ngrams.ngrams.insert(['g', 'u', 's', ' ', ' '], 1);
+        ngrams.ngrams.insert(['u', 's', ' ', ' ', ' '], 1);
+        ngrams.ngrams.insert(['s', ' ', ' ', ' ', ' '], 1);
         let translator = Translator::new()
             .letters_to_lowercase("amogus")
             .build();
@@ -371,7 +343,6 @@ mod tests {
         assert_eq!(data.skipgram_sum, 4.0,);
         assert_eq!(data.skipgram2_sum, 3.0,);
         assert_eq!(data.skipgram3_sum, 2.0,);
-        assert_eq!(data.trigram_sum, 4.0);
         assert_eq!(data.trigram_sum, data.skipgram_sum);
 
         for (_, f) in data.characters {

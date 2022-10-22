@@ -90,7 +90,7 @@ impl TryFrom<String> for KeyboardType {
     }
 }
 
-pub fn get_effort_map(heatmap: f64, ktype: KeyboardType) -> [f64; 30] {
+pub fn get_effort_map(heatmap_weight: f64, ktype: KeyboardType) -> [f64; 30] {
 	use KeyboardType::*;
 	
 	let mut res = match ktype {
@@ -124,7 +124,7 @@ pub fn get_effort_map(heatmap: f64, ktype: KeyboardType) -> [f64; 30] {
 	for i in 0..res.len() {
 		res[i] -= 0.2;
 		res[i] /= 4.5;
-		res[i] *= heatmap;
+		res[i] *= heatmap_weight;
 	}
 
 	res
