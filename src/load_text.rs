@@ -95,8 +95,6 @@ impl From<&str> for TextNgrams<5> {
         let it5 = s.chars().skip(4).chain([' ', ' ', ' ', ' ']);
         let it = it1.zip(it2).zip(it3).zip(it4).zip(it5);
         for ((((c1, c2), c3), c4), c5) in it {
-            let q = [c1, c2, c3, c4, c5];
-            println!("{q:?}");
             quingrams.entry([c1, c2, c3, c4, c5]).and_modify(|f| *f += 1).or_insert(1);
         }
         // for q in s.chars()
