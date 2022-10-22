@@ -229,7 +229,7 @@ impl From<(TextNgrams<'_, 5>, &str, Translator)> for TextData {
             }
         }
 
-        // IndexMaps have the property of being sorted based on insertion, so they're sortable:
+        // IndexMaps have the property of keeping order based on insertion, so they're sortable:
         res.characters.iter_mut().for_each(|(_, f)| *f /= res.char_sum);
         res.bigrams.iter_mut().for_each(|(_, f)| *f /= res.bigram_sum);
         res.skipgrams.iter_mut().for_each(|(_, f)| *f /= res.skipgram_sum);
@@ -249,28 +249,34 @@ impl From<(TextNgrams<'_, 5>, &str, Translator)> for TextData {
 }
 
 impl TextData {
+    fn collect_str_into_arr<const N: usize>(string: &str) -> [char; N] {
+        let mut res = [' '; N];
+        for (i, c) in string.chars().enumerate() {
+            res[i] = c;
+        }
+        res
+    }
+
     fn add_from_n_subsequent<const N: usize>(&mut self, ngram: &str, freq: f64) {
-        let mut iter = ngram.chars();
-        if N > 0 && let c1 = iter.next().unwrap() && c1 != ' ' {
+        let ngram: [char; N] = Self::collect_str_into_arr::<N>(ngram);
+        if N > 0 && let c1 = ngram[0] && c1 != ' ' {
             self.add_character(c1, freq);
             // take first, first 2 etc chars of the trigram every time for the appropriate stat
             // as long as they don't contain spaces. return `c2` so I don't iter.next() too much
-            let c2 = if N > 1 && let c2 = iter.next().unwrap() && c2 != ' ' {
+            let c2 = if N > 1 && let c2 = ngram[1] && c2 != ' ' {
                 self.add_bigram([c1, c2], freq);
                 c2
             } else { ' ' };
             // c1 and c3 for skipgrams
-            if N > 2 && let c3 = iter.next().unwrap() && c3 != ' ' {
+            if N > 2 && let c3 = ngram[2] && c3 != ' ' {
                 self.add_skipgram([c1, c3], freq);
 
-                if c2 != ' ' {
-                    self.add_trigram([c1, c2, c3], freq);
-                }
+                if c2 != ' ' { self.add_trigram([c1, c2, c3], freq); }
 
-                if N > 3 && let c4 = iter.next().unwrap() && c4 != ' ' {
+                if N > 3 && let c4 = ngram[3] && c4 != ' ' {
                     self.add_skipgram2([c1, c4], freq);
 
-                    if N > 4 && let c5 = iter.next().unwrap() && c5 != ' ' {
+                    if N > 4 && let c5 = ngram[4] && c5 != ' ' {
                         self.add_skipgram3([c1, c5], freq);
                     }
                 }
