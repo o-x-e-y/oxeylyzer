@@ -5,6 +5,7 @@ use std::iter::FromIterator;
 use std::fs::{File, read_dir};
 use std::time::Instant;
 
+use itertools::Itertools;
 use rayon::iter::{ParallelIterator, IntoParallelRefIterator};
 use file_chunker::FileChunker;
 use anyhow::Result;
@@ -197,7 +198,7 @@ impl From<(TextNgrams<'_, 5>, &str, Translator)> for TextData {
         let mut res = TextData::new(language);
 
         for (quingram, freq) in ngrams.ngrams.into_iter() {
-            let mut translated = translator.translate(quingram);
+            let translated = translator.translate(quingram);
             let first_char = quingram.chars().next().unwrap();
             
             let it_count = if let Some(f) = translator.table.get(&first_char) {
@@ -206,21 +207,22 @@ impl From<(TextNgrams<'_, 5>, &str, Translator)> for TextData {
 
             match translated.chars().count() {
                 5.. => {
-                    translated.push(' ');
-                    let start_i = translated.char_indices()
-                        .map(|(i, _)| i);
-                    let end_i = translated.char_indices()
-                        .skip(5)
-                        .map(|(i, _)| i);
-                    
-                    start_i.zip(end_i)
-                        .map(|(i1, i2)| &translated[i1..i2])
+                    translated.chars()
+                        .tuple_windows::<(_, _, _, _, _)>()
                         .take(it_count)
-                        .for_each(|quin| res.add_from_n_subsequent::<5>(quin, freq as f64));
+                        .for_each(|quin|
+                            res.add_from_n_subsequent::<5>([quin.0, quin.1, quin.2, quin.3, quin.4], freq as f64)
+                        );
                 }
-                4 => res.add_from_n_subsequent::<4>(translated.as_str(), freq as f64),
-                3 => res.add_from_n_subsequent::<3>(translated.as_str(), freq as f64),
-                2 => res.add_from_n_subsequent::<2>(translated.as_str(), freq as f64),
+                4 => res.add_from_n_subsequent::<4>(
+                    Self::collect_str_into_arr::<4>(translated.as_str()), freq as f64
+                ),
+                3 => res.add_from_n_subsequent::<3>(
+                    Self::collect_str_into_arr::<3>(translated.as_str()), freq as f64
+                ),
+                2 => res.add_from_n_subsequent::<2>(
+                    Self::collect_str_into_arr::<2>(translated.as_str()), freq as f64
+            ),
                 1 => {
                     let c1 = translated.chars().next().unwrap();
                     res.add_character(c1, freq as f64);
@@ -257,8 +259,7 @@ impl TextData {
         res
     }
 
-    fn add_from_n_subsequent<const N: usize>(&mut self, ngram: &str, freq: f64) {
-        let ngram: [char; N] = Self::collect_str_into_arr::<N>(ngram);
+    fn add_from_n_subsequent<const N: usize>(&mut self, ngram: [char; N], freq: f64) {
         if N > 0 && let c1 = ngram[0] && c1 != ' ' {
             self.add_character(c1, freq);
             // take first, first 2 etc chars of the trigram every time for the appropriate stat
@@ -390,41 +391,6 @@ mod tests {
         }
         for (_, f) in data.trigrams {
             assert!(f.approx_eq_dbg(1.0/4.0, 15));
-        }
-    }
-
-    #[test]
-    fn test() {
-        let s = "1: d'Être";
-        let n = 5;
-
-        let start_i = s.char_indices()
-            .map(|(i, _)| i);
-        let end_i = s.char_indices()
-            .skip(n)
-            .map(|(i, _)| i);
-        
-        let iter_first = start_i.zip(end_i)
-            .map(|(i1, i2)| &s[i1..i2]);
-
-        let mut buf = [' '; 5];
-        for (i, c) in s.chars().rev().take(5).enumerate() {
-            buf[4 - i] = c;
-        }
-        let s_end = String::from_iter(buf) + "     ";
-
-        let start_i = s_end.char_indices()
-            .map(|(i, _)| i);
-        let end_i = s_end.char_indices()
-            .skip(n)
-            .map(|(i, _)| i);
-
-        let iter = iter_first.chain(
-            start_i.zip(end_i)
-                .map(|(i1, i2)| &s_end[i1..i2])
-        );
-        for s in iter {
-            println!("str: '{s}'");
         }
     }
 
