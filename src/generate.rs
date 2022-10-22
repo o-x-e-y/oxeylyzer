@@ -201,13 +201,11 @@ pub struct LayoutGeneration {
 
 impl LayoutGeneration {
 	pub fn new<P>(
-		language: &str, base_path: P, trigram_precision: usize, weights_opt: Option<Weights>
+		language: &str,
+		base_path: P,
+		config: Option<Config>,
 	) -> Result<Self> where P: AsRef<Path> {
-		let weights = if weights_opt.is_none() {
-			Config::new().weights
-		} else {
-			weights_opt.unwrap()
-		};
+		let config = config.unwrap_or_else(|| Config::new());
 		
 		if let Ok(data) = LanguageData::from_file(
 			base_path.as_ref().join("language_data"), language
@@ -221,24 +219,23 @@ impl LayoutGeneration {
 				Self {
 					language: language.to_string(),
 					chars_for_generation,
-					weighted_bigrams: Self::weighted_bigrams(&data, &weights),
+					weighted_bigrams: Self::weighted_bigrams(&data, &config.weights),
 					per_char_trigrams: Self::per_char_trigrams(
 						&data.trigrams,
 						possible_chars.as_ref(),
-						trigram_precision
+						config.defaults.trigram_precision
 					),
 					data,
 
-					fspeed_vals: get_fspeed(weights.lateral_penalty),
-					effort_map: get_effort_map(weights.heatmap),
+					fspeed_vals: get_fspeed(config.weights.lateral_penalty),
+					effort_map: get_effort_map(config.weights.heatmap, config.defaults.keyboard_type),
 					scissor_indices: get_scissor_indices(),
 					i_to_col: [
 						0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
 						0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
 						0, 1, 2, 3, 3, 4, 4, 5, 6, 7
 					],
-
-					weights,
+					weights: config.weights,
 					layouts: IndexMap::new()
 				}
 			)
@@ -589,7 +586,7 @@ impl LayoutGeneration {
 				cache.scissors
 			};
 
-			let new_heur = cache.trigrams_total - scissors_score - effort_score - usage_score - fspeed_score;
+			let _new_heur = cache.trigrams_total - scissors_score - effort_score - usage_score - fspeed_score;
 
 			let trigrams_score = if cache.total_score < (f64::MAX) { //new_heur + new_heur.abs() * 0.0) {
 				let trigrams_end = self.trigram_char_score(layout, swap);
@@ -603,7 +600,7 @@ impl LayoutGeneration {
 			} else {
 				#[cfg(test)]
 				PRUNED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-				
+
 				unsafe { layout.swap_no_bounds(swap) };
 				return f64::MIN + 1000.0;
 			};
@@ -805,6 +802,7 @@ impl LayoutGeneration {
 }
 
 mod obsolete;
+mod michaelll;
 
 #[cfg(test)]
 mod tests {
@@ -815,7 +813,7 @@ use nanorand::Rng;
 	use crate::utility::ApproxEq;
 
 	lazy_static!{
-		pub static ref GEN: LayoutGeneration = LayoutGeneration::new("english", "static", 1000, None).unwrap();
+		pub static ref GEN: LayoutGeneration = LayoutGeneration::new("english", "static", None).unwrap();
 	}
 
 	#[allow(dead_code)]
@@ -907,25 +905,40 @@ use nanorand::Rng;
 
 	#[test]
 	fn optimize_qwerty() {
-		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
+		let qwerty_str = "qwertyuiopasdfghjkl;zxcvbnm,./";
+		let qwerty = FastLayout::try_from(qwerty_str).unwrap();
 
 		let optimized_normal = 
 			GEN.optimize_normal_no_cols(qwerty.clone(), &POSSIBLE_SWAPS);
 		let normal_score = GEN.score_with_precision(&optimized_normal, 1000);
 
-		println!("optimized normally:\n{}", optimized_normal);
+		let mut qwerty_for_cached = FastLayout::try_from(qwerty_str).unwrap();
+		let mut cache = GEN.initialize_cache(&qwerty_for_cached);
 
-		let mut cache = GEN.initialize_cache(&qwerty);
-		let mut qwerty_for_cached = qwerty.clone();
 		let best_cached_score =
 			GEN.optimize_cached(&mut qwerty_for_cached, &mut cache, &POSSIBLE_SWAPS);
 
-		println!("optimized with cache:\n{}", qwerty_for_cached);
 		assert!(normal_score.approx_eq_dbg(best_cached_score, 7));
+		assert_eq!(qwerty_for_cached.layout_str(), optimized_normal.layout_str());
+		println!("{qwerty_for_cached}");
+	}
 
-		let mut cache = GEN.initialize_cache(&qwerty);
-		let with_cols = GEN.optimize(qwerty.clone(), &mut cache, &POSSIBLE_SWAPS);
+	#[test]
+	fn optimize_random_layouts() {
+		for _ in 0..5 {
+			let layout = FastLayout::random(GEN.chars_for_generation);
+			let mut layout_for_cached = layout.clone();
 
-		println!("optimized with cache and cols:\n{}", with_cols);
+			let optimized_normal = 
+				GEN.optimize_normal_no_cols(layout, &POSSIBLE_SWAPS);
+			let normal_score = GEN.score_with_precision(&optimized_normal, 1000);
+
+			let mut cache = GEN.initialize_cache(&layout_for_cached);
+			let best_cached_score =
+				GEN.optimize_cached(&mut layout_for_cached, &mut cache, &POSSIBLE_SWAPS);
+
+			assert!(normal_score.approx_eq_dbg(best_cached_score, 7));
+			assert_eq!(layout_for_cached.layout_str(), optimized_normal.layout_str());
+		}
 	}
 }

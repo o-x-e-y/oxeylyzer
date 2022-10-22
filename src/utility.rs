@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use serde::Deserialize;
 use crate::languages_cfg::read_cfg;
 
 pub static COL_TO_FINGER: [usize; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
@@ -54,15 +55,75 @@ const fn get_possible_swaps() -> [PosPair; 435] {
 	res
 }
 
-pub fn get_effort_map(heatmap: f64) -> [f64; 30] {
-	let mut res = [
-		3.3, 2.3, 1.9, 1.5, 2.3, 3.2, 2.0, 1.8, 2.2, 2.8,
-		1.5, 1.1, 0.9, 0.8, 2.4, 2.4, 0.8, 0.9, 1.1, 1.5,
-		2.9, 2.5, 2.2, 1.8, 1.8, 1.9, 1.6, 2.2, 2.5, 3.1
-	];
+#[derive(Deserialize, Debug)]
+pub enum KeyboardType {
+	AnsiAngle,
+	IsoAngle,
+	RowstagDefault,
+	Ortho,
+	Colstag
+}
+
+impl TryFrom<String> for KeyboardType {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, &'static str> {
+		let lower = value.to_lowercase();
+		let split = lower.split_whitespace().collect::<Vec<&str>>();
+
+        if split.len() == 1 {
+			match split[0] {
+				"ortho" => Ok(Self::Ortho),
+				"colstag" => Ok(Self::Colstag),
+				"rowstag" | "iso" | "ansi" | "jis" => Ok(Self::RowstagDefault),
+				_ => Err("Couldn't parse keyboard type!")
+			}
+		} else if split.len() == 2 {
+			match (split[0], split[1]) {
+				("ansi", "angle") => Ok(Self::AnsiAngle),
+				("iso", "angle") => Ok(Self::IsoAngle),
+				_ => Err("Couldn't parse keyboard type!")
+			}
+		} else {
+			Err("Couldn't parse keyboard type!")
+		}
+    }
+}
+
+pub fn get_effort_map(heatmap: f64, ktype: KeyboardType) -> [f64; 30] {
+	use KeyboardType::*;
 	
-	for i in 0..30 {
-		res[i] /= 4.0;
+	let mut res = match ktype {
+		IsoAngle => [
+			3.0, 2.4, 2.0, 2.2, 2.4,  3.3, 2.2, 2.0, 2.4, 3.0,
+			1.8, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.8,
+			3.3, 2.8, 2.4, 1.8, 2.2,  2.2, 1.8, 2.4, 2.8, 3.3
+		],
+		AnsiAngle => [
+			3.0, 2.4, 2.0, 2.2, 2.4,  3.3, 2.2, 2.0, 2.4, 3.0,
+			1.8, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.8,
+			3.7, 2.8, 2.4, 1.8, 2.2,  2.2, 1.8, 2.4, 2.8, 3.3
+		],
+		RowstagDefault => [
+			3.0, 2.4, 2.0, 2.2, 2.4,  3.3, 2.2, 2.0, 2.4, 3.0,
+			1.8, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.8,
+			3.5, 3.0, 2.7, 2.2, 3.7,  2.2, 1.8, 2.4, 2.8, 3.3
+		],
+		Ortho => [
+			3.0, 2.4, 2.0, 2.2, 3.1,  3.1, 2.2, 2.0, 2.4, 3.0,
+			1.7, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.7,
+			3.2, 2.6, 2.3, 1.6, 3.0,  3.0, 1.6, 2.3, 2.6, 3.2
+		],
+		Colstag => [
+			3.0, 2.4, 2.0, 2.2, 3.1,  3.1, 2.2, 2.0, 2.4, 3.0,
+			1.7, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.7,
+			3.4, 2.7, 2.2, 1.8, 3.2,  3.2, 1.8, 2.2, 2.7, 3.4
+		],
+	};
+	
+	for i in 0..res.len() {
+		res[i] -= 0.2;
+		res[i] /= 4.5;
 		res[i] *= heatmap;
 	}
 
