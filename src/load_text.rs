@@ -6,14 +6,14 @@ use std::fs::{File, read_dir};
 use std::time::Instant;
 
 use itertools::Itertools;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator, IntoParallelRefIterator};
 use file_chunker::FileChunker;
 use anyhow::Result;
 use indexmap::IndexMap;
 use serde::{Serialize, Deserialize};
-use smartstring::{SmartString, Compact};
+use smartstring::{LazyCompact, SmartString};
 
-const TWO_MB: u64 = 1024 * 1024 * 2;
+const FOUR_MB: u64 = 1024 * 1024 * 4;
 
 pub fn load_raw(language: &str) {
     load_data(language, Translator::raw(true)).unwrap();
@@ -43,69 +43,91 @@ pub(crate) fn load_all_default() -> Result<()> {
     Ok(())
 }
 
-pub fn load_data(language: &str, translator: Translator) -> Result<TextData> {
+pub fn load_data(language: &str, translator: Translator) -> Result<()> {
     let start_total = Instant::now();
-
-    let all_trigrams = read_dir(format!("static/text/{language}"))?
-        .filter_map(Result::ok)
-        .map(|dir_entry| -> Result<TextNgrams<5>> {
-            let f = File::open(dir_entry.path())?;
-            TextNgrams::try_from(f)
-        })
-        .filter_map(Result::ok)
-        .reduce(|accum, new| accum.combine_with(new))
-        .unwrap_or(TextNgrams::default());
-
     let is_raw = translator.is_raw;
-    let res = TextData::from((all_trigrams, translator, language));
-    res.save(is_raw)?;
-    println!("loading {} took {}ms", language, (Instant::now() - start_total).as_millis());
-    Ok(res)
-}
 
-#[derive(Default, Debug)]
-pub struct TextNgrams<const N: usize> {
-    pub ngrams: HashMap<[char; N], usize>,
-}
+    let chunkers = read_dir(format!("static/text/{language}"))?
+        .filter_map(Result::ok)
+        .flat_map(|dir_entry| File::open(dir_entry.path()))
+        .map(|f| {
+            let len = f.metadata().unwrap().len() + 1;
+            let count = if len > FOUR_MB { len / FOUR_MB } else { 1 };
+            (FileChunker::new(&f).unwrap(), count as usize)
+        })
+        .collect::<Vec<_>>();
+    
+    let texts = chunkers.par_iter()
+        .flat_map(|(chunker, count)| {
+            chunker.chunks(*count, Some(' ')).unwrap()
+        })
+        .map(|chunk| std::str::from_utf8(chunk).expect(
+                "one of the files provided is not encoded as utf-8.\
+                Make sure all files in the directory are valid utf-8."
+            )
+        )
+        .map(|s| {
+            let mut buf = [' '; 5];
+            for (i, c) in s.chars().rev().take(5).enumerate() {
+                buf[4 - i] = c;
+            }
+            (s, SmartString::<LazyCompact>::from_iter(buf) + "     ")
+        })
+        .collect::<Vec<_>>();
 
-impl TryFrom<File> for TextNgrams<5> {
-    type Error = anyhow::Error;
-
-    fn try_from(f: File) -> Result<Self, Self::Error> {
-        let thread_count = (f.metadata()?.len() / TWO_MB + 1).min(12);
-        
-        let chunker = FileChunker::new(&f)?;
-
-        let ngrams = chunker.chunks(thread_count as usize, None)?
-            .into_par_iter()
-            .map(|chunk| {
-                let text = String::from_utf8_lossy(chunk);
-                TextNgrams::from(text.as_ref())
-            })
+        let quingrams = texts.par_iter()
+            .map(|(s, last5)|
+                TextNgrams::<5>::from((*s, last5.as_str()))
+            )
             .reduce(
                 || TextNgrams::default(),
                 |accum, new| accum.combine_with(new)
-            );
-        Ok(ngrams)
-    }
+        );
+
+    TextData::from((quingrams, language, translator)).save(is_raw)?;
+    println!("loading {} took {}ms", language, ((Instant::now() - start_total) * 100).as_millis());
+
+    Ok(())
 }
 
-impl From<&str> for TextNgrams<5> {
-    fn from(s: &str) -> Self {
-        let mut ngrams: HashMap<[char; 5], usize> = HashMap::new();
+#[derive(Default, Debug)]
+pub struct TextNgrams<'a, const N: usize> {
+    pub ngrams: HashMap<&'a str, usize>,
+}
 
-        let mut chars = s.chars().chain("    ".chars())
-            .tuple_windows::<(_, _, _, _, _)>();
+impl<'a, const N: usize> From<(&'a str, &'a str)> for TextNgrams<'a, N> {
+    fn from((s, s_end): (&'a str, &'a str)) -> Self {
+        let mut pentagrams = HashMap::new();
 
-        while let Some((c1, c2, c3, c4, c5)) = chars.next() {
-            ngrams.entry([c1, c2, c3, c4, c5]).and_modify(|e| *e += 1).or_insert(1);
+        let start_i = s.char_indices()
+            .map(|(i, _)| i);
+        let end_i = s.char_indices()
+            .skip(N)
+            .map(|(i, _)| i);
+        
+        let iter_first = start_i.zip(end_i)
+            .map(|(i1, i2)| &s[i1..i2]);
+
+        let start_i = s_end.char_indices()
+            .map(|(i, _)| i);
+        let end_i = s_end.char_indices()
+            .skip(N)
+            .map(|(i, _)| i);
+
+        let iter = iter_first.chain(
+            start_i.zip(end_i)
+                .map(|(i1, i2)| &s_end[i1..i2])
+        );
+
+        for s in iter {
+            pentagrams.entry(s).and_modify(|p| *p += 1).or_insert(1);
         }
         
-        Self { ngrams }
+        Self { ngrams: pentagrams }
     }
 }
 
-impl<const N: usize> TextNgrams<N> {
+impl<'a, const N: usize> TextNgrams<'a, N> {
     fn combine_with(mut self, rhs: Self) -> Self {
         for (trigram, freq) in rhs.ngrams.into_iter() {
             self.ngrams.entry(trigram).and_modify(|e| *e += freq).or_insert(freq);
@@ -118,12 +140,12 @@ impl<const N: usize> TextNgrams<N> {
 pub struct TextData {
     language: String,
 
-    characters: IndexMap<String, f64>,
-    bigrams: IndexMap<String, f64>,
-    skipgrams: IndexMap<String, f64>,
-    skipgrams2: IndexMap<String, f64>,
-    skipgrams3: IndexMap<String, f64>,
-    trigrams: IndexMap<String, f64>,
+    characters: IndexMap<char, f64>,
+    bigrams: IndexMap<SmartString<LazyCompact>, f64>,
+    skipgrams: IndexMap<SmartString<LazyCompact>, f64>,
+    skipgrams2: IndexMap<SmartString<LazyCompact>, f64>,
+    skipgrams3: IndexMap<SmartString<LazyCompact>, f64>,
+    trigrams: IndexMap<SmartString<LazyCompact>, f64>,
 
     #[serde(skip)]
     char_sum: f64,
@@ -143,15 +165,15 @@ impl std::fmt::Display for TextData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{{
-\"language\": {},
-\"characters\": {:#?},
-\"bigrams\": {:#?},
-\"skipgrams\": {:#?},
-\"skipgrams2\": {:#?},
-\"skipgrams3\": {:#?},
-\"trigrams\": {:#?}
-}}",
+            "{{\
+                \"language\": {},\
+                \"characters\": {:#?},\
+                \"bigrams\": {:#?},\
+                \"skipgrams\": {:#?},\
+                \"skipgrams2\": {:#?},\
+                \"skipgrams3\": {:#?},\
+                \"trigrams\": {:#?}\
+            }}",
             self.language,
             self.characters,
             self.bigrams,
@@ -163,49 +185,47 @@ impl std::fmt::Display for TextData {
     }
 }
 
-impl From<(TextNgrams<5>, Translator, &str)> for TextData {
-    fn from((data, translator, language): (TextNgrams<5>, Translator, &str)) -> Self {
-        let mut res = TextData::default();
-        res.language = language.replace(" ", "_");
+impl TextData {
+    pub fn new(language: &str) -> Self {
+        let mut res = Self::default();
+        res.language = language.replace(" ", "_").to_lowercase().to_string();
+        res
+    }
+}
 
-        for (pentagram, freq) in data.ngrams.into_iter() {
-            let s: SmartString<Compact> = SmartString::from_iter(pentagram);
-            let translated = translator.translate(s.as_str());
+impl From<(TextNgrams<'_, 5>, &str, Translator)> for TextData {
+    fn from((ngrams, language, translator): (TextNgrams<5>, &str, Translator)) -> Self {
+        let mut res = TextData::new(language);
+
+        for (quingram, freq) in ngrams.ngrams.into_iter() {
+            let mut translated = translator.translate(quingram);
+            let first_char = quingram.chars().next().unwrap();
             
-            let mut it_count = if let Some(f) = translator.table.get(&pentagram[0]) {
+            let it_count = if let Some(f) = translator.table.get(&first_char) {
                 f.chars().count()
-            } else { 0 };
+            } else { 1 };
 
             match translated.chars().count() {
                 5.. => {
-                    let mut it = translated.chars()
-                        .tuple_windows::<(_, _, _, _, _)>();
-
-                    while let Some(p) = it.next() && it_count > 0 {
-                        let pentagram = [p.0, p.1, p.2, p.3, p.4];
-                        res.add_from_n_subsequent::<5>(pentagram, freq as f64);
-                        it_count -= 1;
-                    }
-                },
-                4 => {
-                    let q: (char, char, char, char) = translated.chars().collect_tuple().unwrap();
-                    let quadgram = [q.0, q.1, q.2, q.3];
-                    res.add_from_n_subsequent::<4>(quadgram, freq as f64);
-                },
-                3 => {
-                    let t: (char, char, char) = translated.chars().collect_tuple().unwrap();
-                    let trigram = [t.0, t.1, t.2];
-                    res.add_from_n_subsequent::<3>(trigram, freq as f64);
-                },
-                2 => {
-                    let b: (char, char) = translated.chars().collect_tuple().unwrap();
-                    let bigram = [b.0, b.1];
-                    res.add_from_n_subsequent::<2>(bigram, freq as f64);
+                    translated.push(' ');
+                    let start_i = translated.char_indices()
+                        .map(|(i, _)| i);
+                    let end_i = translated.char_indices()
+                        .skip(5)
+                        .map(|(i, _)| i);
+                    
+                    start_i.zip(end_i)
+                        .map(|(i1, i2)| &translated[i1..i2])
+                        .take(it_count)
+                        .for_each(|quin| res.add_from_n_subsequent::<5>(quin, freq as f64));
                 }
+                4 => res.add_from_n_subsequent::<4>(translated.as_str(), freq as f64),
+                3 => res.add_from_n_subsequent::<3>(translated.as_str(), freq as f64),
+                2 => res.add_from_n_subsequent::<2>(translated.as_str(), freq as f64),
                 1 => {
                     let c1 = translated.chars().next().unwrap();
                     res.add_character(c1, freq as f64);
-                },
+                }
                 _ => {}
             }
         }
@@ -230,26 +250,28 @@ impl From<(TextNgrams<5>, Translator, &str)> for TextData {
 }
 
 impl TextData {
-    fn add_from_n_subsequent<const N: usize>(&mut self, ngram: [char; N], freq: f64) {
-        if N > 0 && let c1 = ngram[0] && c1 != ' ' {
+    fn add_from_n_subsequent<const N: usize>(&mut self, ngram: &str, freq: f64) {
+        let mut iter = ngram.chars();
+        if N > 0 && let c1 = iter.next().unwrap() && c1 != ' ' {
             self.add_character(c1, freq);
             // take first, first 2 etc chars of the trigram every time for the appropriate stat
-            // as long as they don't contain spaces
-            if N > 1 && let c2 = ngram[1] && c2 != ' ' {
+            // as long as they don't contain spaces. return `c2` so I don't iter.next() too much
+            let c2 = if N > 1 && let c2 = iter.next().unwrap() && c2 != ' ' {
                 self.add_bigram([c1, c2], freq);
-
-                if N > 2 && let c3 = ngram[2] && c3 != ' ' {
-                    self.add_trigram([c1, c2, c3], freq);
-                }
-            }
+                c2
+            } else { ' ' };
             // c1 and c3 for skipgrams
-            if N > 2 && let c3 = ngram[2] && c3 != ' ' {
+            if N > 2 && let c3 = iter.next().unwrap() && c3 != ' ' {
                 self.add_skipgram([c1, c3], freq);
 
-                if N > 3 && let c4 = ngram[3] && c4 != ' ' {
+                if c2 != ' ' {
+                    self.add_trigram([c1, c2, c3], freq);
+                }
+
+                if N > 3 && let c4 = iter.next().unwrap() && c4 != ' ' {
                     self.add_skipgram2([c1, c4], freq);
 
-                    if N > 4 && let c5 = ngram[4] && c5 != ' ' {
+                    if N > 4 && let c5 = iter.next().unwrap() && c5 != ' ' {
                         self.add_skipgram3([c1, c5], freq);
                     }
                 }
@@ -257,38 +279,38 @@ impl TextData {
         }
     }
 
-    pub(crate) fn add_character(&mut self, c1: char, freq: f64) {
-        self.characters.entry(String::from(c1))
+    pub(crate) fn add_character(&mut self, c: char, freq: f64) {
+        self.characters.entry(c)
             .and_modify(|e| *e += freq).or_insert(freq);
         self.char_sum += freq;
     }
 
     pub(crate) fn add_bigram(&mut self, bigram: [char; 2], freq: f64) {
-        self.bigrams.entry(String::from_iter(bigram))
+        self.bigrams.entry(SmartString::from_iter(bigram))
             .and_modify(|e| *e += freq).or_insert(freq);
         self.bigram_sum += freq;
     }
 
     pub(crate) fn add_skipgram(&mut self, skipgram: [char; 2], freq: f64) {
-        self.skipgrams.entry(String::from_iter(skipgram))
+        self.skipgrams.entry(SmartString::from_iter(skipgram))
             .and_modify(|e| *e += freq).or_insert(freq);
         self.skipgram_sum += freq;
     }
 
     pub(crate) fn add_skipgram2(&mut self, skipgram: [char; 2], freq: f64) {
-        self.skipgrams2.entry(String::from_iter(skipgram))
+        self.skipgrams2.entry(SmartString::from_iter(skipgram))
             .and_modify(|e| *e += freq).or_insert(freq);
         self.skipgram2_sum += freq;
     }
 
     pub(crate) fn add_skipgram3(&mut self, skipgram: [char; 2], freq: f64) {
-        self.skipgrams3.entry(String::from_iter(skipgram))
+        self.skipgrams3.entry(SmartString::from_iter(skipgram))
             .and_modify(|e| *e += freq).or_insert(freq);
         self.skipgram3_sum += freq;
     }
 
     pub(crate) fn add_trigram(&mut self, trigram: [char; 3], freq: f64) {
-        self.trigrams.entry(String::from_iter(trigram))
+        self.trigrams.entry(SmartString::from_iter(trigram))
             .and_modify(|e| *e += freq).or_insert(freq);
         self.trigram_sum += freq;
     }
