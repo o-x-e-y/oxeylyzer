@@ -88,21 +88,14 @@ pub struct TextNgrams<const N: usize> {
 impl From<&str> for TextNgrams<5> {
     fn from(s: &str) -> Self {
         let mut quingrams = HashMap::new();
-        let it1 = s.chars();
-        let it2 = s.chars().skip(1).chain([' ']);
-        let it3 = s.chars().skip(2).chain([' ', ' ']);
-        let it4 = s.chars().skip(3).chain([' ', ' ', ' ']);
-        let it5 = s.chars().skip(4).chain([' ', ' ', ' ', ' ']);
-        let it = it1.zip(it2).zip(it3).zip(it4).zip(it5);
-        for ((((c1, c2), c3), c4), c5) in it {
-            quingrams.entry([c1, c2, c3, c4, c5]).and_modify(|f| *f += 1).or_insert(1);
-        }
-        // for q in s.chars()
-        //     .chain([' ', ' ', ' ', ' '])
-        //     .tuple_windows::<(_, _, _, _, _)>()
-        //     .map(|(c1, c2, c3, c4, c5)| [c1, c2, c3, c4, c5]) {
-        //         quingrams.entry(q).and_modify(|f| *f += 1).or_insert(1);
-        //     }
+        let it = s.chars()
+            .chain([' ', ' ', ' ', ' '])
+            .tuple_windows::<(_, _, _, _, _)>()
+            .map(|(c1, c2, c3, c4, c5)| [c1, c2, c3, c4, c5]);
+        
+        for q in it {
+                quingrams.entry(q).and_modify(|f| *f += 1).or_insert(1);
+            }
         Self { ngrams: quingrams }
     }
 }
