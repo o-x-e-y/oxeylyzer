@@ -117,10 +117,10 @@ impl Layout<char> for FastLayout {
 		}
 	}
 
-	fn random(mut available_chars: [char; 30]) -> FastLayout {
+	fn random(mut with_chars: [char; 30]) -> FastLayout {
 		let mut rng = tls_rng();
-		rng.shuffle(&mut available_chars);
-		FastLayout::from(available_chars)
+		rng.shuffle(&mut with_chars);
+		FastLayout::from(with_chars)
 	}
 
 	fn random_pins(mut layout_chars: [char; 30], pins: &[usize]) -> FastLayout {
