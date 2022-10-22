@@ -1,11 +1,20 @@
 use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
+use crate::utility::KeyboardType;
+
+#[derive(Deserialize, Debug)]
+pub struct WeightDefaultsLoad {
+	pub language: String,
+	pub keyboard_type: String,
+	trigram_precision: usize
+}
 
 #[derive(Deserialize, Debug)]
 pub struct WeightDefaults {
 	pub language: String,
-	trigram_precision: usize
+	pub keyboard_type: KeyboardType,
+	pub trigram_precision: usize
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -41,7 +50,7 @@ pub struct Weights {
 #[derive(Deserialize)]
 struct ConfigLoad {
 	pub pins: String,
-	pub defaults: WeightDefaults,
+	pub defaults: WeightDefaultsLoad,
 	pub weights: Weights
 }
 
@@ -84,11 +93,16 @@ impl Config {
 				pins.push(i);
 			}
 		}
-		load.weights.dsfb_ratio2 = (load.weights.dsfb_ratio * 6.0).powi(3) / 6.0;
-		load.weights.dsfb_ratio3 = (load.weights.dsfb_ratio * 6.0).powi(5) / 6.0;
+		load.weights.dsfb_ratio2 = (load.weights.dsfb_ratio * 6.0).powi(3) / 6.5;
+		load.weights.dsfb_ratio3 = (load.weights.dsfb_ratio * 6.0).powi(5) / 7.0;
 		Self {
 			pins,
-			defaults: load.defaults,
+			defaults: WeightDefaults {
+				language: load.defaults.language,
+				keyboard_type: KeyboardType::try_from(load.defaults.keyboard_type)
+					.unwrap_or(KeyboardType::AnsiAngle),
+				trigram_precision: load.defaults.trigram_precision
+			},
 			weights: load.weights
 		}
 	}
@@ -97,6 +111,7 @@ impl Config {
 		Self {
 			defaults: WeightDefaults {
 				language: "english".to_string(),
+				keyboard_type: KeyboardType::AnsiAngle,
 				trigram_precision: 1000
 			},
 			weights: Weights {
