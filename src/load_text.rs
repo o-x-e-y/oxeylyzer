@@ -5,8 +5,7 @@ use std::iter::FromIterator;
 use std::fs::{File, read_dir};
 use std::time::Instant;
 
-use itertools::Itertools;
-use rayon::iter::{IntoParallelIterator, ParallelIterator, IntoParallelRefIterator};
+use rayon::iter::{ParallelIterator, IntoParallelRefIterator};
 use file_chunker::FileChunker;
 use anyhow::Result;
 use indexmap::IndexMap;
@@ -344,7 +343,84 @@ impl TextData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
+    use crate::{*, utility::ApproxEq};
+
+    #[test]
+    fn from_textngrams() {
+        let mut ngrams = TextNgrams::<5>::default();
+        ngrams.ngrams.insert("Amogu", 1);
+        ngrams.ngrams.insert("mogus", 1);
+        ngrams.ngrams.insert("ogus", 1);
+        ngrams.ngrams.insert("gus", 1);
+        ngrams.ngrams.insert("us", 1);
+        ngrams.ngrams.insert("s", 1);
+        let translator = Translator::new()
+            .letters_to_lowercase("amogus")
+            .build();
+        let data = TextData::from((ngrams, "among", translator));
+        
+        assert_eq!(data.char_sum, 6.0,);
+        assert_eq!(data.bigram_sum, 5.0,);
+        assert_eq!(data.skipgram_sum, 4.0,);
+        assert_eq!(data.skipgram2_sum, 3.0,);
+        assert_eq!(data.skipgram3_sum, 2.0,);
+        assert_eq!(data.trigram_sum, 4.0);
+        assert_eq!(data.trigram_sum, data.skipgram_sum);
+
+        for (_, f) in data.characters {
+            assert!(f.approx_eq_dbg(1.0/6.0, 15));
+        }
+        for (_, f) in data.bigrams {
+            assert!(f.approx_eq_dbg(1.0/5.0, 15));
+        }
+        for (_, f) in data.skipgrams {
+            assert!(f.approx_eq_dbg(1.0/4.0, 15));
+        }
+        for (_, f) in data.skipgrams2 {
+            assert!(f.approx_eq_dbg(1.0/3.0, 15));
+        }
+        for (_, f) in data.skipgrams3 {
+            assert!(f.approx_eq_dbg(1.0/2.0, 15));
+        }
+        for (_, f) in data.trigrams {
+            assert!(f.approx_eq_dbg(1.0/4.0, 15));
+        }
+    }
+
+    #[test]
+    fn test() {
+        let s = "1: d'Être";
+        let n = 5;
+
+        let start_i = s.char_indices()
+            .map(|(i, _)| i);
+        let end_i = s.char_indices()
+            .skip(n)
+            .map(|(i, _)| i);
+        
+        let iter_first = start_i.zip(end_i)
+            .map(|(i1, i2)| &s[i1..i2]);
+
+        let mut buf = [' '; 5];
+        for (i, c) in s.chars().rev().take(5).enumerate() {
+            buf[4 - i] = c;
+        }
+        let s_end = String::from_iter(buf) + "     ";
+
+        let start_i = s_end.char_indices()
+            .map(|(i, _)| i);
+        let end_i = s_end.char_indices()
+            .skip(n)
+            .map(|(i, _)| i);
+
+        let iter = iter_first.chain(
+            start_i.zip(end_i)
+                .map(|(i1, i2)| &s_end[i1..i2])
+        );
+        for s in iter {
+            println!("str: '{s}'");
+        }
+    }
 
 	#[test]
 	fn load_language_data() {
@@ -377,8 +453,11 @@ mod tests {
 
 	#[test]
 	fn get_generator() {
-
-		let a = generate::LayoutGeneration::new("test", "static", 1000, None);
+		let a = generate::LayoutGeneration::new(
+            "test",
+            "static",
+            None,
+        );
 		assert!(a.is_ok());
 	}
 }
