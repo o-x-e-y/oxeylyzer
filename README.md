@@ -21,7 +21,27 @@ There are a lot of metrics that can be configured, which all happens in the `con
 Pins allow you to lock certain keys to a certain position when you run `improve` on a certain layout. if you change a `.` into an `x`, it becomes pinned. This is useful if you want certain keys to be in certain locations, but want to optimize everything else.
 
 ### Defaults
-`language` is the language the repl starts out in, and `trigram_precision` is the amount of trigrams that are used during generation. Note however that this does not actually work yet, it's hardcoded to be 1000 everywhere. I will fix this at some point.
+`language` is the language the repl starts out in, and `trigram_precision` is the amount of trigrams that are used during generation. Note however that this does not actually work yet, it's hardcoded to be 1000 everywhere. I will fix this at some point. There is also `keyboard_type`, which sets some values for the heatmap the analyzer uses. This has a few settings:
+
+* Ansi - Iso - JIS - Rowstag:
+
+Default fingering, no angle mod. This means lower left is punished quite heavily.
+
+* Iso Angle:
+
+Same as the above, except left bottom now has a lower weight.
+
+* Ansi Angle:
+
+Same as Iso Angle, except it punishes the bottom left pinky a lot to have nothing important go there, and make sure it can easily go to qwerty `b`. Note that this only changes the heatmap, it won't change sfb calculation.
+
+* Ortho:
+
+Punishes certain positions slightly more and others slightly less due to stagger. Homerow weights unchanged. Useful if you have an ortho keyboard.
+
+* Colstag
+
+Punishes some top row positions a bit more than ortho, others a bit less. Useful if you have board with column stagger.
 
 ### Weights
 This is where the magic happens.
@@ -61,7 +81,7 @@ These finger speed weigths determine the strength of certain fingers, and divide
 
 ## Creating your own corpus rules
 
-You can generate language data files using your own rules now! There are a few settings that you can use for them.
+You can generate language data files using your own rules now! There are a few settings that you can use for them. As a shortcut, if your corpus is just English, you can create a `.toml` file with a single line: `based_on = ["default"]`. That should cover everything you need.
 
 ### Corpus config files
 
@@ -71,7 +91,7 @@ All direct subfolders are searched for this, so you can keep your own rulesets i
 
 #### based_on
 
-This is an array `[]` that contain references to other config files. Most provided configs use `default`, which has a couple of useful formatting features like unshifting latin characters and some punctuation and changing some unconventional quotation marks to the more common appostrophe (which itself is the unshifted version of `"`). One caveat is that this does not check for circular references, so if you have one file `A` that references `B` and have `B` reference `A`, that _will_ get stuck in an infinite loop. Don't do that :thumbsup:.
+This is an array `[]` that contain references to other config files. Most provided configs use `default`, which has a couple of useful formatting features like unshifting latin characters and some punctuation and changing some unconventional quotation marks to the more common appostrophe (which itself is the unshifted version of `"`). One caveat is that this does not check for circular references, so if you have one file `A` that references `B` and have `B` reference `A`, that _will_ get stuck in an infinite loop. Don't do that :thumbsup:
 
 #### letters_to_lowercase
 
