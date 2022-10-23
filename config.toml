@@ -7,9 +7,10 @@ pins = """
 [defaults]
 language = "english"
 trigram_precision = 1000
+keyboard_type = "ansi angle"
 
 [weights]
-heatmap = 1.5
+heatmap = 1.65
 fspeed = 14.0
 lateral_penalty = 1.0
 dsfb_ratio = 0.11

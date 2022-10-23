@@ -28,12 +28,12 @@ impl Repl {
         where P: AsRef<Path> {
         let config = Config::new();
         let language = config.defaults.language.clone();
+        let pins = config.pins.clone();
 
         let mut gen = LayoutGeneration::new(
-            config.defaults.language.as_str(),
+            config.defaults.language.clone().as_str(),
             generator_base_path.as_ref(),
-            config.trigram_precision(),
-            Some(config.weights),
+            Some(config),
         ).expect(format!("Could not read language data for {}", language).as_str());
 
         Ok(Self {
@@ -44,7 +44,7 @@ impl Repl {
             language,
             gen,
             temp_generated: Vec::new(),
-            pins: config.pins
+            pins
         })
     }
 
@@ -333,8 +333,7 @@ impl Repl {
                         if let Ok(generator) = LayoutGeneration::new(
                             language,
                             "static",
-                            config.trigram_precision(),
-                            Some(config.weights)
+                            Some(config)
                         ) {
                             self.language = language.to_string();
                             self.gen = generator;
@@ -370,15 +369,14 @@ impl Repl {
             }
             Some("reload") | Some("r") => {
                 let config = Config::new();
+                self.pins = config.pins.clone();
 
                 if let Ok(generator) = LayoutGeneration::new(
                     self.language.as_str(),
                     "static",
-                    config.trigram_precision(),
-                    Some(config.weights)
+                    Some(config)
                 ) {
                     self.gen = generator;
-                    self.pins = config.pins;
                     self.saved = self.gen.load_layouts(
                         "static/layouts",
                         self.language.as_str()
