@@ -304,7 +304,8 @@ impl Repl {
                 if matches!(opt1, Ok(Some(Short('a'))) | Ok(Some(Long("all")))) {
                     for (language, config) in CorpusConfig::all() {
                         println!("loading data for language: {language}...");
-                        load_text::load_data(language.as_str(), config.translator());
+                        load_text::load_data(language.as_str(), config.translator())
+                            .map_err(|e| e.to_string())?;
                     }
                 } else if let Some(language) = args.next_positional() {
                     let opt2 = args.next_opt();
@@ -317,7 +318,8 @@ impl Repl {
                         let translator = CorpusConfig::new_translator(language, preferred_folder);
                         
                         println!("loading data for {language}...");
-                        load_text::load_data(language, translator);
+                        load_text::load_data(language, translator)
+                            .map_err(|e| e.to_string())?;
                     }
                 } else {
                     print_error(
