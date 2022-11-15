@@ -1,16 +1,35 @@
-use itertools::Itertools;
-use serde::Deserialize;
 use crate::languages_cfg::read_cfg;
 
+use itertools::Itertools;
+use serde::Deserialize;
+use arrayvec::ArrayVec;
+use nanorand::{Rng, tls_rng};
+
+#[inline]
+pub fn shuffle_pins<const N: usize, T>(slice: &mut [T], pins: &[usize]) {
+    let mapping: ArrayVec<_, N> = (0..slice.len()).filter(|x| !pins.contains(x)).collect();
+	let mut rng = tls_rng();
+
+	for (m, &swap1) in mapping.iter().enumerate() {
+        let swap2 = rng.generate_range(m..mapping.len());
+        slice.swap(swap1, mapping[swap2]);
+    }
+}
+
 pub static COL_TO_FINGER: [usize; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
+pub static I_TO_COL: [usize; 30] = [
+	0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
+	0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
+	0, 1, 2, 3, 3,  4, 4, 5, 6, 7
+];
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PosPair(pub usize, pub usize);
 
 const AFFECTS_SCISSOR: [bool; 30] = [
-	true, true, true, true, true, true, true, true, true, true,
-	true, true, false, false, false, false, false, false, true, true,
-	true, true, true, false, true, false, false, true, true, true
+	true,  true,  true,  true,  true,   true,  true,  true,  true,  true,
+	true,  true,  false, false, false,  false, false, false, true,  true,
+	true,  true,  true,  false, true,   false, false, true,  true,  true
 ];
 
 impl PosPair {
@@ -271,4 +290,21 @@ pub(crate) fn format_layout_str(layout_str: String) -> String {
 				.collect::<String>()
 		})
 		.collect::<String>()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn shuffle_pinned() {
+		let mut rng = tls_rng();
+		let mut chars = "abcdefghijklmnopqrstuvwxyz',.;".chars().collect::<Vec<_>>();
+		for _ in 0..10000 {
+			let pin_count = rng.generate_range(0..30);
+			for i in 0..pin_count {
+				
+			}
+		}
+	}
 }

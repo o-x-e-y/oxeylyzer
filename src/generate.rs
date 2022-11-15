@@ -1,3 +1,4 @@
+use std::hash::BuildHasherDefault;
 use std::hint::unreachable_unchecked;
 use std::path::Path;
 
@@ -162,20 +163,20 @@ impl LayoutCache {
 	}
 }
 
-type PerCharTrigrams = FxHashMap<char, TrigramData>;
+type PerCharTrigrams = FxHashMap<[char; 2], TrigramData>;
 
 static COLS: [usize; 6] = [0, 1, 2, 7, 8, 9];
 
-fn pinned_swaps(pins: &[usize]) -> Vec<PosPair> {
-	let mut map = [false; 30];
+pub(crate) fn pinned_swaps(pins: &[usize]) -> Vec<PosPair> {
+	let mut map = [true; 30];
 	for i in 0..30 {
 		if pins.contains(&i) {
-			map[i] = true;
+			map[i] = false;
 		}
 	}
 	let mut res = Vec::new();
 	for ps in POSSIBLE_SWAPS {
-		if !map[ps.0] && !map[ps.1] {
+		if map[ps.0] && map[ps.1] {
 			res.push(ps);
 		}
 	}
@@ -190,13 +191,12 @@ pub struct LayoutGeneration {
 	fspeed_vals: [(PosPair, f64); 48],
 	effort_map: [f64; 30],
 	scissor_indices: [PosPair; 17],
-	i_to_col: [usize; 30],
 
 	weighted_bigrams: BigramData,
 	per_char_trigrams: PerCharTrigrams,
 
 	pub weights: Weights,
-	pub layouts: IndexMap<String, FastLayout>,
+	pub layouts: IndexMap<String, FastLayout, BuildHasherDefault<fxhash::FxHasher>>,
 }
 
 impl LayoutGeneration {
@@ -210,7 +210,12 @@ impl LayoutGeneration {
 		if let Ok(data) = LanguageData::from_file(
 			base_path.as_ref().join("language_data"), language
 		) {
-			let chars_for_generation = chars_for_generation(language);
+			let mut chars_for_generation = chars_for_generation(language);
+			chars_for_generation.sort_by(|a, b| {
+				let a = data.characters.get(a).unwrap_or(&0.0);
+				let b = data.characters.get(b).unwrap_or(&0.0);
+				b.partial_cmp(a).unwrap()
+			});
 			let possible_chars = data.characters.iter()
 				.map(|(c, _)| *c)
 				.collect::<Vec<_>>();
@@ -222,7 +227,7 @@ impl LayoutGeneration {
 					weighted_bigrams: Self::weighted_bigrams(&data, &config.weights),
 					per_char_trigrams: Self::per_char_trigrams(
 						&data.trigrams,
-						possible_chars.as_ref(),
+						&possible_chars,
 						config.defaults.trigram_precision
 					),
 					data,
@@ -230,13 +235,9 @@ impl LayoutGeneration {
 					fspeed_vals: get_fspeed(config.weights.lateral_penalty),
 					effort_map: get_effort_map(config.weights.heatmap, config.defaults.keyboard_type),
 					scissor_indices: get_scissor_indices(),
-					i_to_col: [
-						0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
-						0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
-						0, 1, 2, 3, 3, 4, 4, 5, 6, 7
-					],
+					
 					weights: config.weights,
-					layouts: IndexMap::new()
+					layouts: IndexMap::default()
 				}
 			)
 		} else {
@@ -371,15 +372,33 @@ impl LayoutGeneration {
 		let mut n_trigrams = trigrams.clone();
 		n_trigrams.truncate(trigram_precision);
 		
-		let thingy: Vec<(char, Vec<([char; 3], f64)>)> = possible
+		let thingy: Vec<([char; 2], Vec<([char; 3], f64)>)> = possible
 			.into_iter()
-			.map(|c| {
-				let per_char = n_trigrams
+			.cartesian_product(possible)
+			.map(|(c1, c2)| {
+
+				let v1 = n_trigrams
 					.iter()
 					.map(|(t, f)| (t.clone(), f.clone()))
-					.filter(|(t, _)| t.contains(c))
+					.filter(|(t, _)| t.contains(c1))
 					.collect::<Vec<([char; 3], f64)>>();
-				(*c, per_char)
+
+				let v2 = n_trigrams
+					.iter()
+					.map(|(t, f)| (t.clone(), f.clone()))
+					.filter(|(t, _)| t.contains(c2))
+					.collect::<Vec<([char; 3], f64)>>();
+
+				let (big, small, c) =
+					if v1.len() >= v2.len() { (v1, v2, &c1) } else { (v2, v1, &c2) };
+				
+				let per_char = big.into_iter()
+					.chain(
+						small.into_iter()
+						.filter(|(t, _)| !t.contains(c))
+					)
+					.collect::<Vec<_>>();
+				([*c1, *c2], per_char)
 			})
 			.collect();
 		
@@ -419,23 +438,10 @@ impl LayoutGeneration {
 		let c1 = unsafe { layout.cu(pos.0) };
 		let c2 = unsafe { layout.cu(pos.1) };
 
-		let v1 = self.per_char_trigrams.get(&c1);
-		let v2 = self.per_char_trigrams.get(&c2);
-
-		match (v1, v2) {
-			(None, None) => 0.0,
-			(Some(v), None) | (None, Some(v)) => {
-				self.trigram_score_iter(layout, v)
-			},
-			(Some(v1), Some(v2)) => {
-				let (big, small, c) =
-					if v1.len() >= v2.len() { (v1, v2, &c1) } else { (v2, v1, &c2) };
-				
-				let iter = big.into_iter().chain(
-					small.into_iter().filter(|(t, _)| !t.contains(c))
-				);
-				self.trigram_score_iter(layout, iter)
-			}
+		if let Some(t_vec) = self.per_char_trigrams.get(&[c1, c2]) {
+			self.trigram_score_iter(layout, t_vec)
+		} else {
+			0.0
 		}
 	}
 
@@ -550,8 +556,8 @@ impl LayoutGeneration {
 
 			let PosPair(i1, i2) = *swap;
 
-			let col1 = self.i_to_col[i1];
-			let col2 = self.i_to_col[i2];
+			let col1 = I_TO_COL[i1];
+			let col2 = I_TO_COL[i2];
 
 			let fspeed_score = if col1 == col2 {
 				let fspeed = self.col_fspeed(layout, col1);
@@ -615,8 +621,8 @@ impl LayoutGeneration {
 
 		let PosPair(i1, i2) = *swap;
 
-		let col1 = self.i_to_col[i1];
-		let col2 = self.i_to_col[i2];
+		let col1 = I_TO_COL[i1];
+		let col2 = I_TO_COL[i2];
 
 		cache.fspeed_total = if col1 == col2 {
 			let fspeed = self.col_fspeed(layout, col1);
@@ -705,7 +711,7 @@ impl LayoutGeneration {
 		current_best_score
 	}
 
-	fn optimize_cols(&self, layout: &mut FastLayout, cache: &mut LayoutCache, score: Option<f64>) -> f64 {
+	fn optimize_cols(&self, layout: &mut FastLayout, cache: &mut LayoutCache, score: Option<f64>) {
 		let mut best_score = score.unwrap_or_else(|| cache.total_score);
 
 		let mut best = layout.clone();
@@ -714,7 +720,7 @@ impl LayoutGeneration {
 
 		self.col_perms(layout, &mut best, cache, &mut best_score, 6);
 		*layout = best;
-		best_score
+		layout.score = best_score;
 	}
 
 	fn col_perms(
@@ -758,10 +764,25 @@ impl LayoutGeneration {
 
 		while with_col_score < optimized_score {
 			optimized_score = self.optimize_cached(&mut layout, cache, possible_swaps);
-			with_col_score = self.optimize_cols(&mut layout, cache, Some(optimized_score));
+			self.optimize_cols(&mut layout, cache, Some(optimized_score));
+			with_col_score = layout.score;
 		}
 
+		layout.score = optimized_score;
 		layout
+	}
+
+	pub fn optimize_mut(&self, layout: &mut FastLayout, cache: &mut LayoutCache, possible_swaps: &[PosPair]) {
+		let mut with_col_score = f64::MIN;
+		let mut optimized_score = f64::MIN / 2.0;
+
+		while with_col_score < optimized_score {
+			optimized_score = self.optimize_cached(layout, cache, possible_swaps);
+			self.optimize_cols(layout, cache, Some(optimized_score));
+			with_col_score = layout.score;
+		}
+
+		layout.score = optimized_score;
 	}
 
 	pub fn generate_n_iter(&self, amount: usize) -> impl ParallelIterator<Item = FastLayout> + '_ {
@@ -802,6 +823,7 @@ impl LayoutGeneration {
 }
 
 mod obsolete;
+mod iterative;
 
 #[cfg(test)]
 mod tests {

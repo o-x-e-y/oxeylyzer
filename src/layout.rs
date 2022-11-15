@@ -1,18 +1,6 @@
 use crate::utility::*;
 use crate::generate::{Matrix, CharToFinger};
 use crate::trigram_patterns::{TrigramPattern, TRIGRAM_COMBINATIONS};
-use nanorand::{Rng, tls_rng};
-
-#[inline]
-fn shuffle_pins<T>(slice: &mut [T], pins: &[usize]) {
-    let mapping: Vec<_> = (0..slice.len()).filter(|x| !pins.contains(x)).collect();
-	let mut rng = tls_rng();
-
-	for (m, &swap1) in mapping.iter().enumerate() {
-        let swap2 = rng.generate_range(m..mapping.len());
-        slice.swap(swap1, mapping[swap2]);
-    }
-}
 
 pub trait Layout<T: Copy + Default> {
 	fn new() -> Self;
@@ -118,13 +106,12 @@ impl Layout<char> for FastLayout {
 	}
 
 	fn random(mut with_chars: [char; 30]) -> FastLayout {
-		let mut rng = tls_rng();
-		rng.shuffle(&mut with_chars);
+		shuffle_pins::<30, char>(&mut with_chars, &[]);
 		FastLayout::from(with_chars)
 	}
 
 	fn random_pins(mut layout_chars: [char; 30], pins: &[usize]) -> FastLayout {
-		shuffle_pins(&mut layout_chars, pins);
+		shuffle_pins::<30, char>(&mut layout_chars, pins);
 		FastLayout::from(layout_chars)
 	}
 
