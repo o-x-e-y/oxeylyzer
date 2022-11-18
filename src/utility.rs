@@ -1,5 +1,6 @@
 use crate::languages_cfg::read_cfg;
 
+use fxhash::FxHashMap;
 use itertools::Itertools;
 use serde::Deserialize;
 use arrayvec::ArrayVec;
@@ -55,7 +56,7 @@ impl std::fmt::Display for PosPair {
     }
 }
 
-pub static POSSIBLE_SWAPS: [PosPair; 435] = get_possible_swaps();
+pub const POSSIBLE_SWAPS: [PosPair; 435] = get_possible_swaps();
 
 const fn get_possible_swaps() -> [PosPair; 435] {
 	let mut res = [PosPair::default(); 435];
@@ -72,6 +73,105 @@ const fn get_possible_swaps() -> [PosPair; 435] {
 		pos1 += 1;
 	}
 	res
+}
+
+#[derive(Clone, Default)]
+pub struct ConvertU8 {
+	from: Vec<char>,
+	to: FxHashMap<char, u8>,
+}
+
+impl ConvertU8 {
+	pub fn from_single(&self, c: u8) -> char {
+		*self.from.get(c as usize).unwrap_or(&' ')
+	}
+
+	pub fn from<T>(&self, input: T) -> Vec<char>
+	where T: IntoIterator<Item = u8> {
+		input.into_iter()
+			.map(|c| self.from_single(c))
+			.collect()
+	}
+
+	pub fn to_single(&mut self, c: char) -> u8 {
+		if let Some(u) = self.to.get(&c) {
+			*u
+		} else {
+			let new = self.len();
+			self.from.push(c);
+			self.to.insert(c, new);
+			new
+		}
+	}
+
+	pub fn to_bigram(&mut self, from: [char; 2]) -> [u8; 2] {
+		[self.to_single(from[0]), self.to_single(from[1])]
+	}
+
+	pub fn to_trigram(&mut self, from: [char; 3]) -> [u8; 3] {
+		[self.to_single(from[0]), self.to_single(from[1]), self.to_single(from[2])]
+	}
+
+	pub fn to<T>(&mut self, input: T) -> Vec<u8>
+	where T: IntoIterator<Item = char> {
+		input.into_iter()
+			.map(|c| self.to_single(c))
+			.collect()
+	}
+
+	pub fn to_single_lossy(&self, c: char) -> u8 {
+		if let Some(u) = self.to.get(&c) {
+			*u
+		} else {
+			self.len()
+		}
+	}
+
+	pub fn to_bigram_lossy(&self, from: [char; 2]) -> [u8; 2] {
+		[self.to_single_lossy(from[0]), self.to_single_lossy(from[1])]
+	}
+
+	pub fn to_trigram_lossy(&self, from: [char; 3]) -> [u8; 3] {
+		[self.to_single_lossy(from[0]), self.to_single_lossy(from[1]), self.to_single_lossy(from[2])]
+	}
+
+	pub fn to_lossy<T>(&self, input: T) -> Vec<u8>
+	where T: IntoIterator<Item = char> {
+		input.into_iter()
+			.map(|c| self.to_single_lossy(c))
+			.collect()
+	}
+
+	pub fn insert_single(&mut self, c: char) {
+		if self.to.get(&c).is_none() {
+			let new = self.len();
+			self.from.push(c);
+			self.to.insert(c, new);
+		}
+	}
+
+	pub fn insert<T>(&mut self, input: T)
+	where T: IntoIterator<Item = char> {
+		input.into_iter().for_each(|c| self.insert_single(c));
+	}
+
+	pub fn with_chars(s: &str) -> Self {
+		let mut res = Self::default();
+		res.insert(s.chars());
+		res
+	}
+
+	pub fn as_str(&self, input: &[u8]) -> String {
+		input.into_iter()
+			.map(|&c| self.from.get(c as usize).unwrap_or(&' '))
+			.collect()
+	}
+
+	pub fn len(&self) -> u8 {
+		debug_assert_eq!(self.to.len(), self.from.len());
+
+		self.to.len() as u8
+	}
 }
 
 #[derive(Deserialize, Debug)]
@@ -280,7 +380,7 @@ pub(crate) fn layout_name(entry: &std::fs::DirEntry) -> Option<String> {
 	None
 }
 
-pub(crate) fn format_layout_str(layout_str: String) -> String {
+pub(crate) fn format_layout_str(layout_str: &str) -> String {
 	layout_str
 		.split("\n")
 		.take(3)

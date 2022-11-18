@@ -1,16 +1,20 @@
+use arrayvec::ArrayVec;
 use fxhash::FxHashMap;
 use indexmap::IndexMap;
 use anyhow::Result;
+use serde::Deserialize;
+use serde_json;
 
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
-use serde::Deserialize;
-use serde_json;
 
-pub type CharacterData = smallmap::Map<char, f64>;
-pub type BigramData = FxHashMap<[char; 2], f64>;
-pub type TrigramData = Vec<([char; 3], f64)>;
+use crate::utility::ConvertU8;
+
+pub type CharacterData = ArrayVec<f64, 60>;
+pub type BigramData = FxHashMap<[u8; 2], f64>;
+pub type FastBigramData = Vec<f64>;
+pub type TrigramData = Vec<([u8; 3], f64)>;
 
 #[derive(Deserialize)]
 struct LanguageDataInter {
@@ -21,69 +25,73 @@ struct LanguageDataInter {
 	pub skipgrams2: FxHashMap<String, f64>,
 	pub skipgrams3: FxHashMap<String, f64>,
 	pub trigrams: IndexMap<String, f64>,
+	#[serde(skip)]
+	pub convert_u8: ConvertU8
 }
 
-impl LanguageDataInter {
-	fn get_char_data(&self, data: &FxHashMap<char, f64>) -> CharacterData {
-		let mut res = CharacterData::new();
-		for (c, f) in data.into_iter() {
-			res.insert(*c, *f);
-		}
-		res
+fn get_char_data(data: FxHashMap<char, f64>, con: &mut ConvertU8) -> CharacterData {
+	let mut res = CharacterData::new();
+	for (c, f) in data.into_iter() {
+		con.insert_single(c);
+		res.push(f);
 	}
-
-	fn get_bigram_data(&self, data: &FxHashMap<String, f64>) -> BigramData {
-		let mut res = BigramData::default();
-		for (bigram, freq) in data {
-			let bv = bigram.chars().collect::<Vec<char>>();
-
-			let new_bigram = [bv[0], bv[1]];
-			res.insert(new_bigram, *freq);
-		}
-		res
-	}
-
-	fn get_trigram_data(&self, data: &IndexMap<String, f64>) -> TrigramData {
-		let mut res = TrigramData::new();
-		for (trigram, freq) in data {
-			let tv = trigram.chars().collect::<Vec<char>>();
-
-			if tv[0] != tv[1] && tv[1] != tv[2] {
-				let new_trigram = [tv[0], tv[1], tv[2]];
-				res.push((new_trigram, *freq));
-			}
-		}
-		res
-	}
+	res
 }
 
+fn get_bigram_data(data: FxHashMap<String, f64>, con: &mut ConvertU8) -> BigramData {
+	let mut res = BigramData::default();
+	for (bigram, freq) in data {
+		let bv = bigram.chars().collect::<Vec<char>>();
+		let bv_u8 = con.to(bv);
+
+		let new_bigram = [bv_u8[0], bv_u8[1]];
+		res.insert(new_bigram, freq);
+	}
+	res
+}
+
+fn get_trigram_data(data: IndexMap<String, f64>, con: &mut ConvertU8) -> TrigramData {
+	let mut res = TrigramData::new();
+	for (trigram, freq) in data {
+		let tv = trigram.chars().collect::<Vec<char>>();
+		let tv_u8 = con.to(tv);
+
+		if tv_u8[0] != tv_u8[1] && tv_u8[1] != tv_u8[2] {
+			let new_trigram = [tv_u8[0], tv_u8[1], tv_u8[2]];
+			res.push((new_trigram, freq));
+		}
+	}
+	res
+}
 pub struct LanguageData {
 	pub characters: CharacterData,
 	pub bigrams: BigramData,
 	pub skipgrams: BigramData,
 	pub skipgrams2: BigramData,
 	pub skipgrams3: BigramData,
-	pub weighted_bigrams: BigramData,
+	pub weighted_bigrams: FastBigramData,
 	pub trigrams: TrigramData,
-	pub language: String
+	pub language: String,
+	pub convert_u8: ConvertU8
 }
 
 impl From<LanguageDataInter> for LanguageData {
 	fn from(inter: LanguageDataInter) -> Self {
-		let characters = inter.get_char_data(&inter.characters);
+		let mut convert_u8 = inter.convert_u8;
+		let characters = get_char_data(inter.characters, &mut convert_u8);
 
-		let bigrams = inter.get_bigram_data(&inter.bigrams);
-		let skipgrams = inter.get_bigram_data(&inter.skipgrams);
-		let skipgrams2 = inter.get_bigram_data(&inter.skipgrams2);
-		let skipgrams3 = inter.get_bigram_data(&inter.skipgrams3);
+		let bigrams = get_bigram_data(inter.bigrams, &mut convert_u8);
+		let skipgrams = get_bigram_data(inter.skipgrams, &mut convert_u8);
+		let skipgrams2 = get_bigram_data(inter.skipgrams2, &mut convert_u8);
+		let skipgrams3 = get_bigram_data(inter.skipgrams3, &mut convert_u8);
 
-		let weighted_bigrams = FxHashMap::default();
+		let weighted_bigrams = FastBigramData::new();
 
-		let trigrams = inter.get_trigram_data(&inter.trigrams);
+		let trigrams = get_trigram_data(inter.trigrams, &mut convert_u8);
 
 		Self {
-			characters, bigrams, skipgrams, skipgrams2, skipgrams3,
-			weighted_bigrams, trigrams, language: inter.language,
+			characters, bigrams, skipgrams, skipgrams2, skipgrams3, trigrams,
+			weighted_bigrams, language: inter.language, convert_u8
 		}
 	}
 }

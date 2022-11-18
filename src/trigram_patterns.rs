@@ -158,27 +158,33 @@ pub static TRIGRAM_COMBINATIONS: [TrigramPattern; 512] = get_trigram_combination
 #[cfg(test)]
 mod tests {
 	use crate::*;
+	use layout::{FastLayout, Layout};
+	use trigram_patterns::TrigramPattern::*;
+	use utility::ConvertU8;
+	use once_cell::sync::Lazy;
+
+	static CON: Lazy<ConvertU8> = Lazy::new(
+		|| ConvertU8::with_chars("abcdefghijklmnopqrstuvwxyz',.;")
+	);
 
 	#[test]
 	fn trigram_combinations() {
-		use layout::{FastLayout, Layout};
-		use trigram_patterns::TrigramPattern::*;
-
-		let dvorak = FastLayout::try_from("',.pyfgcrlaoeuidhtns;qjkxbmwvz")
+		let dvorak_bytes = CON.to_lossy("',.pyfgcrlaoeuidhtns;qjkxbmwvz".chars());
+		let dvorak = FastLayout::try_from(dvorak_bytes.as_slice())
 			.expect("couldn't create dvorak");
 
-		assert_eq!(dvorak.get_trigram_pattern(&['h', 'o', 't']), Alternate);
-		assert_eq!(dvorak.get_trigram_pattern(&['l', 'a', 'z']), AlternateSfs);
+		assert_eq!(dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['h', 'o', 't'])), Alternate);
+		assert_eq!(dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['l', 'a', 'z'])), AlternateSfs);
 
-		assert_eq!(dvorak.get_trigram_pattern(&['a', 'b', 'c']), Outroll);
-		assert_eq!(dvorak.get_trigram_pattern(&['t', 'h', 'e']), Inroll);
-		assert_eq!(dvorak.get_trigram_pattern(&['r', 't', 'h']), Onehand);
-		assert_eq!(dvorak.get_trigram_pattern(&['h', 't', 'r']), Onehand);
+		assert_eq!(dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['a', 'b', 'c'])), Outroll);
+		assert_eq!(dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['t', 'h', 'e'])), Inroll);
+		assert_eq!(dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['r', 't', 'h'])), Onehand);
+		assert_eq!(dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['h', 't', 'r'])), Onehand);
 
-		assert_eq!(dvorak.get_trigram_pattern(&['c', 'b', 't']), Redirect);
-		assert_eq!(dvorak.get_trigram_pattern(&['r', 't', 's']), BadRedirect);
+		assert_eq!(dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['c', 'b', 't'])), Redirect);
+		assert_eq!(dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['r', 't', 's'])), BadRedirect);
 
-		assert_eq!(dvorak.get_trigram_pattern(&['g', 'h', 't']), BadSfb);
-		assert_eq!(dvorak.get_trigram_pattern(&['p', 'u', 'k']), Sft);
+		assert_eq!(dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['g', 'h', 't'])), BadSfb);
+		assert_eq!(dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['p', 'u', 'k'])), Sft);
     }
 }

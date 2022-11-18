@@ -10,13 +10,13 @@ trigram_precision = 1000
 keyboard_type = "ansi angle"
 
 [weights]
-heatmap = 1.5
-lateral_penalty = 1.0
+heatmap = 1.65
 fspeed = 14.0
+lateral_penalty = 1.0
 dsfb_ratio = 0.11
 scissors = 1.75
 inrolls = 2.1
-outrolls = 1.8
+outrolls = 1.9
 onehands = 0.9
 alternates = 0.9
 alternates_sfs = 0.6
@@ -26,7 +26,7 @@ bad_redirects = 5.0
 [weights.max_finger_use]
 penalty = 2.5
 pinky = 9.0
-ring = 16.5
+ring = 16.7
 middle = 20.0
 index = 18.0
 

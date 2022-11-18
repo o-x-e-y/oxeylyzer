@@ -1,6 +1,8 @@
 use crate::utility::*;
-use crate::generate::{Matrix, CharToFinger};
 use crate::trigram_patterns::{TrigramPattern, TRIGRAM_COMBINATIONS};
+
+pub type CharToFinger<T> = smallmap::Map<T, usize>;
+pub type Matrix<T> = [T; 30];
 
 pub trait Layout<T: Copy + Default> {
 	fn new() -> Self;
@@ -11,7 +13,7 @@ pub trait Layout<T: Copy + Default> {
 
 	fn c(&self, i: usize) -> T;
 
-	unsafe fn cu(&self, i: usize) -> char;
+	unsafe fn cu(&self, i: usize) -> T;
 
 	fn char(&self, x: usize, y: usize) -> T;
 
@@ -31,102 +33,122 @@ pub trait Layout<T: Copy + Default> {
 
 	fn get_trigram_pattern(&self, trigram: &[T; 3]) -> TrigramPattern;
 
-	unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[char; 3]) -> TrigramPattern;
+	unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[T; 3]) -> TrigramPattern;
 }
 
 #[derive(Default, Clone)]
 pub struct FastLayout {
-	pub matrix: Matrix<char>,
-	pub char_to_finger: CharToFinger<char>,
+	pub matrix: Matrix<u8>,
+	pub char_to_finger: CharToFinger<u8>,
 	pub score: f64
 }
 
-impl From<[char; 30]> for FastLayout {
-    fn from(layout: [char; 30]) -> Self {
+impl From<[u8; 30]> for FastLayout {
+    fn from(layout: [u8; 30]) -> Self {
         let mut new_layout = FastLayout::new();
 
 		for (i, c) in layout.into_iter().enumerate() {
 			new_layout.matrix[i] = c;
-			new_layout.char_to_finger.insert(c, COL_TO_FINGER[i%10]);
+			new_layout.char_to_finger.insert(c, I_TO_COL[i]);
 		}
 		new_layout
     }
 }
 
-impl TryFrom<&str> for FastLayout {
-    type Error = anyhow::Error;
+// impl TryFrom<&str> for FastLayout {
+//     type Error = anyhow::Error;
 
-    fn try_from(layout_str: &str) -> Result<Self, Self::Error> {  
-        let mut new_layout = FastLayout::new();
+//     fn try_from(layout_str: &str) -> Result<Self, Self::Error> {  
+//         let mut new_layout = FastLayout::new();
 
-		if layout_str.chars().count() == 30 {
-			for (i, c) in layout_str.chars().enumerate() {
-				new_layout.matrix[i] = c;
-				new_layout.char_to_finger.insert(c, COL_TO_FINGER[i%10]);
+// 		if layout_str.chars().count() == 30 {
+// 			let u8s = unsafe { CONVERT_U8.to_u8(layout_str.chars()) };
+// 			for (i, c) in u8s.into_iter().enumerate() {
+// 				new_layout.matrix[i] = c;
+// 				new_layout.char_to_finger.insert(c, I_TO_COL[i]);
+// 			}
+
+// 			Ok(new_layout)
+// 		} else {
+// 			anyhow::bail!("string to create a layout should be 30 chars long")
+// 		}
+//     }
+// }
+
+impl TryFrom<&[u8]> for FastLayout {
+	type Error = anyhow::Error;
+
+	fn try_from(layout_bytes: &[u8]) -> Result<Self, Self::Error> {
+		if layout_bytes.len() >= 30 {
+			let mut new_layout = FastLayout::new();
+
+			for (i, &byte) in layout_bytes.into_iter().enumerate() {
+				new_layout.matrix[i] = byte;
+				new_layout.char_to_finger.insert(byte, I_TO_COL[i]);
 			}
-
 			Ok(new_layout)
 		} else {
-			anyhow::bail!("string to create a layout should be 30 chars long")
+			anyhow::bail!("you should provide at least 30 bytes to create a layout from.")
 		}
-    }
-}
-
-impl std::fmt::Display for FastLayout {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		let mut res = String::new();
-
-        for (i, c) in self.matrix.iter().enumerate() {
-			if i % 10 == 0 && i > 0 {
-				res.push('\n');
-			}
-			if (i + 5) % 10 == 0 {
-				res.push(' ');
-			}
-			res.push(*c);
-			res.push(' ');
-		};
-		write!(f, "{res}")
-    }
-}
-
-impl FastLayout {
-	pub fn layout_str(&self) -> String {
-		String::from_iter(self.matrix)
 	}
 }
 
-impl Layout<char> for FastLayout {
+// impl std::fmt::Display for FastLayout {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+// 		let mut res = String::new();
+
+//         for (i, u) in self.matrix.iter().enumerate() {
+// 			let c = unsafe { CONVERT_U8.from_u8}
+// 			if i % 10 == 0 && i > 0 {
+// 				res.push('\n');
+// 			}
+// 			if (i + 5) % 10 == 0 {
+// 				res.push(' ');
+// 			}
+// 			res.push(*c);
+// 			res.push(' ');
+// 		};
+// 		write!(f, "{res}")
+//     }
+// }
+
+impl FastLayout {
+	pub fn layout_str(&self, con: &ConvertU8) -> String {
+		con.as_str(&self.matrix)
+	}
+}
+
+impl Layout<u8> for FastLayout {
 	fn new() -> FastLayout {
 		FastLayout {
-			matrix: ['.'; 30],
+			matrix: [u8::MAX; 30],
 			char_to_finger: CharToFinger::default(),
 			score: 0.0
 		}
 	}
 
-	fn random(mut with_chars: [char; 30]) -> FastLayout {
-		shuffle_pins::<30, char>(&mut with_chars, &[]);
+	fn random(mut with_chars: [u8; 30]) -> FastLayout {
+		shuffle_pins::<30, u8>(&mut with_chars, &[]);
 		FastLayout::from(with_chars)
 	}
 
-	fn random_pins(mut layout_chars: [char; 30], pins: &[usize]) -> FastLayout {
-		shuffle_pins::<30, char>(&mut layout_chars, pins);
+	fn random_pins(mut layout_chars: [u8; 30], pins: &[usize]) -> FastLayout {
+		shuffle_pins::<30, u8>(&mut layout_chars, pins);
 		FastLayout::from(layout_chars)
 	}
 
 	#[inline(always)]
-	fn c(&self, i: usize) -> char {
+	fn c(&self, i: usize) -> u8 {
 		self.matrix[i]
 	}
 
 	#[inline(always)]
-	unsafe fn cu(&self, i: usize) -> char {
+	unsafe fn cu(&self, i: usize) -> u8 {
 		*self.matrix.get_unchecked(i)
 	}
 
 	#[inline]
-	fn char(&self, x: usize, y: usize) -> char {
+	fn char(&self, x: usize, y: usize) -> u8 {
 		assert!(x < 10 && y < 3);
 		self.matrix[x + 10*y]
 	}
@@ -139,8 +161,8 @@ impl Layout<char> for FastLayout {
 
 			self.matrix[i1] = char2;
 			self.matrix[i2] = char1;
-			self.char_to_finger.insert(char1, COL_TO_FINGER[i2 % 10]);
-			self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
+			self.char_to_finger.insert(char1, I_TO_COL[i2]);
+			self.char_to_finger.insert(char2, I_TO_COL[i1]);
 
 			return Some(())
 		} else {
@@ -157,8 +179,8 @@ impl Layout<char> for FastLayout {
 		*self.matrix.get_unchecked_mut(i1) = char2;
 		*self.matrix.get_unchecked_mut(i2) = char1;
 
-		self.char_to_finger.insert(char1, COL_TO_FINGER[i2 % 10]);
-		self.char_to_finger.insert(char2, COL_TO_FINGER[i1 % 10]);
+		self.char_to_finger.insert(char1, I_TO_COL[i2]);
+		self.char_to_finger.insert(char2, I_TO_COL[i1]);
 	}
 
 	#[inline(always)]
@@ -184,8 +206,8 @@ impl Layout<char> for FastLayout {
 		}
 	}
 
-	fn get_index(&self, index: usize) -> [char; 6] {
-		let mut new_index = [' '; 6];
+	fn get_index(&self, index: usize) -> [u8; 6] {
+		let mut new_index = [0; 6];
 		let start_pos = index*2 + 3;
 		for i in 0..2 {
 			for j in 0..3 {
@@ -195,7 +217,7 @@ impl Layout<char> for FastLayout {
 		new_index
 	}
 
-	fn get_trigram_pattern(&self, trigram: &[char; 3]) -> TrigramPattern {
+	fn get_trigram_pattern(&self, trigram: &[u8; 3]) -> TrigramPattern {
 		let a = *self.char_to_finger.get(&trigram[0]).unwrap_or_else(|| &usize::MAX);
 		let b = *self.char_to_finger.get(&trigram[1]).unwrap_or_else(|| &usize::MAX);
 		let c = *self.char_to_finger.get(&trigram[2]).unwrap_or_else(|| &usize::MAX);
@@ -207,7 +229,7 @@ impl Layout<char> for FastLayout {
 		TRIGRAM_COMBINATIONS[combination]
 	}
 
-	unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[char; 3]) -> TrigramPattern {
+	unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[u8; 3]) -> TrigramPattern {
 		let a = *self.char_to_finger.get(&trigram[0]).unwrap_unchecked();
 		let b = *self.char_to_finger.get(&trigram[1]).unwrap_unchecked();
 		let c = *self.char_to_finger.get(&trigram[2]).unwrap_unchecked();
@@ -220,100 +242,121 @@ impl Layout<char> for FastLayout {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use once_cell::sync::Lazy;
+	static CON: Lazy<ConvertU8> = Lazy::new(|| ConvertU8::with_chars("abcdefghijklmnopqrstuvwxyz'.,;/"));
 
 	#[test]
 	fn layout_str() {
-		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./")
+		let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+		println!("{qwerty_bytes:?}");
+		let qwerty = FastLayout::try_from(qwerty_bytes.as_slice())
 			.expect("couldn't create qwerty");
 		
 		assert_eq!(
-			qwerty.matrix,
-			[
+			CON.from(qwerty.matrix),
+			vec![
 				'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p',
 				'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';',
 				'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'
 			]
 		);
-		assert_eq!(qwerty.layout_str(), "qwertyuiopasdfghjkl;zxcvbnm,./".to_string());
+		assert_eq!(qwerty.layout_str(&CON), "qwertyuiopasdfghjkl;zxcvbnm,./".to_string());
 	}
 
 	#[test]
 	fn swap() {
-		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
+		let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+		println!("{qwerty_bytes:?}");
+		let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice())
+			.expect("couldn't create qwerty");
+		
 		qwerty.swap(10, 11);
-		assert_eq!(qwerty.layout_str(), "qwertyuiopsadfghjkl;zxcvbnm,./".to_owned());
+		assert_eq!(qwerty.layout_str(&CON), "qwertyuiopsadfghjkl;zxcvbnm,./".to_owned());
 	}
 
 	#[test]
 	fn swap_no_bounds() {
-		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
+		let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+		let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice())
+			.expect("couldn't create qwerty");
+		
 		unsafe { qwerty.swap_xy_no_bounds(9, 12) };
-		assert_eq!(qwerty.layout_str(), "qwertyuiodaspfghjkl;zxcvbnm,./".to_string());
+		assert_eq!(qwerty.layout_str(&CON), "qwertyuiodaspfghjkl;zxcvbnm,./".to_string());
 	}
 
 	#[test]
 	fn swap_cols_no_bounds() {
-		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
+		let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+		let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice())
+			.expect("couldn't create qwerty");
+		
 		unsafe { qwerty.swap_cols_no_bounds(1, 9) };
-		assert_eq!(
-			qwerty.layout_str(), "qpertyuiowa;dfghjklsz/cvbnm,.x".to_string()
-		);
+		assert_eq!(qwerty.layout_str(&CON), "qpertyuiowa;dfghjklsz/cvbnm,.x".to_string());
 	}
 
 	#[test]
 	fn swap_pair() {
-		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
+		let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+		let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice())
+			.expect("couldn't create qwerty");
+		
 		let new_swap = PosPair::new(0, 29);
 		qwerty.swap_pair(&new_swap);
-		assert_eq!(qwerty.layout_str(), "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string());
+		assert_eq!(qwerty.layout_str(&CON), "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string());
 	}
 
 	#[test]
 	fn swap_pair_no_bounds() {
-		let mut qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
+		let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+		let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice())
+			.expect("couldn't create qwerty");
+		
 		let new_swap = PosPair::new(0, 29);
 		unsafe { qwerty.swap_no_bounds(&new_swap) };
-		assert_eq!(qwerty.layout_str(), "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string());
+		assert_eq!(qwerty.layout_str(&CON), "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string());
 	}
 
 	#[test]
 	fn char_to_finger() {
-		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		assert_eq!(qwerty.char_to_finger.get(&'a'), Some(&0usize));
-		assert_eq!(qwerty.char_to_finger.get(&'w'), Some(&1usize));
-		assert_eq!(qwerty.char_to_finger.get(&'c'), Some(&2usize));
+		let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+		let qwerty = FastLayout::try_from(qwerty_bytes.as_slice())
+			.expect("couldn't create qwerty");
+		
+		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('a')), Some(&0usize));
+		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('w')), Some(&1usize));
+		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('c')), Some(&2usize));
 
-		assert_eq!(qwerty.char_to_finger.get(&'r'), Some(&3usize));
-		assert_eq!(qwerty.char_to_finger.get(&'b'), Some(&3usize));
+		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('r')), Some(&3usize));
+		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('b')), Some(&3usize));
 
-		assert_eq!(qwerty.char_to_finger.get(&'h'), Some(&4usize));
-		assert_eq!(qwerty.char_to_finger.get(&'u'), Some(&4usize));
+		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('h')), Some(&4usize));
+		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('u')), Some(&4usize));
 
-		assert_eq!(qwerty.char_to_finger.get(&'i'), Some(&5usize));
-		assert_eq!(qwerty.char_to_finger.get(&'.'), Some(&6usize));
-		assert_eq!(qwerty.char_to_finger.get(&';'), Some(&7usize));
+		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('i')), Some(&5usize));
+		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('.')), Some(&6usize));
+		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy(';')), Some(&7usize));
 	}
 
 	#[test]
 	fn char() {
-		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		assert_eq!(qwerty.char(4, 1), 'g');
-		assert_eq!(qwerty.char(9, 2), '/');
-		assert_eq!(qwerty.char(8, 1), 'l');
+		let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+		let qwerty = FastLayout::try_from(qwerty_bytes.as_slice())
+			.expect("couldn't create qwerty");
+
+		assert_eq!(qwerty.char(4, 1), CON.to_single_lossy('g'));
+		assert_eq!(qwerty.char(9, 2), CON.to_single_lossy('/'));
+		assert_eq!(qwerty.char(8, 1), CON.to_single_lossy('l'));
 	}
 
 	#[test]
 	fn char_by_index() {
-		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		assert_eq!(qwerty.c(10), 'a');
-		assert_eq!(qwerty.c(24), 'b');
-		assert_eq!(qwerty.c(22), 'c');
-	}
+		let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+		let qwerty = FastLayout::try_from(qwerty_bytes.as_slice())
+			.expect("couldn't create qwerty");
 
-	#[test]
-	fn thing() {
-		let qwerty = FastLayout::try_from("qwertyuiopasdfghjkl;zxcvbnm,./").unwrap();
-		assert_eq!(qwerty.score, 0.0);
+		assert_eq!(qwerty.c(10), CON.to_single_lossy('a'));
+		assert_eq!(qwerty.c(24), CON.to_single_lossy('b'));
+		assert_eq!(qwerty.c(22), CON.to_single_lossy('c'));
 	}
 
 	// #[test]
