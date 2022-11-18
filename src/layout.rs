@@ -55,26 +55,6 @@ impl From<[u8; 30]> for FastLayout {
     }
 }
 
-// impl TryFrom<&str> for FastLayout {
-//     type Error = anyhow::Error;
-
-//     fn try_from(layout_str: &str) -> Result<Self, Self::Error> {  
-//         let mut new_layout = FastLayout::new();
-
-// 		if layout_str.chars().count() == 30 {
-// 			let u8s = unsafe { CONVERT_U8.to_u8(layout_str.chars()) };
-// 			for (i, c) in u8s.into_iter().enumerate() {
-// 				new_layout.matrix[i] = c;
-// 				new_layout.char_to_finger.insert(c, I_TO_COL[i]);
-// 			}
-
-// 			Ok(new_layout)
-// 		} else {
-// 			anyhow::bail!("string to create a layout should be 30 chars long")
-// 		}
-//     }
-// }
-
 impl TryFrom<&[u8]> for FastLayout {
 	type Error = anyhow::Error;
 
@@ -93,31 +73,12 @@ impl TryFrom<&[u8]> for FastLayout {
 	}
 }
 
-// impl std::fmt::Display for FastLayout {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-// 		let mut res = String::new();
-
-//         for (i, u) in self.matrix.iter().enumerate() {
-// 			let c = unsafe { CONVERT_U8.from_u8}
-// 			if i % 10 == 0 && i > 0 {
-// 				res.push('\n');
-// 			}
-// 			if (i + 5) % 10 == 0 {
-// 				res.push(' ');
-// 			}
-// 			res.push(*c);
-// 			res.push(' ');
-// 		};
-// 		write!(f, "{res}")
-//     }
-// }
-
 impl FastLayout {
 	pub fn layout_str(&self, con: &ConvertU8) -> String {
 		con.as_str(&self.matrix)
 	}
 
-	pub fn to_string(&self, con: &ConvertU8) -> String {
+	pub fn formatted_string(&self, con: &ConvertU8) -> String {
 		let mut res = String::new();
 
         for (i, u) in self.matrix.iter().enumerate() {
