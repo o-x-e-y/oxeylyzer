@@ -116,6 +116,24 @@ impl FastLayout {
 	pub fn layout_str(&self, con: &ConvertU8) -> String {
 		con.as_str(&self.matrix)
 	}
+
+	pub fn to_string(&self, con: &ConvertU8) -> String {
+		let mut res = String::new();
+
+        for (i, u) in self.matrix.iter().enumerate() {
+			let c = con.from_single(*u);
+			if i % 10 == 0 && i > 0 {
+				res.push('\n');
+			}
+			if (i + 5) % 10 == 0 {
+				res.push(' ');
+			}
+			res.push(c);
+			res.push(' ');
+		}
+
+		res
+	}
 }
 
 impl Layout<u8> for FastLayout {
