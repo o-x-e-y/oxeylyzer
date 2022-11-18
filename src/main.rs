@@ -11,6 +11,12 @@ fn main() -> Result<(), String> {
 	repl::Repl::run()
 }
 
+// fn main() {
+// 	use languages::*;
+
+// 	let x = CorpusConfig::new("english", None);
+// }
+
 // use oxeylyzer::load_text;
 
 // fn pause() -> Result<(), std::io::Error> {

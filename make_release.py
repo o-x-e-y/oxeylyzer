@@ -1,5 +1,6 @@
 from itertools import permutations
 from os import path
+import pathlib
 import json
 from glob import glob
 from random import choice
@@ -63,5 +64,12 @@ def main():
 
 
 if __name__ == "__main__":
-    s = Solution()
-    s.countVowelPermutation(3)
+    for p in glob("static/language_data/*.json")[14:]:
+        name = path.basename(p).removesuffix(".json")
+
+        with open(f"corpora/provided/{name}.toml", 'w+', encoding='utf8') as f:
+            f.write("based_on = [\"default\"]")
+
+        
+    # s = Solution()
+    # s.countVowelPermutation(3)

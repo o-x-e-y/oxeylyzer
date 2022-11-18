@@ -15,7 +15,7 @@ edition = "2021"
 
 [dependencies]
 shlex = "1.1.0"
-oxeylyzer = { git = "https://github.com/O-X-E-Y/oxeylyzer" }
+oxeylyzer = { git = "https://github.com/O-X-E-Y/oxeylyzer/", branch="fucku8_reboot" }
 indicatif = { version = "0.17.1", features = ["rayon"] }
 ansi_rgb = { git = "https://github.com/O-X-E-Y/ansi_rgb" }
 indexmap = "1.9.1"
