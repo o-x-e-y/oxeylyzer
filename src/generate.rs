@@ -828,14 +828,14 @@ mod obsolete;
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use lazy_static::lazy_static;
+	use once_cell::sync::Lazy;
 	use std::sync::atomic::Ordering;
-use nanorand::Rng;
+	use nanorand::Rng;
 	use crate::utility::ApproxEq;
 
-	lazy_static!{
-		pub static ref GEN: LayoutGeneration = LayoutGeneration::new("english", "static", None).unwrap();
-	}
+	static GEN: Lazy<LayoutGeneration> = Lazy::new(
+		|| LayoutGeneration::new("english", "static", None).unwrap()
+	);
 
 	#[allow(dead_code)]
 	fn fspeed_per_pair() {
