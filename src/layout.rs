@@ -1,7 +1,7 @@
 use crate::utility::*;
 use crate::trigram_patterns::{TrigramPattern, TRIGRAM_COMBINATIONS};
 
-pub type CharToFinger<T> = smallmap::Map<T, usize>;
+pub type CharToFinger = [usize; 60];
 pub type Matrix<T> = [T; 30];
 
 pub trait Layout<T: Copy + Default> {
@@ -36,20 +36,26 @@ pub trait Layout<T: Copy + Default> {
 	unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[T; 3]) -> TrigramPattern;
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct FastLayout {
 	pub matrix: Matrix<u8>,
-	pub char_to_finger: CharToFinger<u8>,
+	pub char_to_finger: CharToFinger,
 	pub score: f64
+}
+
+impl Default for FastLayout {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl From<[u8; 30]> for FastLayout {
     fn from(layout: [u8; 30]) -> Self {
         let mut new_layout = FastLayout::new();
 
-		for (i, c) in layout.into_iter().enumerate() {
-			new_layout.matrix[i] = c;
-			new_layout.char_to_finger.insert(c, I_TO_COL[i]);
+		for (i, byte) in layout.into_iter().enumerate() {
+			new_layout.matrix[i] = byte;
+			new_layout.char_to_finger[byte as usize] = I_TO_COL[i];
 		}
 		new_layout
     }
@@ -64,7 +70,7 @@ impl TryFrom<&[u8]> for FastLayout {
 
 			for (i, &byte) in layout_bytes.into_iter().enumerate() {
 				new_layout.matrix[i] = byte;
-				new_layout.char_to_finger.insert(byte, I_TO_COL[i]);
+				new_layout.char_to_finger[byte as usize] = I_TO_COL[i];
 			}
 			Ok(new_layout)
 		} else {
@@ -101,7 +107,7 @@ impl Layout<u8> for FastLayout {
 	fn new() -> FastLayout {
 		FastLayout {
 			matrix: [u8::MAX; 30],
-			char_to_finger: CharToFinger::default(),
+			char_to_finger: [usize::MAX; 60],
 			score: 0.0
 		}
 	}
@@ -140,8 +146,8 @@ impl Layout<u8> for FastLayout {
 
 			self.matrix[i1] = char2;
 			self.matrix[i2] = char1;
-			self.char_to_finger.insert(char1, I_TO_COL[i2]);
-			self.char_to_finger.insert(char2, I_TO_COL[i1]);
+			self.char_to_finger[char1 as usize] = I_TO_COL[i2];
+			self.char_to_finger[char2 as usize] = I_TO_COL[i1];
 
 			return Some(())
 		} else {
@@ -158,8 +164,8 @@ impl Layout<u8> for FastLayout {
 		*self.matrix.get_unchecked_mut(i1) = char2;
 		*self.matrix.get_unchecked_mut(i2) = char1;
 
-		self.char_to_finger.insert(char1, I_TO_COL[i2]);
-		self.char_to_finger.insert(char2, I_TO_COL[i1]);
+		*self.char_to_finger.get_unchecked_mut(char1 as usize) = *I_TO_COL.get_unchecked(i2);
+		*self.char_to_finger.get_unchecked_mut(char2 as usize) = *I_TO_COL.get_unchecked(i1);
 	}
 
 	#[inline(always)]
@@ -197,9 +203,9 @@ impl Layout<u8> for FastLayout {
 	}
 
 	fn get_trigram_pattern(&self, trigram: &[u8; 3]) -> TrigramPattern {
-		let a = *self.char_to_finger.get(&trigram[0]).unwrap_or_else(|| &usize::MAX);
-		let b = *self.char_to_finger.get(&trigram[1]).unwrap_or_else(|| &usize::MAX);
-		let c = *self.char_to_finger.get(&trigram[2]).unwrap_or_else(|| &usize::MAX);
+		let a = *self.char_to_finger.get(trigram[0] as usize).unwrap_or_else(|| &usize::MAX);
+		let b = *self.char_to_finger.get(trigram[1] as usize).unwrap_or_else(|| &usize::MAX);
+		let c = *self.char_to_finger.get(trigram[2] as usize).unwrap_or_else(|| &usize::MAX);
 		if (a | b | c) == usize::MAX {
 			return TrigramPattern::Invalid
 		}
@@ -209,9 +215,9 @@ impl Layout<u8> for FastLayout {
 	}
 
 	unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[u8; 3]) -> TrigramPattern {
-		let a = *self.char_to_finger.get(&trigram[0]).unwrap_unchecked();
-		let b = *self.char_to_finger.get(&trigram[1]).unwrap_unchecked();
-		let c = *self.char_to_finger.get(&trigram[2]).unwrap_unchecked();
+		let a = *self.char_to_finger.get(trigram[0] as usize).unwrap_unchecked();
+		let b = *self.char_to_finger.get(trigram[1] as usize).unwrap_unchecked();
+		let c = *self.char_to_finger.get(trigram[2] as usize).unwrap_unchecked();
 		// a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 == 0b111)
 		let combination = (a << 6) | (b << 3) | c;
 		TRIGRAM_COMBINATIONS[combination]
@@ -301,19 +307,19 @@ mod tests {
 		let qwerty = FastLayout::try_from(qwerty_bytes.as_slice())
 			.expect("couldn't create qwerty");
 		
-		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('a')), Some(&0usize));
-		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('w')), Some(&1usize));
-		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('c')), Some(&2usize));
+		assert_eq!(qwerty.char_to_finger.get(CON.to_single_lossy('a') as usize), Some(&0usize));
+		assert_eq!(qwerty.char_to_finger.get(CON.to_single_lossy('w') as usize), Some(&1usize));
+		assert_eq!(qwerty.char_to_finger.get(CON.to_single_lossy('c') as usize), Some(&2usize));
 
-		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('r')), Some(&3usize));
-		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('b')), Some(&3usize));
+		assert_eq!(qwerty.char_to_finger.get(CON.to_single_lossy('r') as usize), Some(&3usize));
+		assert_eq!(qwerty.char_to_finger.get(CON.to_single_lossy('b') as usize), Some(&3usize));
 
-		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('h')), Some(&4usize));
-		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('u')), Some(&4usize));
-
-		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('i')), Some(&5usize));
-		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy('.')), Some(&6usize));
-		assert_eq!(qwerty.char_to_finger.get(&CON.to_single_lossy(';')), Some(&7usize));
+		assert_eq!(qwerty.char_to_finger.get(CON.to_single_lossy('h') as usize), Some(&4usize));
+		assert_eq!(qwerty.char_to_finger.get(CON.to_single_lossy('u') as usize), Some(&4usize));
+		
+		assert_eq!(qwerty.char_to_finger.get(CON.to_single_lossy('i') as usize), Some(&5usize));
+		assert_eq!(qwerty.char_to_finger.get(CON.to_single_lossy('.') as usize), Some(&6usize));
+		assert_eq!(qwerty.char_to_finger.get(CON.to_single_lossy(';') as usize), Some(&7usize));
 	}
 
 	#[test]
