@@ -61,7 +61,8 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
         .flat_map(|(chunker, count)| {
             chunker.chunks(*count, Some(' ')).unwrap()
         })
-        .map(|chunk| std::str::from_utf8(chunk).expect(
+        .map(|chunk| std::str::from_utf8(chunk)
+        .expect(
                 "one of the files provided is not encoded as utf-8.\
                 Make sure all files in the directory are valid utf-8."
             )
@@ -166,46 +167,32 @@ impl TextData {
     }
 }
 
-impl From<(TextNgrams<5>, &str, Translator)> for TextData {
-    fn from((ngrams, language, translator): (TextNgrams<5>, &str, Translator)) -> Self {
-        let mut res = TextData::new(language);
+#[derive(Default)]
+struct TextDataElem {
+    c: Option<char>,
+    b: Option<[char; 2]>,
+    t: Option<[char; 3]>,
+    s: Option<[char; 2]>,
+    s2: Option<[char; 2]>,
+    s3: Option<[char; 2]>,
+    freq: f64
+}
 
-        for (quingram, freq) in ngrams.ngrams.into_iter() {
-            let q = SmartString::<LazyCompact>::from_iter(quingram);
-            let translated = translator.translate(q.as_str());
-            let first_char = quingram[0];
-            
-            let it_count = if let Some(f) = translator.table.get(&first_char) {
-                f.chars().count()
-            } else { 1 };
-
-            match translated.chars().count() {
-                5.. => {
-                    translated.chars()
-                        .tuple_windows::<(_, _, _, _, _)>()
-                        .take(it_count)
-                        .for_each(|quin|
-                            res.add_from_n_subsequent::<5>([quin.0, quin.1, quin.2, quin.3, quin.4], freq as f64)
-                        );
-                }
-                4 => res.add_from_n_subsequent::<4>(
-                    Self::collect_str_into_arr::<4>(translated.as_str()), freq as f64
-                ),
-                3 => res.add_from_n_subsequent::<3>(
-                    Self::collect_str_into_arr::<3>(translated.as_str()), freq as f64
-                ),
-                2 => res.add_from_n_subsequent::<2>(
-                    Self::collect_str_into_arr::<2>(translated.as_str()), freq as f64
-            ),
-                1 => {
-                    let c1 = translated.chars().next().unwrap();
-                    res.add_character(c1, freq as f64);
-                }
-                _ => {}
-            }
+impl FromIterator<TextDataElem> for TextData {
+    fn from_iter
+        <T: IntoIterator<Item = TextDataElem>>
+    (iter: T) -> Self {
+        let mut res = Self::default();
+        for elem in iter {
+            let freq = elem.freq;
+            if let Some(c) = elem.c { res.add_character(c, freq) }
+            if let Some(b) = elem.b { res.add_bigram(b, freq) }
+            if let Some(t) = elem.t { res.add_trigram(t, freq) }
+            if let Some(s) = elem.s { res.add_skipgram(s, freq) }
+            if let Some(s2) = elem.s2 { res.add_skipgram2(s2, freq) }
+            if let Some(s3) = elem.s3 { res.add_skipgram3(s3, freq) }
         }
 
-        // IndexMaps have the property of keeping order based on insertion, so they're sortable:
         res.characters.iter_mut().for_each(|(_, f)| *f /= res.char_sum);
         res.bigrams.iter_mut().for_each(|(_, f)| *f /= res.bigram_sum);
         res.skipgrams.iter_mut().for_each(|(_, f)| *f /= res.skipgram_sum);
@@ -224,6 +211,99 @@ impl From<(TextNgrams<5>, &str, Translator)> for TextData {
     }
 }
 
+
+
+impl TextDataElem {
+    fn from_n_subsequent<const N: usize>(ngram: [char; N], freq: f64) -> Self {
+        let mut res = Self::default();
+        res.freq = freq;
+
+        if N > 0 && let c1 = ngram[0] && c1 != ' ' {
+            res.c = Some(c1);
+            // take first, first 2 etc chars of the trigram every time for the appropriate stat
+            // as long as they don't contain spaces. return `c2` so I don't iter.next() too much
+            let c2 = if N > 1 && let c2 = ngram[1] && c2 != ' ' {
+                res.b = Some([c1, c2]);
+                c2
+            } else { ' ' };
+            // c1 and c3 for skipgrams
+            if N > 2 && let c3 = ngram[2] && c3 != ' ' {
+                res.s = Some([c1, c3]);
+
+                if c2 != ' ' {
+                    res.t = Some([c1, c2, c3]);
+                }
+
+                if N > 3 && let c4 = ngram[3] && c4 != ' ' {
+                    res.s2 = Some([c1, c4]);
+
+                    if N > 4 && let c5 = ngram[4] && c5 != ' ' {
+                        res.s3 = Some([c1, c5]);
+                    }
+                }
+            }
+        }
+        res
+    }
+
+    // fn from_char_iter<const N: usize>(iter: impl IntoIterator<Item=char>, freq: f64) -> [Option<Self>; N] {
+    //     let mut res = [None; N];
+
+    //     res
+    // }
+}
+
+impl From<(TextNgrams<5>, &str, Translator)> for TextData {
+    fn from((ngrams, language, translator): (TextNgrams<5>, &str, Translator)) -> Self {
+        let mut res = TextData::new(language);
+
+        let x = ngrams.ngrams.into_iter()
+            .map(|(quingram, freq)| {
+                let translated = translator.translate_arr(&quingram);
+                let first_char = quingram[0];
+                
+                let it_count = if let Some(f) = translator.table.get(&first_char) {
+                    f.chars().count()
+                } else { 1 };
+                let mut chars = translated.chars();
+
+                
+            });
+            
+            // match translated.chars().count() {
+            //         5.. => {
+                        
+            //             translated.chars()
+            //                 .tuple_windows::<(_, _, _, _, _)>()
+            //                 .take(it_count)
+            //                 .for_each(|quin|
+            //                     res.add_from_n_subsequent::<5>([quin.0, quin.1, quin.2, quin.3, quin.4], freq as f64)
+            //                 );
+            //         }
+            //         4 => res.add_from_n_subsequent::<4>(
+            //             Self::collect_str_into_arr::<4>(translated.as_str()), freq as f64
+            //         ),
+            //         3 => res.add_from_n_subsequent::<3>(
+            //             Self::collect_str_into_arr::<3>(translated.as_str()), freq as f64
+            //         ),
+            //         2 => res.add_from_n_subsequent::<2>(
+            //             Self::collect_str_into_arr::<2>(translated.as_str()), freq as f64
+            //     ),
+            //         1 => {
+            //             let ngram = translated.chars().next().unwrap();
+            //             TextDataElem::from_n_subsequent(ngram, freq)
+            //         }
+            //         _ => ArrayVec::new()
+            //     }
+        
+
+        // IndexMaps have the property of keeping order based on insertion, so they're sortable:
+        
+
+        res
+    }
+}
+
 impl TextData {
     fn collect_str_into_arr<const N: usize>(string: &str) -> [char; N] {
         let mut res = [' '; N];
@@ -231,32 +311,6 @@ impl TextData {
             res[i] = c;
         }
         res
-    }
-
-    fn add_from_n_subsequent<const N: usize>(&mut self, ngram: [char; N], freq: f64) {
-        if N > 0 && let c1 = ngram[0] && c1 != ' ' {
-            self.add_character(c1, freq);
-            // take first, first 2 etc chars of the trigram every time for the appropriate stat
-            // as long as they don't contain spaces. return `c2` so I don't iter.next() too much
-            let c2 = if N > 1 && let c2 = ngram[1] && c2 != ' ' {
-                self.add_bigram([c1, c2], freq);
-                c2
-            } else { ' ' };
-            // c1 and c3 for skipgrams
-            if N > 2 && let c3 = ngram[2] && c3 != ' ' {
-                self.add_skipgram([c1, c3], freq);
-
-                if c2 != ' ' { self.add_trigram([c1, c2, c3], freq); }
-
-                if N > 3 && let c4 = ngram[3] && c4 != ' ' {
-                    self.add_skipgram2([c1, c4], freq);
-
-                    if N > 4 && let c5 = ngram[4] && c5 != ' ' {
-                        self.add_skipgram3([c1, c5], freq);
-                    }
-                }
-            }
-        }
     }
 
     pub(crate) fn add_character(&mut self, c: char, freq: f64) {
@@ -321,7 +375,8 @@ impl TextData {
     }
 }
 
-#[cfg(test)]
+// #[cfg(test)]
+#[allow(unused)]
 mod tests {
     use super::*;
     use crate::{*, utility::ApproxEq};
@@ -378,22 +433,24 @@ mod tests {
 		
 		assert!(data.language == "test");
 
-		let total_c = 1.0/data.characters.iter().map(|&(_, f)| f).reduce(f64::min).unwrap();
+		let total_c = 1.0/data.characters.iter()
+            .map(|&f| f)
+            .reduce(f64::min).unwrap();
         
-        assert_eq!(data.characters.get(&'e'), Some(&(2.0/total_c)));
-        assert_eq!(data.characters.get(&'\''), Some(&(1.0/total_c)));
+        assert_eq!(data.characters.get(data.convert_u8.to_single_lossy('e') as usize), Some(&(2.0/total_c)));
+        assert_eq!(data.characters.get(data.convert_u8.to_single_lossy('\'') as usize), Some(&(1.0/total_c)));
 
         let total_b = 1.0/data.bigrams.iter().map(|(_, &f)| f).reduce(f64::min).unwrap();
 
-        assert_eq!(data.bigrams.get(&['\'', '*']), Some(&(1.0/total_b)));
-        assert_eq!(data.bigrams.get(&['1', ':']), None);
+        assert_eq!(data.bigrams.get(&data.convert_u8.to_bigram_lossy(['\'', '*'])), Some(&(1.0/total_b)));
+        assert_eq!(data.bigrams.get(&data.convert_u8.to_bigram_lossy(['1', ':'])), None);
 
 		let total_s = 1.0/data.skipgrams.iter().map(|(_, &f)| f).reduce(f64::min).unwrap();
 
-		assert_eq!(data.skipgrams.get(&[';', 'd']), Some(&(1.0/total_s)));
-		assert_eq!(data.skipgrams.get(&['*', 'e']), Some(&(1.0/total_s)));
-		assert_eq!(data.skipgrams.get(&['t', 'e']), Some(&(1.0/total_s)));
-		assert_eq!(data.skipgrams.get(&['\'', 't']), None);
+		assert_eq!(data.skipgrams.get(&data.convert_u8.to_bigram_lossy([';', 'd'])), Some(&(1.0/total_s)));
+		assert_eq!(data.skipgrams.get(&data.convert_u8.to_bigram_lossy(['*', 'e'])), Some(&(1.0/total_s)));
+		assert_eq!(data.skipgrams.get(&data.convert_u8.to_bigram_lossy(['t', 'e'])), Some(&(1.0/total_s)));
+		assert_eq!(data.skipgrams.get(&data.convert_u8.to_bigram_lossy(['\'', 't'])), None);
 	}
 
 	#[test]
