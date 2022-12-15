@@ -93,6 +93,19 @@ impl Translator {
         }
         res
 	}
+
+    pub fn translate_arr(&self, arr: &[char]) -> SmartString<LazyCompact> {
+        let mut res = SmartString::<LazyCompact>::new();
+
+        for c in arr.into_iter() {
+            if let Some(replacement) = self.table.get(c) {
+                res.push_str(replacement);
+            } else {
+                res.push(' ');
+            }
+        }
+        res
+    }
 }
 
 pub struct TranslatorBuilder {
