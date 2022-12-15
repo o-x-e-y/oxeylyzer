@@ -1,6 +1,5 @@
 use crate::translation::Translator;
 
-use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::fs::{File, read_dir};
 use std::time::Instant;
@@ -9,6 +8,7 @@ use itertools::Itertools;
 use rayon::iter::{ParallelIterator, IntoParallelRefIterator};
 use file_chunker::FileChunker;
 use anyhow::Result;
+use fxhash::FxHashMap as HashMap;
 use indexmap::IndexMap;
 use serde::{Serialize, Deserialize};
 use smartstring::{LazyCompact, SmartString};
@@ -82,26 +82,36 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
 }
 
 #[derive(Default, Debug)]
-pub struct TextNgrams<const N: usize> {
-    pub ngrams: HashMap<[char; N], usize>,
+pub struct TextNgrams<'a, const N: usize> {
+    pub ngrams: HashMap<&'a str, usize>,
 }
 
-impl From<&str> for TextNgrams<5> {
-    fn from(s: &str) -> Self {eueueueu
-        let mut quingrams = HashMap::new();
-        let it = s.chars()
-            .chain([' ', ' ', ' ', ' '])
-            .tuple_windows::<(_, _, _, _, _)>()
-            .map(|(c1, c2, c3, c4, c5)| [c1, c2, c3, c4, c5]);
+impl<'a, const N: usize> From<&'a str> for TextNgrams<'a, N> {
+    fn from(s: &'a str) -> Self {
+        let mut ngrams = HashMap::default();
+        let it1 = s.char_indices().map(|(i, _)| i);
+        let it2 = s.char_indices().map(|(i, _)| i).skip(N);
+        let it = it1.zip(it2)
+            .map(|(i1, i2)| &s[i1..i2])
+            .for_each(|ngram| { ngrams.entry(ngram).and_modify(|f| *f += 1).or_insert(1); } );
         
-        for q in it {
-                quingrams.entry(q).and_modify(|f| *f += 1).or_insert(1);
-            }
-        Self { ngrams: quingrams }
+        let mut last_chars = SmartString::<LazyCompact>::new();
+        let mut inter = [' '; 5];
+        s.chars().rev().take(5).enumerate().for_each(|(i, c)| unsafe { *inter.get_unchecked_mut(4 - i) = c } );
+        inter.into_iter().for_each(|c| last_chars.push(c));
+        last_chars.push_str("    ");
+
+        let it1 = last_chars.char_indices().map(|(i, _)| i);
+        let it2 = last_chars.char_indices().map(|(i, _)| i).skip(N);
+        let it = it1.zip(it2)
+            .map(|(i1, i2)| &last_chars[i1..i2])
+            .for_each(|ngram| { ngrams.entry(ngram).and_modify(|f| *f += 1).or_insert(1); } );
+        
+        Self { ngrams }
     }
 }
 
-impl<const N: usize> TextNgrams<N> {
+impl<'a, const N: usize> TextNgrams<'a, N> {
     fn combine_with(mut self, rhs: Self) -> Self {
         for (trigram, freq) in rhs.ngrams.into_iter() {
             self.ngrams.entry(trigram).and_modify(|f| *f += freq).or_insert(freq);
