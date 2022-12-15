@@ -1,2 +1,2 @@
 [base]
-based_on = ["default"]
+inherits = ["default"]

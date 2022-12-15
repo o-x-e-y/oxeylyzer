@@ -32,10 +32,10 @@ impl std::ops::Add for OneToOne {
 
 #[derive(Deserialize)]
 struct CorpusConfigLoad {
-    source_language: Option<String>,
+    source: Option<String>,
     // #[serde(from = "OneOrMany<_>")]
     #[serde(default)]
-    based_on: Vec<String>,
+    inherits: Vec<String>,
     #[serde(default)]
     letters_to_lowercase: String,
     #[serde(default)]
@@ -95,7 +95,7 @@ impl CorpusConfigLoad {
 
 pub struct CorpusConfig {
     source_language: String,
-    based_on: Vec<String>,
+    inherits: Vec<String>,
     letters_to_lowercase: String,
     punct_unshifted: OneToOne,
     keep: String,
@@ -106,14 +106,14 @@ pub struct CorpusConfig {
 impl CorpusConfig {
     pub fn new(language: &str, preferred_folder: Option<&str>) -> Result<Self, String> {
         let loaded = CorpusConfigLoad::new(language, preferred_folder)?;
-        // let based_on = match loaded.based_on {
+        // let inherits = match loaded.inherits {
         //     Some(Single(v)) => vec![v],
         //     Some(Multiple(l)) => l,
         //     None => Vec::new()
         // };
         Ok(Self {
-            source_language: loaded.source_language.unwrap_or_else(|| language.to_string()),
-            based_on: loaded.based_on,
+            source_language: loaded.source.unwrap_or_else(|| language.to_string()),
+            inherits: loaded.inherits,
             letters_to_lowercase: loaded.letters_to_lowercase,
             punct_unshifted: loaded.punct_unshifted,
             keep: loaded.keep,
@@ -177,8 +177,8 @@ impl CorpusConfig {
             .to_multiple_string(&self.to_multiple)
             .build();
         
-        for based_on in self.based_on {
-            if let Ok(new) = Self::new(&based_on, None) {
+        for inherits in self.inherits {
+            if let Ok(new) = Self::new(&inherits, None) {
                 res = res + new.translator();
             }
         }

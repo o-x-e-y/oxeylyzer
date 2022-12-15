@@ -1,1 +1,1 @@
-based_on = ["default", "french"]
+inherits = ["default", "french"]

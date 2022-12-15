@@ -81,7 +81,7 @@ These finger speed weigths determine the strength of certain fingers, and divide
 
 ## Creating your own corpus rules
 
-You can generate language data files using your own rules now! There are a few settings that you can use for them. As a shortcut, if your corpus is just English, you can create a `.toml` file with a single line: `based_on = ["default"]`. That should cover everything you need.
+You can generate language data files using your own rules now! There are a few settings that you can use for them. As a shortcut, if your corpus is just English, you can create a `.toml` file with a single line: `inherits = ["default"]`. That should cover everything you need.
 
 ### Corpus config files
 
@@ -89,7 +89,7 @@ Using the `.toml` files found in the subfolders of `./corpus_config`, you set th
 
 All direct subfolders are searched for this, so you can keep your own rulesets in a different folder to keep things nice and tidy. All characters not specified will be simulated but discarded in the final result. The allowed fields are the following:
 
-#### based_on
+#### inherits
 
 This is an array `[]` that contain references to other config files. Most provided configs use `default`, which has a couple of useful formatting features like unshifting latin characters and some punctuation and changing some unconventional quotation marks to the more common appostrophe (which itself is the unshifted version of `"`). One caveat is that this does not check for circular references, so if you have one file `A` that references `B` and have `B` reference `A`, that _will_ get stuck in an infinite loop. Don't do that :thumbsup:
 
@@ -134,8 +134,8 @@ You could theoretically use two accent keys, but I think this is only useful if 
 
 4. If you know some double keys are very common, you can consider using them as dedicated keys as well. This has to be done as corpus preprocessing with your own script, and cannot be set by these rules. I do have plans to change this however.
 
-5. Once you have this figured out, this is _usually_ enough to create a full ruleset. You use `based_on = ["default"]`, add the non-default alphabet keys that you think deserve a dedicated key to `letters_to_lowercase`, and create a list `to_multiple` for keys that require the accent key.
+5. Once you have this figured out, this is _usually_ enough to create a full ruleset. You use `inherits = ["default"]`, add the non-default alphabet keys that you think deserve a dedicated key to `letters_to_lowercase`, and create a list `to_multiple` for keys that require the accent key.
 
 #### Non-latin languages
 
-The workflow for this is a bit different. You still use step 1 and 2 just fine, but the amount of characters might be wildly different, and you wouldn't want to use `based_on = ["default"]` because keeping latin characters is not what you want. Especially if there are a (lot) more characters in the alphabet, you will have to dive deeper into how typing is usually done within that lanugage if you're not sure, and how to optimize it. It might for example be a good idea to create rules with the language-specific IME/prediction in mind, if possible. Also keep in mind you might need to add script-specific punctuation if such a thing exists.
+The workflow for this is a bit different. You still use step 1 and 2 just fine, but the amount of characters might be wildly different, and you wouldn't want to use `inherits = ["default"]` because keeping latin characters is not what you want. Especially if there are a (lot) more characters in the alphabet, you will have to dive deeper into how typing is usually done within that lanugage if you're not sure, and how to optimize it. It might for example be a good idea to create rules with the language-specific IME/prediction in mind, if possible. Also keep in mind you might need to add script-specific punctuation if such a thing exists.

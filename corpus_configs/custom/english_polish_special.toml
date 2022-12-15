@@ -1,0 +1,8 @@
+inherits = ["default"]
+
+[multiple]
+uppercase_versions = true
+list = [
+    ['q', "*ł"],
+    ['x', "*ę"]
+]

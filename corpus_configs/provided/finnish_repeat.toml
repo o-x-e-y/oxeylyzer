@@ -1,3 +1,3 @@
-based_on = ["default", "finnish"]
+inherits = ["default", "finnish"]
 
 keep = "@"
