@@ -1,0 +1,12 @@
+inherits = ["default"]
+
+letters_to_lowercase = "áéöóő"
+
+[multiple]
+uppercase_versions = true
+list = [
+    ["í", "*i"],
+    ["ü", "*u"],
+    ["ú", "* u"],
+    ["ű", "* u"]
+]

@@ -1,0 +1,3 @@
+inherits = ["default"]
+
+letters_to_lowercase = "äöüß"

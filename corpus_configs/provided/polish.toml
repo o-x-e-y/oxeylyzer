@@ -1,0 +1,14 @@
+inherits = ["default"]
+
+letters_to_lowercase = "łęż"
+
+[multiple]
+uppercase_versions = true
+list = [
+    ['ą',"*a"],
+    ['ó',"*o"],
+    ['ź',"*z"],
+    ['ś',"*s"],
+    ['ć',"*c"],
+    ['ń',"*n"]
+]
