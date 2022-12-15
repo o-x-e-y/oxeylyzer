@@ -195,22 +195,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4217ad341ebadf8d8e724e264f13e593e0648f5b3e94b3896a5df283be015ecc"
 
 [[package]]
-name = "layout_analyser"
-version = "0.1.0"
-dependencies = [
- "ansi_rgb",
- "getargs",
- "glob",
- "indexmap",
- "indicatif",
- "oxeylyzer",
- "serde",
- "serde_json",
- "shlex",
- "toml",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -271,7 +255,14 @@ checksum = "86f0b0d4bf799edbc74508c1e8bf170ff5f41238e5f8225603ca7caaae2b7860"
 [[package]]
 name = "oxeylyzer"
 version = "0.1.0"
-source = "git+https://github.com/O-X-E-Y/oxeylyzer/?branch=fucku8_reboot#d9f1514208ce94181454b36d85cc3a77b1ceafc4"
+dependencies = [
+ "oxeylyzer-core",
+ "oxeylyzer-repl",
+]
+
+[[package]]
+name = "oxeylyzer-core"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "arrayvec",
@@ -286,6 +277,22 @@ dependencies = [
  "serde_json",
  "smallmap",
  "smartstring",
+ "toml",
+]
+
+[[package]]
+name = "oxeylyzer-repl"
+version = "0.1.0"
+dependencies = [
+ "ansi_rgb",
+ "getargs",
+ "glob",
+ "indexmap",
+ "indicatif",
+ "oxeylyzer-core",
+ "serde",
+ "serde_json",
+ "shlex",
  "toml",
 ]
 

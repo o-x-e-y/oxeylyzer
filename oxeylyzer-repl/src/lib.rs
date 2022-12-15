@@ -2,16 +2,10 @@
 #![feature(exclusive_range_pattern)]
 #![feature(let_chains)]
 
-mod repl;
-mod tui;
-mod commands;
-mod corpus_transposition;
-
-fn main() -> Result<(), String> {
-	repl::Repl::run()
-	
-	// Ok(())
-}
+pub mod repl;
+pub mod tui;
+pub mod commands;
+pub mod corpus_transposition;
 
 // fn main() {
 // 	use languages::*;
@@ -19,7 +13,7 @@ fn main() -> Result<(), String> {
 // 	let x = CorpusConfig::new("english", None);
 // }
 
-// use oxeylyzer::load_text;
+// use oxeylyzer_core::load_text;
 
 // fn pause() -> Result<(), std::io::Error> {
 //     println!("\nPress any key to continue...");

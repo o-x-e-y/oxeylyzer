@@ -1,9 +1,9 @@
 use std::io::Write;
 
-use oxeylyzer::generate::LayoutGeneration;
-use oxeylyzer::language_data::LanguageData;
-use oxeylyzer::rayon::iter::ParallelIterator;
-use oxeylyzer::layout::*;
+use oxeylyzer_core::generate::LayoutGeneration;
+use oxeylyzer_core::language_data::LanguageData;
+use oxeylyzer_core::rayon::iter::ParallelIterator;
+use oxeylyzer_core::layout::*;
 
 use ansi_rgb::{rgb, Colorable};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};

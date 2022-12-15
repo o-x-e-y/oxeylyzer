@@ -3,7 +3,7 @@ use std::path::Path;
 
 use getargs::Options;
 use indexmap::IndexMap;
-use oxeylyzer::{
+use oxeylyzer_core::{
     generate::LayoutGeneration,
     layout::*,
     weights::Config,

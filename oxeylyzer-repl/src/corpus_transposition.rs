@@ -1,4 +1,4 @@
-use oxeylyzer::translation::*;
+use oxeylyzer_core::translation::*;
 use serde::Deserialize;
 use glob::glob;
 

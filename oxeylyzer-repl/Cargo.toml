@@ -1,12 +1,5 @@
-cargo-features = ["profile-rustflags"]
-
-[profile.release]
-opt-level = 3
-lto = "fat"
-rustflags = ["-Z", "share-generics=y"]
-
 [package]
-name = "layout_analyser"
+name = "oxeylyzer-repl"
 version = "0.1.0"
 authors = ["O_X_E_Y <lucoerlemans37@gmail.com>"]
 edition = "2021"
@@ -14,8 +7,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+oxeylyzer-core = { path = "../oxeylyzer-core" }
 shlex = "1.1.0"
-oxeylyzer = { git = "https://github.com/O-X-E-Y/oxeylyzer/", branch="fucku8_reboot" }
 indicatif = { version = "0.17.1", features = ["rayon"] }
 ansi_rgb = { git = "https://github.com/O-X-E-Y/ansi_rgb" }
 indexmap = "1.9.1"
