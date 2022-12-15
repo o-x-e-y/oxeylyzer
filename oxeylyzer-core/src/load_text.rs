@@ -87,7 +87,7 @@ pub struct TextNgrams<const N: usize> {
 }
 
 impl From<&str> for TextNgrams<5> {
-    fn from(s: &str) -> Self {
+    fn from(s: &str) -> Self {eueueueu
         let mut quingrams = HashMap::new();
         let it = s.chars()
             .chain([' ', ' ', ' ', ' '])
