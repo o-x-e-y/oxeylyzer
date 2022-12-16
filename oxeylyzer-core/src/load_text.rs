@@ -83,7 +83,11 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
 
 #[derive(Default, Debug)]
 pub struct TextNgrams<'a, const N: usize> {
-    pub ngrams: HashMap<&'a str, usize>,
+    pub ngrams: HashMap<&'a str, usize>
+}
+
+impl<'a, const N: usize> TextNgrams<'a, N> {
+    
 }
 
 impl<'a, const N: usize> From<&'a str> for TextNgrams<'a, N> {
