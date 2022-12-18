@@ -65,7 +65,7 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
             chunker.chunks(*count, Some(' ')).unwrap()
         })
         .map(|chunk| std::str::from_utf8(chunk)
-        .expect(
+            .expect(
                 "one of the files provided is not encoded as utf-8.\
                 Make sure all files in the directory are valid utf-8."
             )

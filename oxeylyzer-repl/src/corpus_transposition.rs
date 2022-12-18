@@ -50,7 +50,7 @@ struct CorpusConfigLoad {
 
 impl CorpusConfigLoad {
     fn check_for_language(language: &str) -> Result<PathBuf, String> {
-        let try_find_path = glob("corpus_configs/*/*.toml").unwrap()
+        let try_find_path = glob("static/corpus_configs/*/*.toml").unwrap()
             .flatten()
             .find(|stem|
                 stem.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("")) == language
@@ -74,7 +74,8 @@ impl CorpusConfigLoad {
 
         if let Ok(preferred_folder) = preferred_folder {
             let file_name = format!("{language}.toml");
-            let path = PathBuf::from("corpus_configs")
+            let path = PathBuf::from("static")
+                .join("corpus_configs")
                 .join(preferred_folder)
                 .join(file_name);
             
