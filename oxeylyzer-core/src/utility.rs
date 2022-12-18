@@ -396,7 +396,8 @@ pub(crate) fn format_layout_str(layout_str: &str) -> String {
 mod tests {
 	use super::*;
 
-	#[test]
+	// #[test]
+	#[allow(unused)]
 	fn shuffle_pinned() {
 		let mut rng = tls_rng();
 		let mut chars = "abcdefghijklmnopqrstuvwxyz',.;".chars().collect::<Vec<_>>();

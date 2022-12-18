@@ -4,14 +4,13 @@ use std::iter::FromIterator;
 use std::fs::{File, read_dir};
 use std::time::Instant;
 
-use itertools::Itertools;
-use rayon::iter::{ParallelIterator, IntoParallelRefIterator};
+use rayon::iter::{ParallelIterator, IntoParallelRefIterator, ParallelBridge};
 use file_chunker::FileChunker;
 use anyhow::Result;
 use fxhash::FxHashMap as HashMap;
 use indexmap::IndexMap;
 use serde::{Serialize, Deserialize};
-use smartstring::{LazyCompact, SmartString};
+use smartstring::{LazyCompact, SmartString, SmartStringMode};
 
 const FOUR_MB: u64 = 1024 * 1024 * 4;
 
@@ -48,16 +47,20 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
     let is_raw = translator.is_raw;
 
     let chunkers = read_dir(format!("static/text/{language}"))?
+        .par_bridge()
         .filter_map(Result::ok)
         .flat_map(|dir_entry| File::open(dir_entry.path()))
         .map(|f| {
             let len = f.metadata().unwrap().len() + 1;
-            let count = if len > FOUR_MB { len / FOUR_MB } else { 1 };
+            let count = (len / FOUR_MB).max(1);
             (FileChunker::new(&f).unwrap(), count as usize)
         })
         .collect::<Vec<_>>();
 
-    let quingrams = chunkers.par_iter()
+    let chunkers_time = Instant::now();
+    println!("Prepared text files in {}ms", (chunkers_time - start_total).as_millis());
+
+    let strings = chunkers.par_iter()
         .flat_map(|(chunker, count)| {
             chunker.chunks(*count, Some(' ')).unwrap()
         })
@@ -67,16 +70,34 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
                 Make sure all files in the directory are valid utf-8."
             )
         )
-        .map(|s|
-            TextNgrams::<5>::from(s)
-        )
+        .map(|s| {
+            let mut last_chars = SmartString::<LazyCompact>::new();
+            let mut inter = [' '; 5];
+            s.chars()
+                .rev()
+                .take(5)
+                .enumerate()
+                .for_each(|(i, c)| unsafe { *inter.get_unchecked_mut(4 - i) = c } );
+            
+            inter.into_iter()
+                .for_each(|c| last_chars.push(c));
+            last_chars.push_str("     ");
+
+            (s, last_chars)
+        })
+        .collect::<Vec<_>>();
+
+    println!("Converted to utf8 in {}ms", (Instant::now() - chunkers_time).as_millis());
+
+    let quingrams = strings.par_iter()
+        .map(|(s, last)| TextNgrams::from_str_last(s, &last))
         .reduce(
             || TextNgrams::default(),
             |accum, new| accum.combine_with(new)
         );
 
     TextData::from((quingrams, language, translator)).save(is_raw)?;
-    println!("loading {} took {}ms", language, ((Instant::now() - start_total) * 100).as_millis());
+    println!("loading {} took {}ms", language, (Instant::now() - start_total).as_millis());
 
     Ok(())
 }
@@ -87,28 +108,18 @@ pub struct TextNgrams<'a, const N: usize> {
 }
 
 impl<'a, const N: usize> TextNgrams<'a, N> {
-    
-}
-
-impl<'a, const N: usize> From<&'a str> for TextNgrams<'a, N> {
-    fn from(s: &'a str) -> Self {
+    fn from_str_last<M: SmartStringMode>(s: &'a str, last: &'a SmartString<M>) -> Self {
         let mut ngrams = HashMap::default();
         let it1 = s.char_indices().map(|(i, _)| i);
         let it2 = s.char_indices().map(|(i, _)| i).skip(N);
-        let it = it1.zip(it2)
+        it1.zip(it2)
             .map(|(i1, i2)| &s[i1..i2])
             .for_each(|ngram| { ngrams.entry(ngram).and_modify(|f| *f += 1).or_insert(1); } );
-        
-        let mut last_chars = SmartString::<LazyCompact>::new();
-        let mut inter = [' '; 5];
-        s.chars().rev().take(5).enumerate().for_each(|(i, c)| unsafe { *inter.get_unchecked_mut(4 - i) = c } );
-        inter.into_iter().for_each(|c| last_chars.push(c));
-        last_chars.push_str("    ");
 
-        let it1 = last_chars.char_indices().map(|(i, _)| i);
-        let it2 = last_chars.char_indices().map(|(i, _)| i).skip(N);
-        let it = it1.zip(it2)
-            .map(|(i1, i2)| &last_chars[i1..i2])
+        let it1 = last.char_indices().map(|(i, _)| i);
+        let it2 = last.char_indices().map(|(i, _)| i).skip(N);
+        it1.zip(it2)
+            .map(|(i1, i2)| &last[i1..i2])
             .for_each(|ngram| { ngrams.entry(ngram).and_modify(|f| *f += 1).or_insert(1); } );
         
         Self { ngrams }
@@ -181,30 +192,37 @@ impl TextData {
     }
 }
 
-#[derive(Default)]
-struct TextDataElem {
-    c: Option<char>,
-    b: Option<[char; 2]>,
-    t: Option<[char; 3]>,
-    s: Option<[char; 2]>,
-    s2: Option<[char; 2]>,
-    s3: Option<[char; 2]>,
-    freq: f64
-}
+impl<'a> From<(TextNgrams<'a, 5>, &str, Translator)> for TextData {
+    fn from((ngrams, language, translator): (TextNgrams<5>, &str, Translator)) -> Self {
+        let mut res = TextData::new(language);
 
-impl FromIterator<TextDataElem> for TextData {
-    fn from_iter
-        <T: IntoIterator<Item = TextDataElem>>
-    (iter: T) -> Self {
-        let mut res = Self::default();
-        for elem in iter {
-            let freq = elem.freq;
-            if let Some(c) = elem.c { res.add_character(c, freq) }
-            if let Some(b) = elem.b { res.add_bigram(b, freq) }
-            if let Some(t) = elem.t { res.add_trigram(t, freq) }
-            if let Some(s) = elem.s { res.add_skipgram(s, freq) }
-            if let Some(s2) = elem.s2 { res.add_skipgram2(s2, freq) }
-            if let Some(s3) = elem.s3 { res.add_skipgram3(s3, freq) }
+        for (ngram, freq) in ngrams.ngrams.into_iter() {
+            let first = unsafe { ngram.chars().next().unwrap_unchecked() };
+            if first != ' ' && let Some(first_t) = translator.table.get(&first) && first_t != " " {
+                let mut trans = translator.translate(ngram);
+                match trans.chars().count() {
+                    5.. => {
+                        trans.push(' ');
+
+                        let first_t_len = first_t.chars().count().max(1);
+                        let it1 = trans.char_indices().map(|(i, _)| i).take(first_t_len);
+                        let it2 = trans.char_indices().map(|(i, _)| i).skip(5).take(first_t_len);
+
+                        it1.zip(it2)
+                            .map(|(i1, i2)| &trans[i1..i2])
+                            .for_each(|ngram| res.from_n_subsequent::<5>(ngram, freq as f64)
+                        );
+                    }
+                    4 => {
+                        println!("4 long ngram: '{}'", &trans);
+                        res.from_n_subsequent::<4>(&trans, freq as f64)
+                    },
+                    3 => res.from_n_subsequent::<3>(&trans, freq as f64),
+                    2 => res.from_n_subsequent::<2>(&trans, freq as f64),
+                    1 => res.from_n_subsequent::<1>(&trans, freq as f64),
+                    _ => {}
+                }
+            }
         }
 
         res.characters.iter_mut().for_each(|(_, f)| *f /= res.char_sum);
@@ -225,106 +243,34 @@ impl FromIterator<TextDataElem> for TextData {
     }
 }
 
-
-
-impl TextDataElem {
-    fn from_n_subsequent<const N: usize>(ngram: [char; N], freq: f64) -> Self {
-        let mut res = Self::default();
-        res.freq = freq;
-
-        if N > 0 && let c1 = ngram[0] && c1 != ' ' {
-            res.c = Some(c1);
+impl TextData {
+    fn from_n_subsequent<const N: usize>(&mut self, ngram: &str, freq: f64) {
+        let mut chars = ngram.chars();
+        if N > 0 && let Some(c1) = chars.next() && c1 != ' ' {
+            self.add_character(c1, freq);
             // take first, first 2 etc chars of the trigram every time for the appropriate stat
             // as long as they don't contain spaces. return `c2` so I don't iter.next() too much
-            let c2 = if N > 1 && let c2 = ngram[1] && c2 != ' ' {
-                res.b = Some([c1, c2]);
+            let c2 = if N > 1 && let Some(c2) = chars.next() && c2 != ' ' {
+                self.add_bigram([c1, c2], freq);
                 c2
             } else { ' ' };
             // c1 and c3 for skipgrams
-            if N > 2 && let c3 = ngram[2] && c3 != ' ' {
-                res.s = Some([c1, c3]);
+            if N > 2 && let Some(c3) = chars.next() && c3 != ' ' {
+                self.add_skipgram([c1, c3], freq);
 
                 if c2 != ' ' {
-                    res.t = Some([c1, c2, c3]);
+                    self.add_trigram([c1, c2, c3], freq);
                 }
 
-                if N > 3 && let c4 = ngram[3] && c4 != ' ' {
-                    res.s2 = Some([c1, c4]);
+                if N > 3 && let Some(c4) = chars.next() && c4 != ' ' {
+                    self.add_skipgram2([c1, c4], freq);
 
-                    if N > 4 && let c5 = ngram[4] && c5 != ' ' {
-                        res.s3 = Some([c1, c5]);
+                    if N > 4 && let Some(c5) = chars.next() && c5 != ' ' {
+                        self.add_skipgram3([c1, c5], freq);
                     }
                 }
             }
         }
-        res
-    }
-
-    // fn from_char_iter<const N: usize>(iter: impl IntoIterator<Item=char>, freq: f64) -> [Option<Self>; N] {
-    //     let mut res = [None; N];
-
-    //     res
-    // }
-}
-
-impl From<(TextNgrams<5>, &str, Translator)> for TextData {
-    fn from((ngrams, language, translator): (TextNgrams<5>, &str, Translator)) -> Self {
-        let mut res = TextData::new(language);
-
-        let x = ngrams.ngrams.into_iter()
-            .map(|(quingram, freq)| {
-                let translated = translator.translate_arr(&quingram);
-                let first_char = quingram[0];
-                
-                let it_count = if let Some(f) = translator.table.get(&first_char) {
-                    f.chars().count()
-                } else { 1 };
-                let mut chars = translated.chars();
-
-                
-            });
-            
-            // match translated.chars().count() {
-            //         5.. => {
-                        
-            //             translated.chars()
-            //                 .tuple_windows::<(_, _, _, _, _)>()
-            //                 .take(it_count)
-            //                 .for_each(|quin|
-            //                     res.add_from_n_subsequent::<5>([quin.0, quin.1, quin.2, quin.3, quin.4], freq as f64)
-            //                 );
-            //         }
-            //         4 => res.add_from_n_subsequent::<4>(
-            //             Self::collect_str_into_arr::<4>(translated.as_str()), freq as f64
-            //         ),
-            //         3 => res.add_from_n_subsequent::<3>(
-            //             Self::collect_str_into_arr::<3>(translated.as_str()), freq as f64
-            //         ),
-            //         2 => res.add_from_n_subsequent::<2>(
-            //             Self::collect_str_into_arr::<2>(translated.as_str()), freq as f64
-            //     ),
-            //         1 => {
-            //             let ngram = translated.chars().next().unwrap();
-            //             TextDataElem::from_n_subsequent(ngram, freq)
-            //         }
-            //         _ => ArrayVec::new()
-            //     }
-        
-
-        // IndexMaps have the property of keeping order based on insertion, so they're sortable:
-        
-
-        res
-    }
-}
-
-impl TextData {
-    fn collect_str_into_arr<const N: usize>(string: &str) -> [char; N] {
-        let mut res = [' '; N];
-        for (i, c) in string.chars().enumerate() {
-            res[i] = c;
-        }
-        res
     }
 
     pub(crate) fn add_character(&mut self, c: char, freq: f64) {
@@ -389,8 +335,7 @@ impl TextData {
     }
 }
 
-// #[cfg(test)]
-#[allow(unused)]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{*, utility::ApproxEq};
@@ -398,12 +343,12 @@ mod tests {
     #[test]
     fn from_textngrams() {
         let mut ngrams = TextNgrams::<5>::default();
-        ngrams.ngrams.insert(['A', 'm', 'o', 'g', 'u'], 1);
-        ngrams.ngrams.insert(['m', 'o', 'g', 'u', 's'], 1);
-        ngrams.ngrams.insert(['o', 'g', 'u', 's', ' '], 1);
-        ngrams.ngrams.insert(['g', 'u', 's', ' ', ' '], 1);
-        ngrams.ngrams.insert(['u', 's', ' ', ' ', ' '], 1);
-        ngrams.ngrams.insert(['s', ' ', ' ', ' ', ' '], 1);
+        ngrams.ngrams.insert("Amogu", 1);
+        ngrams.ngrams.insert("mogus", 1);
+        ngrams.ngrams.insert("ogus ", 1);
+        ngrams.ngrams.insert("gus  ", 1);
+        ngrams.ngrams.insert("us   ", 1);
+        ngrams.ngrams.insert("s    ", 1);
         let translator = Translator::new()
             .letters_to_lowercase("amogus")
             .build();
@@ -442,14 +387,18 @@ mod tests {
 
 		load_default("test");
 
-		let data = LanguageData::from_file("static/language_data","test")
+		let data = LanguageData::from_file("static/language_data", "test")
 			.expect("'test.json' in static/language_data/ was not created");
 		
 		assert!(data.language == "test");
 
-		let total_c = 1.0/data.characters.iter()
+		let total_c = data.characters.iter()
             .map(|&f| f)
-            .reduce(f64::min).unwrap();
+            .reduce(f64::min)
+            .unwrap();
+        let total_c = (1.0/total_c).round();
+        
+        assert_eq!(total_c, 8.0);
         
         assert_eq!(data.characters.get(data.convert_u8.to_single_lossy('e') as usize), Some(&(2.0/total_c)));
         assert_eq!(data.characters.get(data.convert_u8.to_single_lossy('\'') as usize), Some(&(1.0/total_c)));
