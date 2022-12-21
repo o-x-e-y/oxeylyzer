@@ -17,20 +17,21 @@ pub fn shuffle_pins<const N: usize, T>(slice: &mut [T], pins: &[usize]) {
     }
 }
 
-pub static COL_TO_FINGER: [usize; 10] = [0, 1, 2, 3, 3, 4, 4, 5, 6, 7];
-pub static I_TO_COL: [usize; 30] = [
-	0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
-	0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
-	0, 1, 2, 3, 3,  4, 4, 5, 6, 7
+pub static I_TO_COL: [usize; 36] = [
+	0, 1, 2, 3, 3,  6, 6, 7, 8, 9,
+	0, 1, 2, 3, 3,  6, 6, 7, 8, 9,
+	0, 1, 2, 3, 3,  6, 6, 7, 8, 9,
+	      4, 4, 4,  5, 5, 5
 ];
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct PosPair(pub usize, pub usize);
 
-const AFFECTS_SCISSOR: [bool; 30] = [
+const AFFECTS_SCISSOR: [bool; 36] = [
 	true,  true,  true,  true,  true,   true,  true,  true,  true,  true,
 	true,  true,  false, false, false,  false, false, false, true,  true,
-	true,  true,  true,  false, true,   false, false, true,  true,  true
+	true,  true,  true,  false, true,   false, false, true,  true,  true,
+	              false, false, false,  false, false, false
 ];
 
 impl PosPair {

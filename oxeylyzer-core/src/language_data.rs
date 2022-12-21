@@ -25,8 +25,6 @@ struct LanguageDataInter {
 	pub skipgrams2: FxHashMap<String, f64>,
 	pub skipgrams3: FxHashMap<String, f64>,
 	pub trigrams: IndexMap<String, f64>,
-	#[serde(skip)]
-	pub convert_u8: ConvertU8
 }
 
 fn get_char_data(data: FxHashMap<char, f64>, con: &mut ConvertU8) -> CharacterData {
@@ -77,7 +75,7 @@ pub struct LanguageData {
 
 impl From<LanguageDataInter> for LanguageData {
 	fn from(inter: LanguageDataInter) -> Self {
-		let mut convert_u8 = inter.convert_u8;
+		let mut convert_u8 = ConvertU8::with_chars("␣");
 		let characters = get_char_data(inter.characters, &mut convert_u8);
 
 		let bigrams = get_bigram_data(inter.bigrams, &mut convert_u8);

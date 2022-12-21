@@ -65,10 +65,11 @@ impl TryFrom<&[u8]> for FastLayout {
 	type Error = anyhow::Error;
 
 	fn try_from(layout_bytes: &[u8]) -> Result<Self, Self::Error> {
-		if layout_bytes.len() >= 30 {
+		if layout_bytes.len() == 30 {
 			let mut new_layout = FastLayout::new();
 
-			for (i, &byte) in layout_bytes.into_iter().enumerate() {
+			// because of how data loading works space is always 0
+			for (i, &byte) in layout_bytes.into_iter().chain(&[255, 255, 0, 255, 255, 255]).enumerate() {
 				new_layout.matrix[i] = byte;
 				new_layout.char_to_finger[byte as usize] = I_TO_COL[i];
 			}
