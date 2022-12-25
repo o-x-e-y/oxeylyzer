@@ -3,7 +3,6 @@
 #![feature(let_chains)]
 #![feature(const_slice_index)]
 #![feature(iterator_try_collect)]
-#![feature(generic_const_exprs)]
 
 pub mod language_data;
 pub mod load_text;

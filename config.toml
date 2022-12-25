@@ -1,7 +1,7 @@
 pins = """
-....x x....
 ..... .....
-....x x....
+..... .....
+..... .....
 """
 
 [defaults]
@@ -11,16 +11,16 @@ keyboard_type = "iso angle"
 
 [weights]
 heatmap = 1.65
-fspeed = 14.0
+fspeed = 18.0
 lateral_penalty = 1.0
 dsfb_ratio = 0.11
-scissors = 6.0
-inrolls = 2.1
-outrolls = 1.9
+scissors = 5.0
+inrolls = 1.5
+outrolls = 1.25
 onehands = 0.9
 alternates = 0.9
 alternates_sfs = 0.6
-redirects = 1.8
+redirects = 1.4
 bad_redirects = 6.0
 
 [weights.max_finger_use]
