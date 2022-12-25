@@ -5,7 +5,7 @@ To use the analyzer, clone the repo and make sure you have rust nigthly installe
 
 To install rust, visit [the official installation page](https://www.rust-lang.org/learn/get-started) and follow the instructions there. When installing, make sure you add rust to PATH. Once you have installed, you may need to restart in order for the command to be recognised. After restarting, you can try running `rustup install nightly` and `rustup default nightly` to make sure the compiler can use all unstable features.
 
-Once you have done this, you can open a terminal in the folder you cloned into, and run `cargo run --resease`. This will build and run the project. For future uses you can use this command again, or manually take the `.exe` in the newly created `target/release` folder, drop it in the root folder and execute that. There might be a better way to do that but I'm not sure.
+Once you have done this, you can open a terminal in the folder you cloned into, and run `cargo run --release`. This will build and run the project. For future uses you can use this command again, or manually take the `.exe` in the newly created `target/release` folder, drop it in the root folder and execute that. There might be a better way to do that but I'm not sure.
 
 ## Using the repl
 Type `help` to get all commands with their explanation, and `<command> help` to get a more detailed description about it. Should be pretty self-explanatory :thumbsup:
