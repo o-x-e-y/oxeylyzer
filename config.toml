@@ -15,13 +15,15 @@ fspeed = 18.0
 lateral_penalty = 1.0
 dsfb_ratio = 0.11
 scissors = 5.0
-inrolls = 1.5
-outrolls = 1.25
+inrolls = 2.1
+outrolls = 1.9
 onehands = 0.9
 alternates = 0.9
 alternates_sfs = 0.6
 redirects = 1.4
-bad_redirects = 6.0
+redirects_sfs = 2.2
+bad_redirects = 4.5
+bad_redirects_sfs = 6.0
 
 [weights.max_finger_use]
 penalty = 2.5
