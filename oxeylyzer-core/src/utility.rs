@@ -390,21 +390,3 @@ pub(crate) fn format_layout_str(layout_str: &str) -> String {
 		})
 		.collect::<String>()
 }
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	// #[test]
-	#[allow(unused)]
-	fn shuffle_pinned() {
-		let mut rng = tls_rng();
-		let mut chars = "abcdefghijklmnopqrstuvwxyz',.;".chars().collect::<Vec<_>>();
-		for _ in 0..10000 {
-			let pin_count = rng.generate_range(0..30);
-			for i in 0..pin_count {
-				
-			}
-		}
-	}
-}
