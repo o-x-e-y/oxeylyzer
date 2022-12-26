@@ -27,7 +27,9 @@ pub struct TrigramStats {
 	pub outrolls: f64,
 	pub onehands: f64,
 	pub redirects: f64,
+	pub redirects_sfs: f64,
 	pub bad_redirects: f64,
+	pub bad_redirects_sfs: f64,
 	pub sfbs: f64,
 	pub bad_sfbs: f64,
 	pub sfts: f64,
@@ -39,18 +41,20 @@ impl std::fmt::Display for TrigramStats {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(
 			f,
-"Inrolls: {:.3}%
-Outrolls: {:.3}% 
-Total Rolls: {:.3}%
-Onehands: {:.3}%\n
-Alternates: {:.3}%
-Alternates (sfs): {:.3}%
-Total Alternates: {:.3}%\n
-Redirects: {:.3}%
-Bad Redirects: {:.3}%
-Total Redirects: {:.3}%\n
-Bad Sfbs: {:.3}%,
-Sft: {:.3}%",
+			"Inrolls: {:.3}%\n\
+			Outrolls: {:.3}%\n\
+			Total Rolls: {:.3}%\n\
+			Onehands: {:.3}%\n\n\
+			Alternates: {:.3}%\n\
+			Alternates (sfs): {:.3}%\n\
+			Total Alternates: {:.3}%\n\n\
+			Redirects: {:.3}%\n\
+			Redirects Sfs: {:.3}%\n\
+			Bad Redirects: {:.3}%\n\
+			Bad Redirects Sfs: {:.3}%\n\
+			Total Redirects: {:.3}%\n\n\
+			Bad Sfbs: {:.3}%\n\
+			Sft: {:.3}%\n",
 			self.inrolls*100.0,
 			self.outrolls*100.0,
 			(self.inrolls + self.outrolls)*100.0,
@@ -59,8 +63,10 @@ Sft: {:.3}%",
 			self.alternates_sfs*100.0,
 			(self.alternates + self.alternates_sfs)*100.0,
 			self.redirects*100.0,
+			self.redirects_sfs*100.0,
 			self.bad_redirects*100.0,
-			(self.redirects + self.bad_redirects)*100.0,
+			self.bad_redirects_sfs*100.0,
+			(self.redirects + self.redirects_sfs + self.bad_redirects + self.bad_redirects_sfs)*100.0,
 			self.bad_sfbs*100.0,
 			self.sfts*100.0
 		)
@@ -76,10 +82,12 @@ impl std::fmt::Debug for TrigramStats {
 			Total Rolls: {:.3}%\n
 			Onehands: {:.3}%\n\n\
 			Alternates: {:.3}%\n
-			Alternates (sfs): {:.3}%\n
+			Alternates Sfs: {:.3}%\n
 			Total Alternates: {:.3}%\n\n
 			Redirects: {:.3}%\n\
+			Redirects Sfs: {:.3}%\n\
 			Bad Redirects: {:.3}%\n
+			Bad Redirects Sfs: {:.3}%\n\
 			Total Redirects: {:.3}%\n\n
 			Bad Sfbs: {:.3}%\n
 			Sft: {:.3}%\n\n
@@ -93,8 +101,10 @@ impl std::fmt::Debug for TrigramStats {
 			self.alternates_sfs*100.0,
 			(self.alternates + self.alternates_sfs)*100.0,
 			self.redirects*100.0,
+			self.redirects_sfs*100.0,
 			self.bad_redirects*100.0,
-			(self.redirects + self.bad_redirects)*100.0,
+			self.bad_redirects_sfs*100.0,
+			(self.redirects + self.redirects_sfs + self.bad_redirects + self.bad_redirects_sfs)*100.0,
 			self.bad_sfbs*100.0,
 			self.sfts*100.0,
 			self.other*100.0,
@@ -310,21 +320,26 @@ impl LayoutGeneration {
 	}
 
 	pub fn trigram_stats(&self, layout: &FastLayout, trigram_precision: usize) -> TrigramStats {
+		use TrigramPattern::*;
+
 		let mut freqs = TrigramStats::default();
+
 		for (trigram, freq) in self.data.trigrams.iter().take(trigram_precision) {
 			match layout.get_trigram_pattern(trigram) {
-				TrigramPattern::Alternate => freqs.alternates += freq,
-				TrigramPattern::AlternateSfs => freqs.alternates_sfs += freq,
-				TrigramPattern::Inroll => freqs.inrolls += freq,
-				TrigramPattern::Outroll => freqs.outrolls += freq,
-				TrigramPattern::Onehand => freqs.onehands += freq,
-				TrigramPattern::Redirect => freqs.redirects += freq,
-				TrigramPattern::BadRedirect => freqs.bad_redirects += freq,
-				TrigramPattern::Sfb => freqs.sfbs += freq,
-				TrigramPattern::BadSfb => freqs.bad_sfbs += freq,
-				TrigramPattern::Sft => freqs.sfts += freq,
-				TrigramPattern::Other => freqs.other += freq,
-				TrigramPattern::Invalid => freqs.invalid += freq
+				Alternate => freqs.alternates += freq,
+				AlternateSfs => freqs.alternates_sfs += freq,
+				Inroll => freqs.inrolls += freq,
+				Outroll => freqs.outrolls += freq,
+				Onehand => freqs.onehands += freq,
+				Redirect => freqs.redirects += freq,
+				RedirectSfs => freqs.redirects_sfs += freq,
+				BadRedirect => freqs.bad_redirects += freq,
+				BadRedirectSfs => freqs.bad_redirects_sfs += freq,
+				Sfb => freqs.sfbs += freq,
+				BadSfb => freqs.bad_sfbs += freq,
+				Sft => freqs.sfts += freq,
+				Other => freqs.other += freq,
+				Invalid => freqs.invalid += freq
 			}
 		}
 		freqs
@@ -402,17 +417,21 @@ impl LayoutGeneration {
 	#[inline]
 	fn trigram_score_iter<'a, T>(&self, layout: &FastLayout, trigrams: T) -> f64
 	where T: IntoIterator<Item = &'a ([u8; 3], f64)> {
+		use TrigramPattern::*;
+
 		let mut freqs = TrigramStats::default();
 
 		for (trigram, freq) in trigrams {
 			match layout.get_trigram_pattern(trigram) {
-				TrigramPattern::Alternate => freqs.alternates += freq,
-				TrigramPattern::AlternateSfs => freqs.alternates_sfs += freq,
-				TrigramPattern::Inroll => freqs.inrolls += freq,
-				TrigramPattern::Outroll => freqs.outrolls += freq,
-				TrigramPattern::Onehand => freqs.onehands += freq,
-				TrigramPattern::Redirect => freqs.redirects += freq,
-				TrigramPattern::BadRedirect => freqs.bad_redirects += freq,
+				Alternate => freqs.alternates += freq,
+				AlternateSfs => freqs.alternates_sfs += freq,
+				Inroll => freqs.inrolls += freq,
+				Outroll => freqs.outrolls += freq,
+				Onehand => freqs.onehands += freq,
+				Redirect => freqs.redirects += freq,
+				RedirectSfs => freqs.redirects += freq,
+				BadRedirect => freqs.bad_redirects += freq,
+				BadRedirectSfs => freqs.bad_redirects += freq,
 				_ => {}
 			}
 		}
@@ -424,7 +443,9 @@ impl LayoutGeneration {
 		score += self.weights.alternates * freqs.alternates;
 		score += self.weights.alternates_sfs * freqs.alternates_sfs;
 		score -= self.weights.redirects * freqs.redirects;
+		score -= self.weights.redirects_sfs * freqs.redirects_sfs;
 		score -= self.weights.bad_redirects * freqs.bad_redirects;
+		score -= self.weights.bad_redirects_sfs * freqs.bad_redirects_sfs;
 		score
 	}
 

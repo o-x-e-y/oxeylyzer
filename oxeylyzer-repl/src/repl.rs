@@ -163,7 +163,7 @@ impl Repl {
     			return;
   			}
 		};
-		println!("\n{:29}{}", name1, name2);
+		println!("\n{:31}{}", name1, name2);
 		for y in 0..3 {
 			for (n, layout) in [l1, l2].into_iter().enumerate() {
 				for x in 0..10 {
@@ -173,7 +173,7 @@ impl Repl {
 					}
 				}
 				if n == 0 {
-					print!("        ");
+					print!("          ");
 				}
 			}
 			println!();
@@ -184,23 +184,25 @@ impl Repl {
 		let ts2 = s2.trigram_stats;
 		println!(
 			concat!(
-			"Sfb:              {: <10} Sfb:              {:.3}%\n",
-			"Dsfb:             {: <10} Dsfb:             {:.3}%\n",
-			"Finger Speed:     {: <10} Finger Speed:     {:.3}\n",
-			"Scissors          {: <10} Scissors:         {:.3}%\n\n",
-			"Inrolls:          {: <10} Inrolls:          {:.2}%\n",
-			"Outrolls:         {: <10} Outrolls:         {:.2}%\n",
-			"Total Rolls:      {: <10} Total Rolls:      {:.2}%\n",
-			"Onehands:         {: <10} Onehands:         {:.3}%\n\n",
-			"Alternates:       {: <10} Alternates:       {:.2}%\n",
-			"Alternates (sfs): {: <10} Alternates (sfs): {:.2}%\n",
-			"Total Alternates: {: <10} Total Alternates: {:.2}%\n\n",
-			"Redirects:        {: <10} Redirects:        {:.2}%\n",
-			"Bad Redirects:    {: <10} Bad Redirects:    {:.2}%\n",
-			"Total Redirects:  {: <10} Total Redirects:  {:.2}%\n\n",
-			"Bad Sfbs:         {: <10} Bad Sfbs:         {:.2}%\n",
-			"Sft:              {: <10} Sft:              {:.3}%\n\n",
-			"Score:            {: <10} Score:            {:.3}\n"
+			"Sfb:               {: <11} Sfb:               {:.3}%\n",
+			"Dsfb:              {: <11} Dsfb:              {:.3}%\n",
+			"Finger Speed:      {: <11} Finger Speed:      {:.3}\n",
+			"Scissors           {: <11} Scissors:          {:.3}%\n\n",
+			"Inrolls:           {: <11} Inrolls:           {:.2}%\n",
+			"Outrolls:          {: <11} Outrolls:          {:.2}%\n",
+			"Total Rolls:       {: <11} Total Rolls:       {:.2}%\n",
+			"Onehands:          {: <11} Onehands:          {:.3}%\n\n",
+			"Alternates:        {: <11} Alternates:        {:.2}%\n",
+			"Alternates Sfs:    {: <11} Alternates Sfs:    {:.2}%\n",
+			"Total Alternates:  {: <11} Total Alternates:  {:.2}%\n\n",
+			"Redirects:         {: <11} Redirects:         {:.3}%\n",
+            "Redirects Sfs:     {: <11} Redirects Sfs:     {:.3}%\n",
+			"Bad Redirects:     {: <11} Bad Redirects:     {:.3}%\n",
+            "Bad Redirects Sfs: {: <11} Bad Redirects Sfs: {:.3}%\n",
+			"Total Redirects:   {: <11} Total Redirects:   {:.3}%\n\n",
+			"Bad Sfbs:          {: <11} Bad Sfbs:          {:.3}%\n",
+			"Sft:               {: <11} Sft:               {:.3}%\n\n",
+			"Score:             {: <11} Score:             {:.3}\n"
 		),
 			format!("{:.3}%", s1.sfb*100.0), s2.sfb*100.0,
 			format!("{:.3}%", s1.dsfb*100.0), s2.dsfb*100.0,
@@ -214,8 +216,11 @@ impl Repl {
 			format!("{:.2}%", ts1.alternates_sfs*100.0), ts2.alternates_sfs*100.0,
 			format!("{:.2}%", (ts1.alternates + ts1.alternates_sfs)*100.0), (ts2.alternates + ts2.alternates_sfs)*100.0,
 			format!("{:.3}%", ts1.redirects*100.0), ts2.redirects*100.0,
+            format!("{:.3}%", ts1.redirects_sfs*100.0), ts2.redirects_sfs*100.0,
 			format!("{:.3}%", ts1.bad_redirects*100.0), ts2.bad_redirects*100.0,
-			format!("{:.3}%", (ts1.redirects + ts1.bad_redirects)*100.0), (ts2.redirects + ts2.bad_redirects)*100.0,
+            format!("{:.3}%", ts1.bad_redirects_sfs*100.0), ts2.bad_redirects_sfs*100.0,
+			format!("{:.3}%", (ts1.redirects + ts1.redirects_sfs + ts1.bad_redirects + ts1.bad_redirects_sfs)*100.0),
+            (ts2.redirects + ts2.redirects_sfs + ts2.bad_redirects + ts2.bad_redirects_sfs)*100.0,
 			format!("{:.3}%", ts1.bad_sfbs*100.0), ts2.bad_sfbs*100.0,
 			format!("{:.3}%", ts1.sfts*100.0), ts2.sfts*100.0,
 			format!("{:.3}", l1.score), l2.score

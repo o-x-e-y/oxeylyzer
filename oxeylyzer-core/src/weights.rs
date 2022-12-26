@@ -43,7 +43,9 @@ pub struct Weights {
 	pub alternates: f64,
 	pub alternates_sfs: f64,
 	pub redirects: f64,
+	pub redirects_sfs: f64,
 	pub bad_redirects: f64,
+	pub bad_redirects_sfs: f64,
 	pub max_finger_use: MaxFingerUse
 }
 
@@ -128,7 +130,9 @@ impl Config {
 				alternates: 0.7,
 				alternates_sfs: 0.35,
 				redirects: 1.5,
-				bad_redirects: 6.5,
+				redirects_sfs: 2.75,
+				bad_redirects: 4.0,
+				bad_redirects_sfs: 6.0,
 				max_finger_use: MaxFingerUse {
 					penalty: 2.5,
 					pinky: 9.0,

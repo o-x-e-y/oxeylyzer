@@ -103,6 +103,13 @@ impl Finger {
 		}
 	}
 	
+	const fn is_bad(&self) -> bool {
+		match self {
+			LP | LR | LM | RM | RR | RP => true,
+			_ => false
+		}
+	}
+	
 	pub const fn from_usize(value: usize) -> Self {
         match value {
         	0 => LP,
@@ -121,7 +128,7 @@ impl Finger {
 }
 
 #[derive(Debug)]
-struct Trigram {
+pub(crate) struct Trigram {
 	f1: Finger,
 	f2: Finger,
 	f3: Finger,
@@ -151,11 +158,16 @@ impl Trigram {
 		}
 	}
 
+	const fn is_sfs(&self) -> bool {
+		self.f1.eq(self.f3)
+	}
+
 	const fn get_alternate(&self) -> TrigramPattern {
-		if self.f1.eq(self.f3) {
-			TrigramPattern::AlternateSfs
-		} else {
-			TrigramPattern::Alternate
+		use TrigramPattern::*;
+
+		match self.is_sfs() {
+			true => AlternateSfs,
+			false => Alternate
 		}
 	}
 
@@ -169,18 +181,22 @@ impl Trigram {
 		}
 	}
 
+	const fn is_inroll(&self) -> bool {
+		match (self.h1, self.h2, self.h3) {
+			(Left, Left, Right) => self.f1.lt(self.f2),
+			(Right, Left, Left) => self.f2.lt(self.f3),
+			(Right, Right, Left) => self.f1.gt(self.f2),
+			(Left, Right, Right) => self.f2.gt(self.f3),
+			_ => unreachable!()
+		}
+	}
+
 	const fn get_roll(&self) -> TrigramPattern {
 		use TrigramPattern::*;
-		match (self.h1, self.h2, self.h3) {
-			(Left, Left, Right) =>
-				if self.f1.gt(self.f2) { Inroll } else { Outroll }
-			(Right, Left, Left) =>
-				if self.f2.gt(self.f3) { Inroll } else { Outroll }
-			(Right, Right, Left) =>
-				if self.f1.gt(self.f2) { Outroll } else { Inroll }
-			(Left, Right, Right) =>
-				if self.f2.gt(self.f3) { Outroll } else { Inroll }
-			_ => TrigramPattern::Other
+
+		match self.is_inroll() {
+			true => Inroll,
+			false => Outroll
 		}
 	}
 
@@ -193,25 +209,11 @@ impl Trigram {
 	}
 
 	const fn is_redir(&self) -> bool {
-		self.on_one_hand() &&
-		if self.h1.eq(Left) {
-			self.f1.lt(self.f2) && self.f3.lt(self.f2)
-		} else {
-			self.f1.gt(self.f2) && self.f3.gt(self.f2)
-		}
+		(self.f1.lt(self.f2) == self.f2.gt(self.f3)) && self.on_one_hand()
 	}
 
 	const fn is_bad_redir(&self) -> bool {
-		self.is_redir() && match self.f1 {
-			LI | RI => false,
-			_ => true
-		} && match self.f2 {
-			LI | RI => false,
-			_ => true
-		} && match self.f3 {
-			LI | RI => false,
-			_ => true
-		}
+		self.is_redir() && self.f1.is_bad() && self.f2.is_bad() && self.f3.is_bad()
 	}
 
 	const fn has_sfb(&self) -> bool {
@@ -223,18 +225,21 @@ impl Trigram {
 	}
 
 	const fn get_one_hand(&self) -> TrigramPattern {
+		use TrigramPattern::*;
+
 		if self.is_sft() {
-			TrigramPattern::Sft
+			Sft
 		} else if self.has_sfb() {
-			TrigramPattern::BadSfb
+			BadSfb
 		} else if self.is_redir() {
-			if self.is_bad_redir() {
-				TrigramPattern::BadRedirect
-			} else {
-				TrigramPattern::Redirect
+			match (self.is_sfs(), self.is_bad_redir()) {
+				(false, false) => Redirect,
+				(false, true) => BadRedirect,
+				(true, false) => RedirectSfs,
+				(true, true) => BadRedirectSfs,
 			}
 		} else {
-			TrigramPattern::Onehand
+			Onehand
 		}
 	}
 
@@ -264,9 +269,9 @@ const fn get_trigram_combinations() -> [TrigramPattern; 512] {
 			while c1 < 8 {
 				let index = c3*64 + c2*8 + c1;
 				let trigram = Trigram::new(
-					Finger::from_usize(c1),
+					Finger::from_usize(c3),
 					Finger::from_usize(c2),
-					Finger::from_usize(c3)
+					Finger::from_usize(c1)
 				);
 				combinations[index] = trigram.get_trigram_pattern();
 				c1 += 1;
