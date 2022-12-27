@@ -256,7 +256,7 @@ pub fn get_fspeed(lat_multiplier: f64) -> [(PosPair, f64); 48] {
     res.try_into().unwrap()
 }
 
-fn get_distances(lat_multiplier: f64) -> [f64; 48] {
+pub fn get_distances(lat_multiplier: f64) -> [f64; 48] {
     let mut res = Vec::new();
     let help = |f: f64, r: f64| f.powi(2).powf(0.65) * r;
     
@@ -336,13 +336,13 @@ pub fn chars_for_generation(language: &str) -> [char; 30] {
 }
 
 pub trait ApproxEq {
-	fn approx_equal(self, other: f64, dec: u8) -> bool;
+	fn approx_eq(self, other: f64, dec: u8) -> bool;
 
 	fn approx_eq_dbg(self, other: f64, dec: u8) -> bool;
 }
 
 impl ApproxEq for f64 {
-	fn approx_equal(self, other: f64, dec: u8) -> bool {
+	fn approx_eq(self, other: f64, dec: u8) -> bool {
 		let factor = 10.0f64.powi(dec as i32);
 		let a = (self * factor).trunc();
 		let b = (other * factor).trunc();
@@ -389,4 +389,66 @@ pub(crate) fn format_layout_str(layout_str: &str) -> String {
 				.collect::<String>()
 		})
 		.collect::<String>()
+}
+
+#[cfg(test)]
+mod tests {
+	use fxhash::FxHashSet;
+	use super::*;
+
+	#[test]
+	fn affects_scissors() {
+		let indices = get_scissor_indices().into_iter()
+			.map(|PosPair(i1, i2)| [i1, i2])
+			.flatten()
+			.collect::<FxHashSet<usize>>();
+
+		for i in 0..30 {
+			if indices.contains(&i) {
+				assert!(AFFECTS_SCISSOR[i]);
+			} else {
+				assert!(!AFFECTS_SCISSOR[i]);
+			}
+		}
+	}
+
+	#[test]
+	fn approx_eq() {
+		assert!((0.123456789).approx_eq(0.0, 0));
+		assert!((0.123456789).approx_eq(0.1, 1));
+		assert!((0.123456789).approx_eq(0.12, 2));
+		assert!((0.123456789).approx_eq(0.123, 3));
+		assert!((0.123456789).approx_eq(0.1234, 4));
+		assert!((0.123456789).approx_eq(0.12345, 5));
+		assert!((0.123456789).approx_eq(0.123456, 6));
+		assert!((0.123456789).approx_eq(0.1234567, 7));
+		assert!((0.123456789).approx_eq(0.12345678, 8));
+		assert!((0.123456789).approx_eq(0.123456789, 9));
+
+		assert!(!(0.123456789).approx_eq(0.0, 3));
+		assert!(!(0.123456789).approx_eq(0.1, 4));
+
+		assert!((0.123456789).approx_eq_dbg(0.0, 0));
+		assert!((0.123456789).approx_eq_dbg(0.1, 1));
+		assert!((0.123456789).approx_eq_dbg(0.12, 2));
+		assert!((0.123456789).approx_eq_dbg(0.123, 3));
+		assert!((0.123456789).approx_eq_dbg(0.1234, 4));
+		assert!((0.123456789).approx_eq_dbg(0.12345, 5));
+		assert!((0.123456789).approx_eq_dbg(0.123456, 6));
+		assert!((0.123456789).approx_eq_dbg(0.1234567, 7));
+		assert!((0.123456789).approx_eq_dbg(0.12345678, 8));
+		assert!((0.123456789).approx_eq_dbg(0.123456789, 9));
+
+		assert!(!(0.123456789).approx_eq_dbg(0.0, 3));
+		assert!(!(0.123456789).approx_eq_dbg(0.1, 4));
+	}
+
+	#[test]
+	fn format_layout_string() {
+		let str1 = "v m l c p  q z u o , \ns t r d y  f n e a i \nx k j g w  b h ; ' .";
+		let str2 = "a b    c d e f g h i \n j k l \n m n o p q \n r s t u v w x y z";
+		
+		assert_eq!(format_layout_str(str1), "vmlcpqzuo,strdyfneaixkjgwbh;'.");
+		assert_eq!(format_layout_str(str2), "abcdefghijklmnopq");
+	}
 }
