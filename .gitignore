@@ -1,9 +1,6 @@
 target
-.*
 !.gitignore
 static/text
 static/stats
-static/corpus_configs/custom/*
-*.py
+static/corpus_configs/custom/*.toml
 static/language_data/reddit.json
-make_release.py
