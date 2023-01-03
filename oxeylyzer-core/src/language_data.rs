@@ -2,6 +2,7 @@ use arrayvec::ArrayVec;
 use fxhash::FxHashMap;
 use indexmap::IndexMap;
 use anyhow::Result;
+use itertools::Itertools;
 use serde::Deserialize;
 use serde_json;
 
@@ -12,9 +13,19 @@ use std::path::Path;
 use crate::utility::ConvertU8;
 
 pub type CharacterData = ArrayVec<f64, 60>;
-pub type BigramData = FxHashMap<[u8; 2], f64>;
-pub type FastBigramData = Vec<f64>;
+pub type SlowBigramData = FxHashMap<[u8; 2], f64>;
+pub type BigramData = Vec<f64>;
 pub type TrigramData = Vec<([u8; 3], f64)>;
+
+trait BigramLookup {
+	fn lookup(&self, c1: usize, c2: usize, char_count: usize) -> f64;
+}
+
+impl BigramLookup for BigramData {
+    fn lookup(&self, c1: usize, c2: usize, char_count: usize) -> f64 {
+        *self.get(c1 * char_count + c2).unwrap_or(&0.0)
+    }
+}
 
 #[derive(Deserialize)]
 struct LanguageDataInter {
@@ -24,9 +35,7 @@ struct LanguageDataInter {
 	pub skipgrams: FxHashMap<String, f64>,
 	pub skipgrams2: FxHashMap<String, f64>,
 	pub skipgrams3: FxHashMap<String, f64>,
-	pub trigrams: IndexMap<String, f64>,
-	#[serde(skip)]
-	pub convert_u8: ConvertU8
+	pub trigrams: IndexMap<String, f64>
 }
 
 fn get_char_data(data: FxHashMap<char, f64>, con: &mut ConvertU8) -> CharacterData {
@@ -39,15 +48,11 @@ fn get_char_data(data: FxHashMap<char, f64>, con: &mut ConvertU8) -> CharacterDa
 }
 
 fn get_bigram_data(data: FxHashMap<String, f64>, con: &mut ConvertU8) -> BigramData {
-	let mut res = BigramData::default();
-	for (bigram, freq) in data {
-		let bv = bigram.chars().collect::<Vec<char>>();
-		let bv_u8 = con.to(bv);
-
-		let new_bigram = [bv_u8[0], bv_u8[1]];
-		res.insert(new_bigram, freq);
-	}
-	res
+	(0..con.len()).into_iter()
+		.cartesian_product(0..con.len())
+		.map(|(c1, c2)| con.as_str(&[c1, c2]))
+		.map(|bigram| *data.get(&bigram).unwrap_or(&0.0))
+		.collect::<BigramData>()
 }
 
 fn get_trigram_data(data: IndexMap<String, f64>, con: &mut ConvertU8) -> TrigramData {
@@ -69,7 +74,7 @@ pub struct LanguageData {
 	pub skipgrams: BigramData,
 	pub skipgrams2: BigramData,
 	pub skipgrams3: BigramData,
-	pub weighted_bigrams: FastBigramData,
+	pub weighted_bigrams: BigramData,
 	pub trigrams: TrigramData,
 	pub language: String,
 	pub convert_u8: ConvertU8
@@ -77,7 +82,7 @@ pub struct LanguageData {
 
 impl From<LanguageDataInter> for LanguageData {
 	fn from(inter: LanguageDataInter) -> Self {
-		let mut convert_u8 = inter.convert_u8;
+		let mut convert_u8 = ConvertU8::new();
 		let characters = get_char_data(inter.characters, &mut convert_u8);
 
 		let bigrams = get_bigram_data(inter.bigrams, &mut convert_u8);
@@ -85,7 +90,7 @@ impl From<LanguageDataInter> for LanguageData {
 		let skipgrams2 = get_bigram_data(inter.skipgrams2, &mut convert_u8);
 		let skipgrams3 = get_bigram_data(inter.skipgrams3, &mut convert_u8);
 
-		let weighted_bigrams = FastBigramData::new();
+		let weighted_bigrams = BigramData::new();
 
 		let trigrams = get_trigram_data(inter.trigrams, &mut convert_u8);
 

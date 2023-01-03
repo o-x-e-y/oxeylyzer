@@ -10,7 +10,7 @@ use anyhow::Result;
 
 use crate::utility::*;
 use crate::trigram_patterns::TrigramPattern;
-use crate::language_data::{FastBigramData, TrigramData, LanguageData};
+use crate::language_data::{BigramData, TrigramData, LanguageData};
 use crate::layout::*;
 use crate::weights::{Weights, Config};
 
@@ -200,7 +200,7 @@ pub struct LayoutGeneration {
 	effort_map: [f64; 30],
 	scissor_indices: [PosPair; 17],
 
-	weighted_bigrams: FastBigramData,
+	weighted_bigrams: BigramData,
 	per_char_trigrams: PerCharTrigrams,
 
 	pub weights: Weights,
@@ -312,11 +312,15 @@ impl LayoutGeneration {
 		};
 
 		let mut res = 0.0;
+		let len = self.data.characters.len();
+
 		for (PosPair(i1, i2), _) in self.fspeed_vals {
-			let c1 = unsafe { layout.cu(i1) };
-			let c2 = unsafe { layout.cu(i2) };
-			res += data.get(&[c1, c2]).unwrap_or_else(|| &0.0);
-			res += data.get(&[c2, c1]).unwrap_or_else(|| &0.0);
+			let c1 = unsafe { layout.cu(i1) } as usize;
+			let c2 = unsafe { layout.cu(i2) } as usize;
+			if c1 != self.repeat_key && c2 != self.repeat_key {
+				res += data.get(c1 * len + c2).unwrap_or(&0.0);
+				res += data.get(c2 * len + c1).unwrap_or(&0.0);
+			}
 		}
 		res
 	}
@@ -364,16 +368,17 @@ impl LayoutGeneration {
 		trigram_score - effort - fspeed_usage - scissors
 	}
 
-	fn weighted_bigrams(data: &LanguageData, weights: &Weights) -> FastBigramData {
-		let chars = 0..(data.characters.len() as u8);
+	fn weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
+		let len = data.characters.len();
+		let chars = 0..len;
 		
 		chars.clone().cartesian_product(chars)
 			.map(|(c1, c2)| {
-				let bigram = [c1, c2];
-				let sfb = data.bigrams.get(&bigram).unwrap_or(&0.0);
-				let dsfb = data.skipgrams.get(&bigram).unwrap_or(&0.0) * weights.dsfb_ratio;
-				let dsfb2 = data.skipgrams2.get(&bigram).unwrap_or(&0.0) * weights.dsfb_ratio2;
-				let dsfb3 = data.skipgrams3.get(&bigram).unwrap_or(&0.0) * weights.dsfb_ratio3;
+				let bigram = c1 * len + c2;
+				let sfb = data.bigrams.get(bigram).unwrap_or(&0.0);
+				let dsfb = data.skipgrams.get(bigram).unwrap_or(&0.0) * weights.dsfb_ratio;
+				let dsfb2 = data.skipgrams2.get(bigram).unwrap_or(&0.0) * weights.dsfb_ratio2;
+				let dsfb3 = data.skipgrams3.get(bigram).unwrap_or(&0.0) * weights.dsfb_ratio3;
 				(sfb + dsfb + dsfb2 + dsfb3) * weights.fspeed
 			})
 			.collect()
@@ -464,11 +469,13 @@ impl LayoutGeneration {
 
 	fn scissor_score(&self, layout: &FastLayout) -> f64 {
 		let mut res = 0.0;
+		let len = self.data.characters.len();
+
 		for PosPair(i1, i2) in self.scissor_indices {
-			let c1 = layout.matrix[i1];
-			let c2 = layout.matrix[i2];
-			res += self.data.bigrams.get(&[c1, c2]).unwrap_or_else(|| &0.0);
-			res += self.data.bigrams.get(&[c2, c1]).unwrap_or_else(|| &0.0);
+			let c1 = unsafe { layout.cu(i1) } as usize;
+			let c2 = unsafe { layout.cu(i2) } as usize;
+			res += self.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0);
+			res += self.data.bigrams.get(c2 * len + c1).unwrap_or(&0.0);
 		}
 		
 		res * self.weights.scissors
@@ -479,20 +486,20 @@ impl LayoutGeneration {
 		match col {
 			0 | 1 | 2 => {
 				for c in unsafe { [layout.cu(col), layout.cu(col+10), layout.cu(col+20)] } {
-					res += *self.data.characters.get(c as usize).unwrap_or_else(|| &0.0);
+					res += *self.data.characters.get(c as usize).unwrap_or(&0.0);
 				}
 			},
 			3 | 4 => {
 				let col = (col - 3) * 2 + 3;
 				for c in unsafe { [layout.cu(col), layout.cu(col+10), layout.cu(col+20),
-								layout.cu(col+1), layout.cu(col+11), layout.c(col+21)] } {
-					res += *self.data.characters.get(c as usize).unwrap_or_else(|| &0.0);
+								layout.cu(col+1), layout.cu(col+11), layout.cu(col+21)] } {
+					res += *self.data.characters.get(c as usize).unwrap_or(&0.0);
 				}
 			},
 			5 | 6 | 7 => {
 				let col = col + 2;
 				for c in unsafe { [layout.cu(col), layout.cu(col+10), layout.cu(col+20)] } {
-					res += *self.data.characters.get(c as usize).unwrap_or_else(|| &0.0);
+					res += *self.data.characters.get(c as usize).unwrap_or(&0.0);
 				}
 			},
 			_ => unsafe { unreachable_unchecked() }
@@ -509,13 +516,15 @@ impl LayoutGeneration {
 
 	#[inline]
 	fn pair_fspeed(&self, layout: &FastLayout, pair: &PosPair, dist: f64) -> f64 {
+		let c1 = unsafe { layout.cu(pair.0) } as usize;
+		let c2 = unsafe { layout.cu(pair.1) } as usize;
 		if c1 != self.repeat_key && c1 != self.repeat_key {
-		let mut res = 0.0;
+			let mut res = 0.0;
 
-		let len = self.data.characters.len();
-		res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or_else(|| &0.0) * dist;
-		res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or_else(|| &0.0) * dist;
-		res
+			let len = self.data.characters.len();
+			res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or(&0.0) * dist;
+			res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or(&0.0) * dist;
+			res
 		} else {
 			0.0
 		}
@@ -531,6 +540,8 @@ impl LayoutGeneration {
 		let (start, len) = unsafe { Self::col_to_start_len(col) };
 		let mut res = 0.0;
 
+		let stuff = "stuff";
+
 		for i in start..(start+len) {
 			let (pair, dist) = unsafe { self.fspeed_vals.get_unchecked(i) };
 
@@ -542,7 +553,7 @@ impl LayoutGeneration {
 	#[inline]
 	fn char_effort(&self, layout: &FastLayout, i: usize) -> f64 {
 		let c = unsafe { layout.cu(i) };
-		let mut res = *self.data.characters.get(c as usize).unwrap_or_else(|| &0.0);
+		let mut res = *self.data.characters.get(c as usize).unwrap_or(&0.0);
 		res *= self.effort_map[i];
 		res
 	}
