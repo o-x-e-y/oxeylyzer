@@ -540,8 +540,6 @@ impl LayoutGeneration {
 		let (start, len) = unsafe { Self::col_to_start_len(col) };
 		let mut res = 0.0;
 
-		let stuff = "stuff";
-
 		for i in start..(start+len) {
 			let (pair, dist) = unsafe { self.fspeed_vals.get_unchecked(i) };
 

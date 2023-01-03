@@ -54,65 +54,65 @@ pub(crate) fn print_error(command_name: &str, args: &[ArgumentType]) {
     );
 }
 
-#[derive(Debug)]
-pub(crate) struct ReplCommand<'a> {
-    names: &'a [&'a str],
-    arguments: &'a [ArgumentType<'a>],
-    about: &'a str
-}
+// #[derive(Debug)]
+// pub(crate) struct ReplCommand<'a> {
+//     names: &'a [&'a str],
+//     arguments: &'a [ArgumentType<'a>],
+//     about: &'a str
+// }
 
-impl<'a> ReplCommand<'a> {
-    pub const fn new(
-        names: &'a [&'a str], arguments: &'a [ArgumentType<'a>], about: &'a str
-    ) -> Self {
-        ReplCommand { names, arguments, about }
-    }
+// impl<'a> ReplCommand<'a> {
+//     pub const fn new(
+//         names: &'a [&'a str], arguments: &'a [ArgumentType<'a>], about: &'a str
+//     ) -> Self {
+//         ReplCommand { names, arguments, about }
+//     }
 
-    pub fn name(&self) -> &'a str {
-        self.names[0]
-    }
+//     pub fn name(&self) -> &'a str {
+//         self.names[0]
+//     }
 
-    pub fn about(&self) -> &'a str {
-        self.about
-    }
+//     pub fn about(&self) -> &'a str {
+//         self.about
+//     }
 
-    pub fn arguments(&self) -> &'a [ArgumentType<'a>] {
-        self.arguments
-    }
+//     pub fn arguments(&self) -> &'a [ArgumentType<'a>] {
+//         self.arguments
+//     }
 
-    pub fn aliases(&self) -> &'a [&'a str] {
-        self.names
-    }
+//     pub fn aliases(&self) -> &'a [&'a str] {
+//         self.names
+//     }
 
-    pub fn r#match(&self, opt: Option<&str>) -> bool {
-        if let Some(m) = opt {
-            self.names.contains(&m)
-        } else {
-            false
-        }
-    }
-}
-
-use ArgumentType::*;
-
-macro_rules! create_command_helper {
-    () => {
-        Some("a") | Some("b")
-    }
-}
-
-// fn something() {
-//     let x = "a";
-//     match x {
-//         Some("c")
+//     pub fn r#match(&self, opt: Option<&str>) -> bool {
+//         if let Some(m) = opt {
+//             self.names.contains(&m)
+//         } else {
+//             false
+//         }
 //     }
 // }
 
-const COMPARE_COMMAND: ReplCommand = ReplCommand::new(
-    &["compare", "c", "comp", "cmopare", "comprae"],
-    &[R("layout 1"), R("layout 2")],
-    "(c, cmp) Compare 2 layouts."
-);
+// use ArgumentType::*;
+
+// macro_rules! create_command_helper {
+//     () => {
+//         Some("a") | Some("b")
+//     }
+// }
+
+// // fn something() {
+// //     let x = "a";
+// //     match x {
+// //         Some("c")
+// //     }
+// // }
+
+// const COMPARE_COMMAND: ReplCommand = ReplCommand::new(
+//     &["compare", "c", "comp", "cmopare", "comprae"],
+//     &[R("layout 1"), R("layout 2")],
+//     "(c, cmp) Compare 2 layouts."
+// );
 
 //         Some("generate") | Some("gen") | Some("g") => {
 //             if let Some(count_str) = opts.next_positional()

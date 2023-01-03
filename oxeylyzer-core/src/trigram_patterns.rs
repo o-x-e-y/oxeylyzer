@@ -25,12 +25,6 @@ enum Hand {
 
 use Hand::*;
 
-impl Hand {
-	const fn eq(self, other: Self) -> bool {
-		self as u8 == other as u8
-	}
-}
-
 impl std::ops::Not for Hand {
 	type Output = Self;
 	

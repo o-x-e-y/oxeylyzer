@@ -32,7 +32,7 @@ impl std::ops::Add for OneToOne {
 
 #[derive(Deserialize)]
 struct CorpusConfigLoad {
-    source: Option<String>,
+    // source: Option<String>,
     // #[serde(from = "OneOrMany<_>")]
     #[serde(default)]
     inherits: Vec<String>,
@@ -95,7 +95,7 @@ impl CorpusConfigLoad {
 }
 
 pub struct CorpusConfig {
-    source_language: String,
+    // source_language: String,
     inherits: Vec<String>,
     letters_to_lowercase: String,
     punct_unshifted: OneToOne,
@@ -113,7 +113,7 @@ impl CorpusConfig {
         //     None => Vec::new()
         // };
         Ok(Self {
-            source_language: loaded.source.unwrap_or_else(|| language.to_string()),
+            // source_language: loaded.source.unwrap_or_else(|| language.to_string()),
             inherits: loaded.inherits,
             letters_to_lowercase: loaded.letters_to_lowercase,
             punct_unshifted: loaded.punct_unshifted,
