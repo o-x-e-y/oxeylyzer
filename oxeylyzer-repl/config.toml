@@ -1,7 +1,7 @@
 pins = """
 ..... .....
-..... xx...
-..... .x...
+..... .....
+..... .....
 """
 
 [defaults]
@@ -21,7 +21,9 @@ onehands = 0.9
 alternates = 0.9
 alternates_sfs = 0.6
 redirects = 1.4
+redirects_sfs = 2.2
 bad_redirects = 4.5
+bad_redirects_sfs = 6.0
 
 [weights.max_finger_use]
 penalty = 2.5
