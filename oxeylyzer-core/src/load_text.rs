@@ -403,17 +403,26 @@ mod tests {
         assert_eq!(data.characters.get(data.convert_u8.to_single_lossy('e') as usize), Some(&(2.0/total_c)));
         assert_eq!(data.characters.get(data.convert_u8.to_single_lossy('\'') as usize), Some(&(1.0/total_c)));
 
-        let total_b = 1.0/data.bigrams.iter().map(|(_, &f)| f).reduce(f64::min).unwrap();
+        let total_b = 1.0/data.bigrams.iter()
+            .map(|&f| f)
+            .filter(|f| f > &0.0)
+            .reduce(f64::min)
+            .unwrap();
+        let len = data.characters.len();
 
-        assert_eq!(data.bigrams.get(&data.convert_u8.to_bigram_lossy(['\'', '*'])), Some(&(1.0/total_b)));
-        assert_eq!(data.bigrams.get(&data.convert_u8.to_bigram_lossy(['1', ':'])), None);
+        assert_eq!(data.bigrams.get(data.convert_u8.to_bigram_lossy(['\'', '*'], len)), Some(&(1.0/total_b)));
+        assert_eq!(data.bigrams.get(data.convert_u8.to_bigram_lossy(['1', ':'], len)), None);
 
-		let total_s = 1.0/data.skipgrams.iter().map(|(_, &f)| f).reduce(f64::min).unwrap();
+		let total_s = 1.0/data.skipgrams.iter()
+            .map(|&f| f)
+            .filter(|f| f > &0.0)
+            .reduce(f64::min)
+            .unwrap();
 
-		assert_eq!(data.skipgrams.get(&data.convert_u8.to_bigram_lossy([';', 'd'])), Some(&(1.0/total_s)));
-		assert_eq!(data.skipgrams.get(&data.convert_u8.to_bigram_lossy(['*', 'e'])), Some(&(1.0/total_s)));
-		assert_eq!(data.skipgrams.get(&data.convert_u8.to_bigram_lossy(['t', 'e'])), Some(&(1.0/total_s)));
-		assert_eq!(data.skipgrams.get(&data.convert_u8.to_bigram_lossy(['\'', 't'])), None);
+		assert_eq!(data.skipgrams.get(data.convert_u8.to_bigram_lossy([';', 'd'], len)), Some(&(1.0/total_s)));
+		assert_eq!(data.skipgrams.get(data.convert_u8.to_bigram_lossy(['*', 'e'], len)), Some(&(1.0/total_s)));
+		assert_eq!(data.skipgrams.get(data.convert_u8.to_bigram_lossy(['t', 'e'], len)), Some(&(1.0/total_s)));
+		assert_eq!(data.skipgrams.get(data.convert_u8.to_bigram_lossy(['\'', 't'], len)), Some(&0.0));
 	}
 
 	#[test]
