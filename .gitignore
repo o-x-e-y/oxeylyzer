@@ -3,8 +3,7 @@ target
 !.gitignore
 static/text
 static/stats
-static/layouts/cringe
+static/corpus_configs/custom/*
 *.py
 static/language_data/reddit.json
-__pycache__
 make_release.py
