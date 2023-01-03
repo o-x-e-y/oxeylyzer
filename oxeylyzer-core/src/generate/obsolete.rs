@@ -37,22 +37,22 @@ impl LayoutGeneration {
 		for i in start..(start+len) {
 			let (PosPair(i1, i2), dist) = self.fspeed_vals[i];
 
-			let c1 = unsafe { layout.cu(i1) };
-			let c2 = unsafe { layout.cu(i2) };
+			let c1 = unsafe { layout.cu(i1) } as usize;
+			let c2 = unsafe { layout.cu(i2) } as usize;
 
-			let (pair, rev) = ([c1, c2], [c2, c1]);
+			let (pair, rev) = (c1 * len + c2, c2 * len + c1);
 
-			res += self.data.bigrams.get(&pair).unwrap_or_else(|| &0.0) * dist;
-			res += self.data.bigrams.get(&rev).unwrap_or_else(|| &0.0) * dist;
+			res += self.data.bigrams.get(pair).unwrap_or(&0.0) * dist;
+			res += self.data.bigrams.get(rev).unwrap_or(&0.0) * dist;
 
-			res += self.data.skipgrams.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
-			res += self.data.skipgrams.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio;
+			res += self.data.skipgrams.get(pair).unwrap_or(&0.0) * dist * dsfb_ratio;
+			res += self.data.skipgrams.get(rev).unwrap_or(&0.0) * dist * dsfb_ratio;
 
-			res += self.data.skipgrams2.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio2;
-			res += self.data.skipgrams2.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio2;
+			res += self.data.skipgrams2.get(pair).unwrap_or(&0.0) * dist * dsfb_ratio2;
+			res += self.data.skipgrams2.get(rev).unwrap_or(&0.0) * dist * dsfb_ratio2;
 
-			res += self.data.skipgrams3.get(&pair).unwrap_or_else(|| &0.0) * dist * dsfb_ratio3;
-			res += self.data.skipgrams3.get(&rev).unwrap_or_else(|| &0.0) * dist * dsfb_ratio3;
+			res += self.data.skipgrams3.get(pair).unwrap_or(&0.0) * dist * dsfb_ratio3;
+			res += self.data.skipgrams3.get(rev).unwrap_or(&0.0) * dist * dsfb_ratio3;
 		}
 
 		res * self.weights.fspeed
@@ -70,7 +70,7 @@ impl LayoutGeneration {
     pub(crate) fn best_swap(
         &self, layout: &mut FastLayout, current_best_score: Option<f64>, possible_swaps: &[PosPair]
     ) -> (Option<PosPair>, f64) {
-        let mut best_score = current_best_score.unwrap_or_else(|| f64::MIN / 2.0);
+        let mut best_score = current_best_score.unwrap_or(f64::MIN / 2.0);
         let mut best_swap = None;
 
         for swap in possible_swaps.iter() {
