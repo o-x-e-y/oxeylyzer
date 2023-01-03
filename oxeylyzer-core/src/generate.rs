@@ -193,6 +193,7 @@ pub struct LayoutGeneration {
 	pub language: String,
 	pub data: LanguageData,
 	pub convert_u8: ConvertU8,
+	pub repeat_key: usize,
 	pub chars_for_generation: [u8; 30],
 
 	fspeed_vals: [(PosPair, f64); 48],
@@ -236,6 +237,7 @@ impl LayoutGeneration {
 						config.defaults.trigram_precision
 					),
 					convert_u8: data.convert_u8.clone(),
+					repeat_key: data.convert_u8.to_single('@') as usize,
 					data,
 
 					fspeed_vals: get_fspeed(config.weights.lateral_penalty),
@@ -507,14 +509,16 @@ impl LayoutGeneration {
 
 	#[inline]
 	fn pair_fspeed(&self, layout: &FastLayout, pair: &PosPair, dist: f64) -> f64 {
-		let c1 = unsafe { layout.cu(pair.0) as usize };
-		let c2 = unsafe { layout.cu(pair.1) as usize };
+		if c1 != self.repeat_key && c1 != self.repeat_key {
 		let mut res = 0.0;
 
 		let len = self.data.characters.len();
 		res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or_else(|| &0.0) * dist;
 		res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or_else(|| &0.0) * dist;
 		res
+		} else {
+			0.0
+		}
 	}
 
 	#[inline(always)]
