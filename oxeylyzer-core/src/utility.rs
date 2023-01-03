@@ -81,6 +81,10 @@ pub struct ConvertU8 {
 }
 
 impl ConvertU8 {
+	pub fn new() -> Self {
+		Self::default()
+	}
+
 	pub fn from_single(&self, c: u8) -> char {
 		*self.from.get(c as usize).unwrap_or(&' ')
 	}
