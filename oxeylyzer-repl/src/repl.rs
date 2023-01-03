@@ -3,6 +3,7 @@ use std::path::Path;
 
 use getargs::Options;
 use indexmap::IndexMap;
+use itertools::Itertools;
 use oxeylyzer_core::{
     generate::LayoutGeneration,
     layout::*,
@@ -242,11 +243,14 @@ impl Repl {
     }
 
     pub fn sfr_freq(&self) -> f64 {
-        self.gen.data.bigrams
-            .iter()
-            .filter(|(bg, _)| bg[0] == bg[1] )
-            .map(|(_, &f)| f)
-            .sum::<f64>()
+        let len = self.gen.data.characters.len();
+        let chars = 0..len;
+        chars.clone().cartesian_product(chars)
+            .filter(|(i1, i2)| i1 == i2)
+            .map(|(c1, c2)|
+                self.gen.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0)
+            )
+            .sum()
     }
 
     fn respond(&mut self, line: &str) -> Result<bool, String> {
@@ -324,10 +328,34 @@ impl Repl {
                     } else {
                         let preferred_folder = args.next_positional();
                         let translator = CorpusConfig::new_translator(language, preferred_folder);
+                        let is_raw_translator = translator.is_raw;
                         
                         println!("loading data for {language}...");
                         load_text::load_data(language, translator)
                             .map_err(|e| e.to_string())?;
+                        
+                        if !is_raw_translator {
+                            let config = Config::new();
+                            if let Ok(generator) = LayoutGeneration::new(
+                                language,
+                                "static",
+                                Some(config)
+                            ) {
+                                self.language = language.to_string();
+                                self.gen = generator;
+                                self.saved = self.gen.load_layouts(
+                                    "static/layouts",
+                                    language
+                                ).expect("couldn't load layouts lol");
+                                
+                                println!(
+                                    "Set language to {}. Sfr: {:.2}%",
+                                    language, self.sfr_freq() * 100.0
+                                );
+                            } else {
+                                println!("Could not load data for {language}");
+                            }
+                        }
                     }
                 } else {
                     print_error(
@@ -337,9 +365,9 @@ impl Repl {
                 }
             }
             Some("language") | Some("lanugage") | Some("langauge") | Some("lang") | Some("l") => {
-                let config = Config::new();
                 match args.next_positional() {
                     Some(language) => {
+                        let config = Config::new();
                         if let Ok(generator) = LayoutGeneration::new(
                             language,
                             "static",
@@ -357,7 +385,7 @@ impl Repl {
                                 language, self.sfr_freq() * 100.0
                             );
                         } else {
-                            println!("Could not load {}", language);
+                            println!("Could not load data for {language}");
                         }
                     }
                     None => println!("Current language: {}", self.language)
