@@ -117,20 +117,23 @@ pub fn get_ngram_info(data: &mut LanguageData, ngram: &str) -> String {
         },
         2 => {
             let bigram: [char; 2] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
-            let b = [
-                data.convert_u8.to_single(bigram[0]),
-                data.convert_u8.to_single(bigram[1])
-            ];
-            let b2 = [b[1], b[0]];
+            let c1 = data.convert_u8.to_single(bigram[0]) as usize; 
+            let c2 = data.convert_u8.to_single(bigram[1]) as usize;
+
+            let b1 = c1 * data.characters.len() + c2;
+            let b2 = c2 * data.characters.len() + c2;
+
             let rev = bigram.into_iter().rev().collect::<String>();
-            let occ_b = data.bigrams.get(&b).unwrap_or(&0.0) * 100.0;
-            let occ_b2 = data.bigrams.get(&b2).unwrap_or(&0.0) * 100.0;
-            let occ_s = data.skipgrams.get(&b).unwrap_or(&0.0) * 100.0;
-            let occ_s2 = data.skipgrams.get(&b2).unwrap_or(&0.0) * 100.0;
+
+            let occ_b1 = data.bigrams.get(b1).unwrap_or(&0.0) * 100.0;
+            let occ_b2 = data.bigrams.get(b2).unwrap_or(&0.0) * 100.0;
+            let occ_s = data.skipgrams.get(b1).unwrap_or(&0.0) * 100.0;
+            let occ_s2 = data.skipgrams.get(b2).unwrap_or(&0.0) * 100.0;
+            
             format!(
-                "{ngram} + {rev}: {:.3}%,\n  {ngram}: {occ_b:.3}%\n  {rev}: {occ_b2:.3}%\n\
+                "{ngram} + {rev}: {:.3}%,\n  {ngram}: {occ_b1:.3}%\n  {rev}: {occ_b2:.3}%\n\
                 {ngram} + {rev} (skipgram): {:.3}%,\n  {ngram}: {occ_s:.3}%\n  {rev}: {occ_s2:.3}%",
-                occ_b+occ_b2, occ_s+occ_s2
+                occ_b1+occ_b2, occ_s+occ_s2
             )
         }
         3 => {
