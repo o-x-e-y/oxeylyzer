@@ -121,7 +121,7 @@ pub fn get_ngram_info(data: &mut LanguageData, ngram: &str) -> String {
             let c2 = data.convert_u8.to_single(bigram[1]) as usize;
 
             let b1 = c1 * data.characters.len() + c2;
-            let b2 = c2 * data.characters.len() + c2;
+            let b2 = c2 * data.characters.len() + c1;
 
             let rev = bigram.into_iter().rev().collect::<String>();
 
