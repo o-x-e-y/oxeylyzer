@@ -76,9 +76,6 @@ Redirects are trigrams where you press all three keys with the same hand, but th
 #### Max Finger Use
 This basically exists to be a soft cap on how much %usage you can put on a finger before it's 'too much'. It is useful in columns that do well on paper but have very high total frequency, like `pnb` pinky.
 
-#### Finger Speed
-These finger speed weigths determine the strength of certain fingers, and divides the distance used for fspeed accordingly.
-
 ## Creating your own corpus rules
 
 You can generate language data files using your own rules now! There are a few settings that you can use for them. As a shortcut, if your corpus is just English, you can create a `.toml` file with a single line: `inherits = ["default"]`. That should cover everything you need.
