@@ -309,29 +309,37 @@ pub fn get_sfb_indices() -> [PosPair; 48] {
 	res.try_into().unwrap()
 }
 
-pub fn get_scissor_indices() -> [PosPair; 17] {
-	let mut res: Vec<PosPair> = Vec::new();
-	//these two are top pinky to ring homerow
-	res.push(PosPair(0, 11));
-	res.push(PosPair(9, 18));
-	//these two are pinky home to ring bottom
-	res.push(PosPair(10, 21));
-	res.push(PosPair(19, 28));
-	//these four are inner index stretches
-	res.push(PosPair(2, 24));
-	res.push(PosPair(22, 4));
-	res.push(PosPair(5, 27));
+pub const fn get_scissor_indices() -> [PosPair; 19] {
+	let mut res = [PosPair::default(); 19];
+
 	//these add normal stretching between ajacent columns that stretch between 2 rows except for
 	//qwerty mi and cr (assuming c is typed with index)
-	for i in [0, 1, 2, 6, 7, 8] {
-		if i != 2 {
-			res.push(PosPair(i, i+21));
+	let mut i = 0;
+	let cols = [0, 1, 2, 6, 7, 8];
+
+	while i < cols.len() {
+		let col_nr = cols[i];
+		if col_nr != 2 {
+			res[i] = PosPair(col_nr, col_nr+21);
 		}
-		if i != 6 {
-			res.push(PosPair(i+1, i+20));
+		if col_nr != 6 {
+			res[i] = PosPair(col_nr+1, col_nr+20);
 		}
+		i += 1;
 	}
-	res.try_into().unwrap()
+
+	//pinky->ring 1u stretches
+	res[12] = PosPair(0, 11);
+	res[13] = PosPair(9, 18);
+	res[14] = PosPair(10, 21);
+	res[15] = PosPair(19, 28);
+	
+	//inner index scissors (no qwerty `ni` because of stagger)
+	res[16] = PosPair(2, 24);
+	res[17] = PosPair(22, 4);
+	res[18] = PosPair(5, 27);
+	
+	res
 }
 
 pub fn chars_for_generation(language: &str) -> [char; 30] {

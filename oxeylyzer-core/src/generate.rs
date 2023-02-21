@@ -198,7 +198,7 @@ pub struct LayoutGeneration {
 
 	fspeed_vals: [(PosPair, f64); 48],
 	effort_map: [f64; 30],
-	scissor_indices: [PosPair; 17],
+	scissor_indices: [PosPair; 19],
 
 	weighted_bigrams: BigramData,
 	per_char_trigrams: PerCharTrigrams,
@@ -264,6 +264,11 @@ impl LayoutGeneration {
 				.filter(|p| is_kb_file(p))
 				.collect::<Vec<_>>();
 
+			// let stats_dir = base_directory.as_ref().join("stats").join(language);
+			// if let Ok(false) = std::fs::try_exists(stats_dir) {
+			// 	std::fs::create_dir_all(&stats_dir)?;
+			// }
+
 			for entry in valid {
 				if let Some(name) = layout_name(&entry) {
 					let content = std::fs::read_to_string(entry.path())?;
@@ -273,6 +278,8 @@ impl LayoutGeneration {
 					if let Ok(mut layout) = FastLayout::try_from(layout_bytes.as_slice()) {
 						layout.score = self.score(&layout);
 						res.insert(name, layout);
+
+						// self.get_layout_stats(&layout);
 					} else {
 						println!("layout {} is not formatted correctly", name);
 					}
