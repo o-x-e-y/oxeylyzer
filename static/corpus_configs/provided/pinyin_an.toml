@@ -1,0 +1,5 @@
+inherits = ["pinyin"]
+
+[one_to_one]
+from = "АÑ"
+to = "AN"
