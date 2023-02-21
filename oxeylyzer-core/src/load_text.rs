@@ -320,7 +320,7 @@ impl TextData {
 
         let data_dir = format!("static/language_data{}", if pass { "_raw" } else { "" });
 
-        if let Ok(t) = std::fs::try_exists(&data_dir) && !t {
+        if let Ok(true) = std::fs::try_exists(&data_dir) {
             std::fs::create_dir_all(&data_dir)?;
         }
 
