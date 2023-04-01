@@ -62,7 +62,7 @@ pub fn generate_n_with_pins(
         .progress_with(pb)
         .collect::<Vec<_>>();
 
-    println!("Optmizing {} variants took: {} seconds", amount, start.elapsed().as_secs());
+    println!("Optimizing {} variants took: {} seconds", amount, start.elapsed().as_secs());
 
     layouts.sort_by(
         |l1, l2| l2.score.partial_cmp(&l1.score).unwrap()
@@ -93,7 +93,7 @@ pub fn generate_n(gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
         .progress_with(pb)
         .collect::<Vec<_>>();
 
-    println!("optmizing {} variants took: {} seconds", amount, start.elapsed().as_secs());
+    println!("optimizing {} variants took: {} seconds", amount, start.elapsed().as_secs());
 
     layouts.sort_by(
         |l1, l2| l2.score.partial_cmp(&l1.score).unwrap()
