@@ -128,6 +128,7 @@ pub struct LayoutStats {
 	pub dsfb2: f64,
 	pub dsfb3: f64,
 	pub scissors: f64,
+	pub lsbs: f64,
 	pub trigram_stats: TrigramStats,
 	pub fspeed: f64,
 	pub finger_speed: [f64; 8]
@@ -137,9 +138,10 @@ impl std::fmt::Display for LayoutStats {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(
 			f, concat!("Sfb:  {:.3}%\nDsfb: {:.3}%\nFinger Speed: {:.3}\n",
-			"    [{}]\nScissors: {:.3}%\n\n{}"),
+			"    [{}]\nScissors: {:.3}%\nLsbs: {:.3}%\n\n{}"),
 			self.sfb * 100.0, self.dsfb * 100.0, self.fspeed * 10.0,
-			format_fspeed(&self.finger_speed), self.scissors * 100.0, self.trigram_stats
+			format_fspeed(&self.finger_speed), self.scissors * 100.0,
+			self.lsbs * 100.0, self.trigram_stats
 		)
 	}
 }
@@ -150,6 +152,7 @@ pub struct LayoutCache {
 	effort_total: f64,
 
 	scissors: f64,
+	lsbs: f64,
 
 	usage: [f64; 8],
 	usage_total: f64,
@@ -165,7 +168,7 @@ pub struct LayoutCache {
 
 impl LayoutCache {
 	pub fn total_score(&self) -> f64 {
-		self.trigrams_total - self.scissors - self.effort_total - self.usage_total - self.fspeed_total
+		self.trigrams_total - self.scissors - self.lsbs - self.effort_total - self.usage_total - self.fspeed_total
 	}
 }
 
@@ -199,6 +202,7 @@ pub struct LayoutGeneration {
 	fspeed_vals: [(PosPair, f64); 48],
 	effort_map: [f64; 30],
 	scissor_indices: [PosPair; 19],
+	lsb_indices: [PosPair; 16],
 
 	weighted_bigrams: BigramData,
 	per_char_trigrams: PerCharTrigrams,
@@ -243,6 +247,7 @@ impl LayoutGeneration {
 					fspeed_vals: get_fspeed(config.weights.lateral_penalty),
 					effort_map: get_effort_map(config.weights.heatmap, config.defaults.keyboard_type),
 					scissor_indices: get_scissor_indices(),
+					lsb_indices: get_lsb_indices(),
 					
 					weights: config.weights,
 					layouts: IndexMap::default()
@@ -304,9 +309,10 @@ impl LayoutGeneration {
 		let fspeed = cache.fspeed_total;
 		let finger_speed = cache.fspeed;
 		let scissors = self.scissor_score(layout) / self.weights.scissors;
+		let lsbs = self.lsb_score(layout) / self.weights.lsbs;
 		let trigram_stats = self.trigram_stats(layout, usize::MAX);
 		
-		LayoutStats { sfb, dsfb, dsfb2, dsfb3, fspeed, finger_speed, scissors, trigram_stats }
+		LayoutStats { sfb, dsfb, dsfb2, dsfb3, fspeed, finger_speed, scissors, lsbs, trigram_stats }
 	}
 
 	pub fn bigram_percent(&self, layout: &FastLayout, bigram_type: &str) -> f64 {
@@ -324,10 +330,17 @@ impl LayoutGeneration {
 		for (PosPair(i1, i2), _) in self.fspeed_vals {
 			let c1 = unsafe { layout.cu(i1) } as usize;
 			let c2 = unsafe { layout.cu(i2) } as usize;
-			if c1 != self.repeat_key && c2 != self.repeat_key {
-				res += data.get(c1 * len + c2).unwrap_or(&0.0);
-				res += data.get(c2 * len + c1).unwrap_or(&0.0);
-			}
+
+			// if c1 != self.repeat_key && c2 != self.repeat_key {
+			// 	res += data.get(c1 * len + c2).unwrap_or(&0.0);
+			// 	res += data.get(c2 * len + c1).unwrap_or(&0.0);
+			// } else {
+			// 	res += data.get(c1 * len + c2).unwrap_or(&0.0);
+			// 	res += data.get(c2 * len + c1).unwrap_or(&0.0);
+			// }
+
+			res += data.get(c1 * len + c2).unwrap_or(&0.0);
+			res += data.get(c2 * len + c1).unwrap_or(&0.0);
 		}
 		res
 	}
@@ -370,9 +383,10 @@ impl LayoutGeneration {
 			.sum::<f64>();
 
 		let scissors = self.scissor_score(layout);
+		let lsbs = self.lsb_score(layout);
 		let trigram_score = self.trigram_score_iter(layout, &self.data.trigrams);
 
-		trigram_score - effort - fspeed_usage - scissors
+		trigram_score - effort - fspeed_usage - scissors - lsbs
 	}
 
 	fn weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
@@ -488,6 +502,20 @@ impl LayoutGeneration {
 		res * self.weights.scissors
 	}
 
+	fn lsb_score(&self, layout: &FastLayout) -> f64 {
+		let mut res = 0.0;
+		let len = self.data.characters.len();
+
+		for PosPair(i1, i2) in self.lsb_indices {
+			let c1 = unsafe { layout.cu(i1) } as usize;
+			let c2 = unsafe { layout.cu(i2) } as usize;
+			res += self.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0);
+			res += self.data.bigrams.get(c2 * len + c1).unwrap_or(&0.0);
+		}
+		
+		res * self.weights.lsbs
+	}
+
 	fn col_usage(&self, layout: &FastLayout, col: usize) -> f64 {
 		let mut res = 0.0;
 		match col {
@@ -525,16 +553,27 @@ impl LayoutGeneration {
 	fn pair_fspeed(&self, layout: &FastLayout, pair: &PosPair, dist: f64) -> f64 {
 		let c1 = unsafe { layout.cu(pair.0) } as usize;
 		let c2 = unsafe { layout.cu(pair.1) } as usize;
-		if c1 != self.repeat_key && c1 != self.repeat_key {
-			let mut res = 0.0;
+		// if c1 != self.repeat_key && c1 != self.repeat_key {
+		// 	let mut res = 0.0;
 
-			let len = self.data.characters.len();
-			res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or(&0.0) * dist;
-			res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or(&0.0) * dist;
-			res
-		} else {
-			0.0
-		}
+		// 	let len = self.data.characters.len();
+		// 	res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or(&0.0) * dist;
+		// 	res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or(&0.0) * dist;
+		// 	res
+		// } else {
+		// 	let mut res = 0.0;
+
+		// 	let len = self.data.characters.len();
+		// 	res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or(&0.0) * dist * 0.5;
+		// 	res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or(&0.0) * dist * 0.5;
+		// 	res
+		// }
+		let mut res = 0.0;
+
+		let len = self.data.characters.len();
+		res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or(&0.0) * dist;
+		res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or(&0.0) * dist;
+		res
 	}
 
 	#[inline(always)]
@@ -628,7 +667,13 @@ impl LayoutGeneration {
 				cache.scissors
 			};
 
-			let _new_heur = cache.trigrams_total - scissors_score - effort_score - usage_score - fspeed_score;
+			let lsbs_score = if swap.affects_lsb() {
+				self.lsb_score(layout)
+			} else {
+				cache.lsbs
+			};
+
+			// let _new_heur = cache.trigrams_total - scissors_score - effort_score - usage_score - fspeed_score;
 
 			let trigrams_score = if cache.total_score < (f64::MAX) { //new_heur + new_heur.abs() * 0.0) {
 				let trigrams_end = self.trigram_char_score(layout, swap);
@@ -647,7 +692,7 @@ impl LayoutGeneration {
 				return f64::MIN + 1000.0;
 			};
 
-			trigrams_score - scissors_score - effort_score - usage_score - fspeed_score
+			trigrams_score - scissors_score - lsbs_score - effort_score - usage_score - fspeed_score
 	}
 
 	fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
@@ -711,6 +756,10 @@ impl LayoutGeneration {
 
 		if swap.affects_scissor() {
 			cache.scissors = self.scissor_score(layout);
+		}
+
+		if swap.affects_lsb() {
+			cache.lsbs = self.lsb_score(layout);
 		}
 
 		cache.total_score = cache.total_score();

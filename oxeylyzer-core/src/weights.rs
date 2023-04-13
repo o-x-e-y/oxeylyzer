@@ -37,6 +37,7 @@ pub struct Weights {
 	#[serde(default)]
 	pub dsfb_ratio3: f64,
 	pub scissors: f64,
+	pub lsbs: f64,
 	pub inrolls: f64,
 	pub outrolls: f64,
 	pub onehands: f64,
@@ -124,6 +125,7 @@ impl Config {
 				dsfb_ratio2: (0.10 * 6.0f64).powi(2),
 				dsfb_ratio3: (0.08 * 6.0f64).powi(3),
 				scissors: 5.0,
+				lsbs: 2.0,
 				inrolls: 1.6,
 				outrolls: 1.3,
 				onehands: 0.8,

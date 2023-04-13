@@ -1,7 +1,6 @@
 use crate::languages_cfg::read_cfg;
 
 use fxhash::FxHashMap;
-use itertools::Itertools;
 use serde::Deserialize;
 use arrayvec::ArrayVec;
 use nanorand::{Rng, tls_rng};
@@ -23,13 +22,19 @@ pub static I_TO_COL: [usize; 30] = [
 	0, 1, 2, 3, 3,  4, 4, 5, 6, 7
 ];
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct PosPair(pub usize, pub usize);
 
 const AFFECTS_SCISSOR: [bool; 30] = [
 	true,  true,  true,  true,  true,   true,  true,  true,  true,  true,
 	true,  true,  false, false, false,  false, false, false, true,  true,
-	true,  true,  true,  false, true,   false, false, true,  true,  true
+	true,  true,  true,  false, true,   true, false, true,  true,  true
+];
+
+const AFFECTS_LSB: [bool; 30] = [
+	false, false, true, false, true,  true, false, true, false,  false,
+	false, false, true, false, true,  true, false, true, false,  false,
+	false, false, true, false, true,  true, false, true, false,  false
 ];
 
 impl PosPair {
@@ -45,6 +50,13 @@ impl PosPair {
 	pub fn affects_scissor(&self) -> bool {
 		unsafe {
 			*AFFECTS_SCISSOR.get_unchecked(self.0) || *AFFECTS_SCISSOR.get_unchecked(self.1)
+		}
+	}
+
+	#[inline]
+	pub fn affects_lsb(&self) -> bool {
+		unsafe {
+			*AFFECTS_LSB.get_unchecked(self.0) || *AFFECTS_LSB.get_unchecked(self.1)
 		}
 	}
 }
@@ -267,46 +279,95 @@ pub fn get_fspeed(lat_multiplier: f64) -> [(PosPair, f64); 48] {
 }
 
 pub fn get_distances(lat_multiplier: f64) -> [f64; 48] {
-    let mut res = Vec::new();
+    let mut res = [0.0; 48];
+	let mut i = 0;
     let help = |f: f64, r: f64| f.powi(2).powf(0.65) * r;
     
-    for fweight in [1.4, 3.6, 4.8, 4.8, 3.6, 1.4] {
+	let fweights = [1.4, 3.6, 4.8, 4.8, 3.6, 1.4];
+	let mut fweight_i = 0;
+
+    while fweight_i < 6 {
+		let fweight = fweights[fweight_i];
 		let ratio = 5.5/fweight;
-        res.append(&mut vec![help(1.0, ratio), help(2.0, ratio), help(1.0, ratio)]);
+
+        res[i] = help(1.0, ratio);
+		res[i+1] = help(2.0, ratio);
+		res[i+2] = help(1.0, ratio);
+
+		fweight_i += 1;
+		i += 3;
     }
 
-    for _ in 0..2 {
-        for c in [
-			(0, (0i32, 0)), (1, (0i32, 1)), (2, (0, 2)), (3, (1, 0)), (4, (1, 1)), (5, (1, 2))
-		].iter().combinations(2) {
-            let (_, xy1) = c[0];
-            let (_, xy2) = c[1];
+	let mut c = 0;
+	while c <= 2 {
+		let index = [
+			((0, 0), (0, 1)), ((0, 0), (0, 2)), ((0, 0), (1, 0)), ((0, 0), (1, 1)), ((0, 0), (1, 2)),
+			((0, 1), (0, 2)), ((0, 1), (1, 0)), ((0, 1), (1, 1)), ((0, 1), (1, 2)), ((0, 2), (1, 0)),
+			((0, 2), (1, 1)), ((0, 2), (1, 2)), ((1, 0), (1, 1)), ((1, 0), (1, 2)), ((1, 1), (1, 2))
+		];
+		let mut pair_i = 0;
+		while pair_i < 15 {
+			let ((x1, y1), (x2, y2)) = index[pair_i];
 
-			let x_dist = (xy1.0 - xy2.0) as f64;
-			let y_dist = (xy1.1 - xy2.1) as f64;
+			let x_dist = (x1 - x2) as f64;
+			let y_dist = (y1 - y2) as f64;
 			let distance = (x_dist.powi(2)*lat_multiplier + y_dist.powi(2)).powf(0.65);
-			
-			res.push(distance);
-        }
-    }
-    res.try_into().unwrap()
+			res[i] = distance;
+
+			i += 1;
+			pair_i += 1;
+		}
+		c += 2;
+	}
+	res
 }
 
-pub fn get_sfb_indices() -> [PosPair; 48] {
-	let mut res: Vec<PosPair> = Vec::new();
-	for i in [0, 1, 2, 7, 8, 9] {
-		let chars = [i, i+10, i+20];
-		for c in chars.into_iter().combinations(2) {
-			res.push(PosPair(c[0], c[1]));
-		}
+pub const fn get_sfb_indices() -> [PosPair; 48] {
+	let mut res = [PosPair::default(); 48];
+	let mut i = 0;
+	
+	let mut col_i = 0;
+	let cols = [0, 1, 2, 7, 8, 9];
+	while col_i < cols.len() {
+		let col = cols[col_i];
+		res[i] = PosPair(col, col+10);
+		res[i+1] = PosPair(col, col+20);
+		res[i+2] = PosPair(col+10, col+20);
+		
+		col_i += 1;
+		i += 3;
 	}
-	for i in [0, 2] {
-		let chars = [3+i, 13+i, 23+i, 4+i, 14+i, 24+i];
-		for c in chars.into_iter().combinations(2) {
-			res.push(PosPair(c[0], c[1]));
+
+	let mut c = 0;
+	while c <= 2 {
+		let index = [
+			(3+c, 13+c), (3+c, 23+c), (3+c, 4+c), (3+c, 14+c), (3+c, 24+c), (13+c, 23+c),
+			(13+c, 4+c), (13+c, 14+c), (13+c, 24+c), (23+c, 4+c), (23+c, 14+c), (23+c, 24+c),
+			(4+c, 14+c), (4+c, 24+c), (14+c, 24+c)
+		];
+		let mut pair_i = 0;
+		while pair_i < 15 {
+			res[i] = PosPair(index[pair_i].0, index[pair_i].1);
+			i += 1;
+			pair_i += 1;
 		}
+		c += 2;
 	}
-	res.try_into().unwrap()
+	res
+}
+
+pub const fn get_lsb_indices() -> [PosPair; 16] {
+	let mut res = [PosPair::default(); 16];
+	let left  = [(2, 4), (2, 14), (2, 24),  (12, 4), (12, 14),            (22, 4), (22, 14), (22, 24)];
+	let right = [(5, 7), (5, 17), (5, 27),  (15, 7), (15, 17), (15, 27),           (25, 17), (25, 27)];
+	
+	let mut i = 0;
+	while i < left.len() {
+		res[i] = PosPair(left[i].0, left[i].1);
+		res[i+8] = PosPair(right[i].0, right[i].1);
+		i += 1;
+	}
+	res
 }
 
 pub const fn get_scissor_indices() -> [PosPair; 19] {
