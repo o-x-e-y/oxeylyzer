@@ -22,5 +22,5 @@ oxeylyzer-core = { path = "./oxeylyzer-core" }
 oxeylyzer-repl = { path = "./oxeylyzer-repl" }
 
 [[bin]]
-name = "oxeylyzer-repl"
+name = "oxeylyzer"
 path = "./oxeylyzer-repl/src/bin/main.rs"
