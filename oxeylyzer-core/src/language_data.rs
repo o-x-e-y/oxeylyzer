@@ -81,8 +81,15 @@ pub struct LanguageData {
 }
 
 impl From<LanguageDataInter> for LanguageData {
-	fn from(inter: LanguageDataInter) -> Self {
+	fn from(mut inter: LanguageDataInter) -> Self {
 		let mut convert_u8 = ConvertU8::new();
+		
+		for c in ['\'', ',', '.', ';', '/'] {
+			if !inter.characters.contains_key(&c) {
+				inter.characters.insert(c, 0.0);
+			}
+		}
+
 		let characters = get_char_data(inter.characters, &mut convert_u8);
 
 		let bigrams = get_bigram_data(inter.bigrams, &mut convert_u8);
