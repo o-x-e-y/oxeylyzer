@@ -255,6 +255,18 @@ impl Repl {
             .sum()
     }
 
+    fn sfbs(&self, name: &str, top_n: usize) {
+        if let Some(layout) = self.layout_by_name(name) {
+            println!("top {} sfbs for {name}:", top_n.min(48));
+
+            for (bigram, freq) in self.gen.sfbs(layout, top_n) {
+                println!("{bigram}: {:.3}%", freq * 100.0)
+            }
+        } else {
+            println!("layout {name} does not exist!")
+        }
+    }
+
     fn respond(&mut self, line: &str) -> Result<bool, String> {
         let args = shlex::split(line).ok_or("error: Invalid quoting")?;
         let mut args = Options::new(args.iter().map(String::as_str));
@@ -302,6 +314,21 @@ impl Repl {
                     self.compare_name(layout1, layout2);
                 } else {
                     print_error("compare", &[R("layout 1"), R("layout 2")]);
+                }
+            }
+            Some("sfbs") | Some("sfb") => {
+                if let Some(name) = args.next_positional() {
+                    if let Some(top_n_str) = args.next_positional() {
+                        if let Ok(top_n) = usize::from_str_radix(top_n_str, 10) {
+                            self.sfbs(name, top_n)
+                        } else {
+                            print_error("ngram", &[R("name"), O("top n")]);
+                        }
+                    } else {
+                        self.sfbs(name, 10);
+                    }
+                } else {
+                    print_error("ngram", &[R("name"), O("top n")]);
                 }
             }
             Some("ngram") | Some("occ") | Some("n") => {
@@ -475,6 +502,13 @@ impl Repl {
                             "compare",
                             "(c, cmp) Compare 2 layouts.",
                             &[R("layout 1"), R("layout 2")]
+                        )
+                    }
+                    Some("sfbs") | Some("sfb") => {
+                        print_help(
+                            "sfbs",
+                            "(sfbs, sfb) Shows the top n sfbs for a certain layout.",
+                            &[R("name"), O("top n")]
                         )
                     }
                     Some("ngram") | Some("occ") | Some("n") => {

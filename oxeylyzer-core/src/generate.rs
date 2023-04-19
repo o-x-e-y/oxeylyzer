@@ -345,6 +345,24 @@ impl LayoutGeneration {
 		res
 	}
 
+	pub fn sfbs(&self, layout: &FastLayout, top_n: usize) -> Vec<(String, f64)> {
+		self.fspeed_vals
+			.iter()
+			.map(|(p, _)| {
+				let u1 = layout.c(p.0);
+				let u2 = layout.c(p.1);
+				let bigram = self.convert_u8.as_str(&[u1, u2]);
+
+				let i = (u1 as usize) * self.data.characters.len() + (u2 as usize);
+				let freq = self.data.bigrams[i];
+
+				(bigram, freq)
+			})
+			.sorted_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap())
+			.take(top_n)
+			.collect::<Vec<_>>()
+	}
+
 	pub fn trigram_stats(&self, layout: &FastLayout, trigram_precision: usize) -> TrigramStats {
 		use TrigramPattern::*;
 
