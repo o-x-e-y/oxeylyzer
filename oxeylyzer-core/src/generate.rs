@@ -595,7 +595,7 @@ impl LayoutGeneration {
 	}
 
 	#[inline(always)]
-	pub(self) const unsafe fn col_to_start_len(col: usize) -> (usize, usize) {
+	pub unsafe fn col_to_start_len(col: usize) -> (usize, usize) {
 		*[(0, 3), (3, 3), (6, 3), (18, 15), (33, 15), (9, 3), (12, 3), (15, 3)].get_unchecked(col)
 	}
 
