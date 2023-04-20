@@ -1,7 +1,7 @@
 # Oxeylyzer repl
 
 ## Building with cargo
-To use the analyzer, clone the repo and make sure you have rust nigthly installed. If you have, skip the next step.
+To use the analyzer, clone the repo and make sure you have rust nightly installed. If you have, skip the next step.
 
 To install rust, visit [the official installation page](https://www.rust-lang.org/learn/get-started) and follow the instructions there. When installing, make sure you add rust to PATH. Once you have installed, you may need to restart in order for the command to be recognised. After restarting, you can try running `rustup install nightly` and `rustup default nightly` to make sure the compiler can use all unstable features.
 
