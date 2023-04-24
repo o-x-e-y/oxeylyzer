@@ -1,22 +1,22 @@
+use glob::glob;
 use oxeylyzer_core::translation::*;
 use serde::Deserialize;
-use glob::glob;
 
-use std::path::PathBuf;
 use std::fs::File;
 use std::io::Read;
+use std::path::PathBuf;
 
 #[derive(Deserialize, Default)]
 struct Multiple {
     #[serde(default)]
     uppercase_versions: bool,
-    list: Vec<[String; 2]>
+    list: Vec<[String; 2]>,
 }
 
 #[derive(Deserialize, Default)]
 struct OneToOne {
     pub from: String,
-    to: String
+    to: String,
 }
 
 impl std::ops::Add for OneToOne {
@@ -45,19 +45,23 @@ struct CorpusConfigLoad {
     #[serde(default)]
     one_to_one: OneToOne,
     #[serde(default)]
-    punct_unshifted: OneToOne
+    punct_unshifted: OneToOne,
 }
 
 impl CorpusConfigLoad {
     fn check_for_language(language: &str) -> Result<PathBuf, String> {
-        let try_find_path = glob("static/corpus_configs/*/*.toml").unwrap()
+        let try_find_path = glob("static/corpus_configs/*/*.toml")
+            .unwrap()
             .flatten()
-            .find(|stem|
-                stem.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("")) == language
-            );
+            .find(|stem| stem.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("")) == language);
         if let Some(path) = try_find_path {
-            let res = path.as_path().parent().unwrap()
-                .components().last().unwrap()
+            let res = path
+                .as_path()
+                .parent()
+                .unwrap()
+                .components()
+                .last()
+                .unwrap()
                 .as_os_str();
             Ok(PathBuf::from(res))
         } else {
@@ -78,7 +82,7 @@ impl CorpusConfigLoad {
                 .join("corpus_configs")
                 .join(preferred_folder)
                 .join(file_name);
-            
+
             let mut f = File::open(path)
                 .map_err(|_| "Couldn't open file because it does not exist.".to_string())?;
 
@@ -86,8 +90,9 @@ impl CorpusConfigLoad {
             f.read_to_string(&mut buf)
                 .map_err(|_| "Toml contains non-utf8 characters, aborting...".to_string())?;
 
-            toml::from_str(buf.as_str())
-                .map_err(|_| "Toml contains invalid elements. Check the readme for what is allowed.".to_string())
+            toml::from_str(buf.as_str()).map_err(|_| {
+                "Toml contains invalid elements. Check the readme for what is allowed.".to_string()
+            })
         } else {
             Err("No config file found!".to_string())
         }
@@ -101,7 +106,7 @@ pub struct CorpusConfig {
     punct_unshifted: OneToOne,
     keep: String,
     to_multiple: Vec<(char, String)>,
-    one_to_one: OneToOne
+    one_to_one: OneToOne,
 }
 
 impl CorpusConfig {
@@ -119,7 +124,7 @@ impl CorpusConfig {
             punct_unshifted: loaded.punct_unshifted,
             keep: loaded.keep,
             to_multiple: Self::get_to_multiple(loaded.multiple),
-            one_to_one: loaded.one_to_one
+            one_to_one: loaded.one_to_one,
         })
     }
 
@@ -130,7 +135,7 @@ impl CorpusConfig {
                 if from.chars().count() == 1 {
                     let c = from.chars().next().unwrap();
                     res.push((c, to.clone()));
-                    
+
                     let mut upper = c.to_uppercase();
                     if upper.clone().count() == 1 {
                         let upper_c = upper.next().unwrap();
@@ -143,7 +148,8 @@ impl CorpusConfig {
     }
 
     pub fn all() -> Vec<(String, Self)> {
-        glob("static/text/*").unwrap()
+        glob("static/text/*")
+            .unwrap()
             .flatten()
             .filter(|pb| pb.is_dir())
             .map(|pb| pb.file_name().unwrap().to_os_string().into_string())
@@ -177,7 +183,7 @@ impl CorpusConfig {
             .custom_unshift(&self.punct_unshifted.from, &self.punct_unshifted.to)
             .to_multiple_string(&self.to_multiple)
             .build();
-        
+
         for inherits in self.inherits {
             if let Ok(new) = Self::new(&inherits, None) {
                 res = res + new.translator();

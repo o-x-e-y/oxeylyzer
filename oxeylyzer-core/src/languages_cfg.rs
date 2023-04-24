@@ -23,14 +23,16 @@ pub fn read_cfg() -> FxHashMap<String, String> {
             }
         }
     } else {
-        println!("No cfg file found! Make sure to have a 'languages_default.cfg' in your root folder");
+        println!(
+            "No cfg file found! Make sure to have a 'languages_default.cfg' in your root folder"
+        );
     }
-    res   
+    res
 }
 
 struct LangsChars {
     languages: Vec<String>,
-    chars: String
+    chars: String,
 }
 
 fn parse_line(line: &str) -> Result<LangsChars, String> {
@@ -49,10 +51,12 @@ fn parse_line(line: &str) -> Result<LangsChars, String> {
                 if cc == 30 {
                     Ok(LangsChars {
                         languages: langs,
-                        chars: chars.to_string()
+                        chars: chars.to_string(),
                     })
                 } else {
-                    Err(format!("You specified {cc} characters instead of the required 30 for {langs:?}"))
+                    Err(format!(
+                        "You specified {cc} characters instead of the required 30 for {langs:?}"
+                    ))
                 }
             } else {
                 Err("No specified language".to_owned())

@@ -2,10 +2,10 @@
 #![feature(exclusive_range_pattern)]
 #![feature(let_chains)]
 
-pub mod repl;
-pub mod tui;
 pub mod commands;
 pub mod corpus_transposition;
+pub mod repl;
+pub mod tui;
 
 // fn main() {
 // 	use languages::*;
@@ -27,16 +27,3 @@ pub mod corpus_transposition;
 
 // 	pause()
 // }
-
-
-
-
-
-
-
-
-
-
-
-
-

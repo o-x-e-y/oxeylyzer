@@ -52,7 +52,7 @@ impl LayoutGeneration {
             smie.add_char(i);
             if smie.chars_placed == 1 {
                 let score = self.char_effort(&smie.layout, i);
-                if score < 
+                if score < 0.0 {}
             }
         }
     }

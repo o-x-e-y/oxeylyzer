@@ -1,15 +1,15 @@
 use crate::translation::Translator;
 
+use std::fs::{read_dir, File};
 use std::iter::FromIterator;
-use std::fs::{File, read_dir};
 use std::time::Instant;
 
-use rayon::iter::{ParallelIterator, IntoParallelRefIterator, ParallelBridge};
-use file_chunker::FileChunker;
 use anyhow::Result;
+use file_chunker::FileChunker;
 use fxhash::FxHashMap as HashMap;
 use indexmap::IndexMap;
-use serde::{Serialize, Deserialize};
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString, SmartStringMode};
 
 const FOUR_MB: u64 = 1024 * 1024 * 4;
@@ -21,7 +21,7 @@ pub fn load_raw(language: &str) {
 #[allow(dead_code)]
 pub(crate) fn load_default(language: &str) {
     let translator = Translator::language_or_raw(language);
-	if let Err(error) = load_data(language, translator) {
+    if let Err(error) = load_data(language, translator) {
         println!("{language} failed to update: '{error}'");
     }
 }
@@ -33,12 +33,14 @@ pub(crate) fn load_all_default() -> Result<()> {
     std::fs::read_dir(format!("static/text/"))?
         .filter_map(Result::ok)
         .for_each(|language_dir| {
-			let language = language_dir.path().display().to_string().replace("\\", "/");
-			let language = language.split("/").last().unwrap();
-			load_default(language);
-        }
+            let language = language_dir.path().display().to_string().replace("\\", "/");
+            let language = language.split("/").last().unwrap();
+            load_default(language);
+        });
+    println!(
+        "loading all languages took {}ms",
+        (Instant::now() - start_total).as_millis()
     );
-    println!("loading all languages took {}ms", (Instant::now() - start_total).as_millis());
     Ok(())
 }
 
@@ -58,18 +60,20 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
         .collect::<Vec<_>>();
 
     let chunkers_time = Instant::now();
-    println!("Prepared text files in {}ms", (chunkers_time - start_total).as_millis());
+    println!(
+        "Prepared text files in {}ms",
+        (chunkers_time - start_total).as_millis()
+    );
 
-    let strings = chunkers.par_iter()
-        .flat_map(|(chunker, count)| {
-            chunker.chunks(*count, Some(' ')).unwrap()
-        })
-        .map(|chunk| std::str::from_utf8(chunk)
-            .expect(
+    let strings = chunkers
+        .par_iter()
+        .flat_map(|(chunker, count)| chunker.chunks(*count, Some(' ')).unwrap())
+        .map(|chunk| {
+            std::str::from_utf8(chunk).expect(
                 "one of the files provided is not encoded as utf-8.\
-                Make sure all files in the directory are valid utf-8."
+                Make sure all files in the directory are valid utf-8.",
             )
-        )
+        })
         .map(|s| {
             let mut last_chars = SmartString::<LazyCompact>::new();
             let mut inter = [' '; 5];
@@ -77,34 +81,41 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
                 .rev()
                 .take(5)
                 .enumerate()
-                .for_each(|(i, c)| unsafe { *inter.get_unchecked_mut(4 - i) = c } );
-            
-            inter.into_iter()
-                .for_each(|c| last_chars.push(c));
+                .for_each(|(i, c)| unsafe { *inter.get_unchecked_mut(4 - i) = c });
+
+            inter.into_iter().for_each(|c| last_chars.push(c));
             last_chars.push_str("     ");
 
             (s, last_chars)
         })
         .collect::<Vec<_>>();
 
-    println!("Converted to utf8 in {}ms", (Instant::now() - chunkers_time).as_millis());
+    println!(
+        "Converted to utf8 in {}ms",
+        (Instant::now() - chunkers_time).as_millis()
+    );
 
-    let quingrams = strings.par_iter()
+    let quingrams = strings
+        .par_iter()
         .map(|(s, last)| TextNgrams::from_str_last(s, &last))
         .reduce(
             || TextNgrams::default(),
-            |accum, new| accum.combine_with(new)
+            |accum, new| accum.combine_with(new),
         );
 
     TextData::from((quingrams, language, translator)).save(is_raw)?;
-    println!("loading {} took {}ms", language, (Instant::now() - start_total).as_millis());
+    println!(
+        "loading {} took {}ms",
+        language,
+        (Instant::now() - start_total).as_millis()
+    );
 
     Ok(())
 }
 
 #[derive(Default, Debug)]
 pub struct TextNgrams<'a, const N: usize> {
-    pub ngrams: HashMap<&'a str, usize>
+    pub ngrams: HashMap<&'a str, usize>,
 }
 
 impl<'a, const N: usize> TextNgrams<'a, N> {
@@ -112,16 +123,18 @@ impl<'a, const N: usize> TextNgrams<'a, N> {
         let mut ngrams = HashMap::default();
         let it1 = s.char_indices().map(|(i, _)| i);
         let it2 = s.char_indices().map(|(i, _)| i).skip(N);
-        it1.zip(it2)
-            .map(|(i1, i2)| &s[i1..i2])
-            .for_each(|ngram| { ngrams.entry(ngram).and_modify(|f| *f += 1).or_insert(1); } );
+        it1.zip(it2).map(|(i1, i2)| &s[i1..i2]).for_each(|ngram| {
+            ngrams.entry(ngram).and_modify(|f| *f += 1).or_insert(1);
+        });
 
         let it1 = last.char_indices().map(|(i, _)| i);
         let it2 = last.char_indices().map(|(i, _)| i).skip(N);
         it1.zip(it2)
             .map(|(i1, i2)| &last[i1..i2])
-            .for_each(|ngram| { ngrams.entry(ngram).and_modify(|f| *f += 1).or_insert(1); } );
-        
+            .for_each(|ngram| {
+                ngrams.entry(ngram).and_modify(|f| *f += 1).or_insert(1);
+            });
+
         Self { ngrams }
     }
 }
@@ -129,7 +142,10 @@ impl<'a, const N: usize> TextNgrams<'a, N> {
 impl<'a, const N: usize> TextNgrams<'a, N> {
     fn combine_with(mut self, rhs: Self) -> Self {
         for (trigram, freq) in rhs.ngrams.into_iter() {
-            self.ngrams.entry(trigram).and_modify(|f| *f += freq).or_insert(freq);
+            self.ngrams
+                .entry(trigram)
+                .and_modify(|f| *f += freq)
+                .or_insert(freq);
         }
         self
     }
@@ -157,7 +173,7 @@ pub struct TextData {
     #[serde(skip)]
     skipgram3_sum: f64,
     #[serde(skip)]
-    trigram_sum: f64
+    trigram_sum: f64,
 }
 
 impl std::fmt::Display for TextData {
@@ -225,19 +241,37 @@ impl<'a> From<(TextNgrams<'a, 5>, &str, Translator)> for TextData {
             }
         }
 
-        res.characters.iter_mut().for_each(|(_, f)| *f /= res.char_sum);
-        res.bigrams.iter_mut().for_each(|(_, f)| *f /= res.bigram_sum);
-        res.skipgrams.iter_mut().for_each(|(_, f)| *f /= res.skipgram_sum);
-        res.skipgrams2.iter_mut().for_each(|(_, f)| *f /= res.skipgram2_sum);
-        res.skipgrams3.iter_mut().for_each(|(_, f)| *f /= res.skipgram3_sum);
-        res.trigrams.iter_mut().for_each(|(_, f)| *f /= res.trigram_sum);
-        
-        res.characters.sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
-        res.bigrams.sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
-        res.skipgrams.sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
-        res.skipgrams2.sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
-        res.skipgrams3.sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
-        res.trigrams.sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
+        res.characters
+            .iter_mut()
+            .for_each(|(_, f)| *f /= res.char_sum);
+        res.bigrams
+            .iter_mut()
+            .for_each(|(_, f)| *f /= res.bigram_sum);
+        res.skipgrams
+            .iter_mut()
+            .for_each(|(_, f)| *f /= res.skipgram_sum);
+        res.skipgrams2
+            .iter_mut()
+            .for_each(|(_, f)| *f /= res.skipgram2_sum);
+        res.skipgrams3
+            .iter_mut()
+            .for_each(|(_, f)| *f /= res.skipgram3_sum);
+        res.trigrams
+            .iter_mut()
+            .for_each(|(_, f)| *f /= res.trigram_sum);
+
+        res.characters
+            .sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
+        res.bigrams
+            .sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
+        res.skipgrams
+            .sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
+        res.skipgrams2
+            .sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
+        res.skipgrams3
+            .sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
+        res.trigrams
+            .sort_by(|_, f1, _, f2| f2.partial_cmp(f1).unwrap());
 
         res
     }
@@ -274,38 +308,50 @@ impl TextData {
     }
 
     pub(crate) fn add_character(&mut self, c: char, freq: f64) {
-        self.characters.entry(c)
-            .and_modify(|e| *e += freq).or_insert(freq);
+        self.characters
+            .entry(c)
+            .and_modify(|e| *e += freq)
+            .or_insert(freq);
         self.char_sum += freq;
     }
 
     pub(crate) fn add_bigram(&mut self, bigram: [char; 2], freq: f64) {
-        self.bigrams.entry(SmartString::from_iter(bigram))
-            .and_modify(|e| *e += freq).or_insert(freq);
+        self.bigrams
+            .entry(SmartString::from_iter(bigram))
+            .and_modify(|e| *e += freq)
+            .or_insert(freq);
         self.bigram_sum += freq;
     }
 
     pub(crate) fn add_skipgram(&mut self, skipgram: [char; 2], freq: f64) {
-        self.skipgrams.entry(SmartString::from_iter(skipgram))
-            .and_modify(|e| *e += freq).or_insert(freq);
+        self.skipgrams
+            .entry(SmartString::from_iter(skipgram))
+            .and_modify(|e| *e += freq)
+            .or_insert(freq);
         self.skipgram_sum += freq;
     }
 
     pub(crate) fn add_skipgram2(&mut self, skipgram: [char; 2], freq: f64) {
-        self.skipgrams2.entry(SmartString::from_iter(skipgram))
-            .and_modify(|e| *e += freq).or_insert(freq);
+        self.skipgrams2
+            .entry(SmartString::from_iter(skipgram))
+            .and_modify(|e| *e += freq)
+            .or_insert(freq);
         self.skipgram2_sum += freq;
     }
 
     pub(crate) fn add_skipgram3(&mut self, skipgram: [char; 2], freq: f64) {
-        self.skipgrams3.entry(SmartString::from_iter(skipgram))
-            .and_modify(|e| *e += freq).or_insert(freq);
+        self.skipgrams3
+            .entry(SmartString::from_iter(skipgram))
+            .and_modify(|e| *e += freq)
+            .or_insert(freq);
         self.skipgram3_sum += freq;
     }
 
     pub(crate) fn add_trigram(&mut self, trigram: [char; 3], freq: f64) {
-        self.trigrams.entry(SmartString::from_iter(trigram))
-            .and_modify(|e| *e += freq).or_insert(freq);
+        self.trigrams
+            .entry(SmartString::from_iter(trigram))
+            .and_modify(|e| *e += freq)
+            .or_insert(freq);
         self.trigram_sum += freq;
     }
 
@@ -329,7 +375,7 @@ impl TextData {
             .create(true)
             .truncate(true)
             .open(format!("{}/{}.json", data_dir, self.language))?;
-        
+
         file.write(ser.into_inner().as_slice())?;
         Ok(())
     }
@@ -338,7 +384,7 @@ impl TextData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{*, utility::ApproxEq};
+    use crate::{utility::ApproxEq, *};
 
     #[test]
     fn from_textngrams() {
@@ -349,11 +395,9 @@ mod tests {
         ngrams.ngrams.insert("gus  ", 1);
         ngrams.ngrams.insert("us   ", 1);
         ngrams.ngrams.insert("s    ", 1);
-        let translator = Translator::new()
-            .letters_to_lowercase("amogus")
-            .build();
+        let translator = Translator::new().letters_to_lowercase("amogus").build();
         let data = TextData::from((ngrams, "among", translator));
-        
+
         assert_eq!(data.char_sum, 6.0,);
         assert_eq!(data.bigram_sum, 5.0,);
         assert_eq!(data.skipgram_sum, 4.0,);
@@ -362,76 +406,113 @@ mod tests {
         assert_eq!(data.trigram_sum, data.skipgram_sum);
 
         for (_, f) in data.characters {
-            assert!(f.approx_eq_dbg(1.0/6.0, 15));
+            assert!(f.approx_eq_dbg(1.0 / 6.0, 15));
         }
         for (_, f) in data.bigrams {
-            assert!(f.approx_eq_dbg(1.0/5.0, 15));
+            assert!(f.approx_eq_dbg(1.0 / 5.0, 15));
         }
         for (_, f) in data.skipgrams {
-            assert!(f.approx_eq_dbg(1.0/4.0, 15));
+            assert!(f.approx_eq_dbg(1.0 / 4.0, 15));
         }
         for (_, f) in data.skipgrams2 {
-            assert!(f.approx_eq_dbg(1.0/3.0, 15));
+            assert!(f.approx_eq_dbg(1.0 / 3.0, 15));
         }
         for (_, f) in data.skipgrams3 {
-            assert!(f.approx_eq_dbg(1.0/2.0, 15));
+            assert!(f.approx_eq_dbg(1.0 / 2.0, 15));
         }
         for (_, f) in data.trigrams {
-            assert!(f.approx_eq_dbg(1.0/4.0, 15));
+            assert!(f.approx_eq_dbg(1.0 / 4.0, 15));
         }
     }
 
-	#[test]
-	fn load_language_data() {
+    #[test]
+    fn load_language_data() {
         use language_data::*;
 
-		load_default("test");
+        load_default("test");
 
-		let data = LanguageData::from_file("static/language_data", "test")
-			.expect("'test.json' in static/language_data/ was not created");
-		
-		assert!(data.language == "test");
+        let data = LanguageData::from_file("static/language_data", "test")
+            .expect("'test.json' in static/language_data/ was not created");
 
-		let total_c = data.characters.iter()
-            .map(|&f| f)
+        assert!(data.language == "test");
+
+        let total_c = data
+            .characters
+            .iter()
+            .filter(|f| f > &&0.0)
+            .copied()
             .reduce(f64::min)
             .unwrap();
-        let total_c = (1.0/total_c).round();
-        
+        let total_c = (1.0 / total_c).round();
+
         assert_eq!(total_c, 8.0);
-        
-        assert_eq!(data.characters.get(data.convert_u8.to_single_lossy('e') as usize), Some(&(2.0/total_c)));
-        assert_eq!(data.characters.get(data.convert_u8.to_single_lossy('\'') as usize), Some(&(1.0/total_c)));
 
-        let total_b = 1.0/data.bigrams.iter()
-            .map(|&f| f)
-            .filter(|f| f > &0.0)
-            .reduce(f64::min)
-            .unwrap();
+        assert_eq!(
+            data.characters
+                .get(data.convert_u8.to_single_lossy('e') as usize),
+            Some(&(2.0 / total_c))
+        );
+        assert_eq!(
+            data.characters
+                .get(data.convert_u8.to_single_lossy('\'') as usize),
+            Some(&(1.0 / total_c))
+        );
+
+        let total_b = 1.0
+            / data
+                .bigrams
+                .iter()
+                .map(|&f| f)
+                .filter(|f| f > &0.0)
+                .reduce(f64::min)
+                .unwrap();
         let len = data.characters.len();
 
-        assert_eq!(data.bigrams.get(data.convert_u8.to_bigram_lossy(['\'', '*'], len)), Some(&(1.0/total_b)));
-        assert_eq!(data.bigrams.get(data.convert_u8.to_bigram_lossy(['1', ':'], len)), None);
-
-		let total_s = 1.0/data.skipgrams.iter()
-            .map(|&f| f)
-            .filter(|f| f > &0.0)
-            .reduce(f64::min)
-            .unwrap();
-
-		assert_eq!(data.skipgrams.get(data.convert_u8.to_bigram_lossy([';', 'd'], len)), Some(&(1.0/total_s)));
-		assert_eq!(data.skipgrams.get(data.convert_u8.to_bigram_lossy(['*', 'e'], len)), Some(&(1.0/total_s)));
-		assert_eq!(data.skipgrams.get(data.convert_u8.to_bigram_lossy(['t', 'e'], len)), Some(&(1.0/total_s)));
-		assert_eq!(data.skipgrams.get(data.convert_u8.to_bigram_lossy(['\'', 't'], len)), Some(&0.0));
-	}
-
-	#[test]
-	fn get_generator() {
-		let a = generate::LayoutGeneration::new(
-            "test",
-            "static",
-            None,
+        assert_eq!(
+            data.bigrams
+                .get(data.convert_u8.to_bigram_lossy(['\'', '*'], len)),
+            Some(&(1.0 / total_b))
         );
-		assert!(a.is_ok());
-	}
+        assert_eq!(
+            data.bigrams
+                .get(data.convert_u8.to_bigram_lossy(['1', ':'], len)),
+            None
+        );
+
+        let total_s = 1.0
+            / data
+                .skipgrams
+                .iter()
+                .map(|&f| f)
+                .filter(|f| f > &0.0)
+                .reduce(f64::min)
+                .unwrap();
+
+        assert_eq!(
+            data.skipgrams
+                .get(data.convert_u8.to_bigram_lossy([';', 'd'], len)),
+            Some(&(1.0 / total_s))
+        );
+        assert_eq!(
+            data.skipgrams
+                .get(data.convert_u8.to_bigram_lossy(['*', 'e'], len)),
+            Some(&(1.0 / total_s))
+        );
+        assert_eq!(
+            data.skipgrams
+                .get(data.convert_u8.to_bigram_lossy(['t', 'e'], len)),
+            Some(&(1.0 / total_s))
+        );
+        assert_eq!(
+            data.skipgrams
+                .get(data.convert_u8.to_bigram_lossy(['\'', 't'], len)),
+            Some(&0.0)
+        );
+    }
+
+    #[test]
+    fn get_generator() {
+        let a = generate::LayoutGeneration::new("test", "static", None);
+        assert!(a.is_ok());
+    }
 }

@@ -4,16 +4,11 @@ use std::path::Path;
 use getargs::Options;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use oxeylyzer_core::{
-    generate::LayoutGeneration,
-    layout::*,
-    weights::Config,
-    load_text
-};
+use oxeylyzer_core::{generate::LayoutGeneration, layout::*, load_text, weights::Config};
 
-use crate::tui::*;
 use crate::commands::*;
 use crate::corpus_transposition::CorpusConfig;
+use crate::tui::*;
 use ArgumentType::*;
 
 pub struct Repl {
@@ -21,12 +16,14 @@ pub struct Repl {
     gen: LayoutGeneration,
     saved: IndexMap<String, FastLayout>,
     temp_generated: Vec<FastLayout>,
-    pins: Vec<usize>
+    pins: Vec<usize>,
 }
 
 impl Repl {
     pub fn new<P>(generator_base_path: P) -> Result<Self, String>
-        where P: AsRef<Path> {
+    where
+        P: AsRef<Path>,
+    {
         let config = Config::new();
         let language = config.defaults.language.clone();
         let pins = config.pins.clone();
@@ -35,17 +32,20 @@ impl Repl {
             config.defaults.language.clone().as_str(),
             generator_base_path.as_ref(),
             Some(config),
-        ).expect(format!("Could not read language data for {}", language).as_str());
+        )
+        .expect(format!("Could not read language data for {}", language).as_str());
 
         Ok(Self {
-            saved: gen.load_layouts(
-                generator_base_path.as_ref().join("layouts"),
-                language.as_str())
+            saved: gen
+                .load_layouts(
+                    generator_base_path.as_ref().join("layouts"),
+                    language.as_str(),
+                )
                 .map_err(|e| e.to_string())?,
             language,
             gen,
             temp_generated: Vec::new(),
-            pins
+            pins,
         })
     }
 
@@ -72,163 +72,186 @@ impl Repl {
     }
 
     pub fn rank(&self) {
-		for (name, layout) in self.saved.iter() {
-			println!("{:10}{}", format!("{:.3}:", layout.score), name);
-		}
-	}
+        for (name, layout) in self.saved.iter() {
+            println!("{:10}{}", format!("{:.3}:", layout.score), name);
+        }
+    }
 
-	pub fn layout_by_name(&self, name: &str) -> Option<&FastLayout> {
-		self.saved.get(name)
-	}
+    pub fn layout_by_name(&self, name: &str) -> Option<&FastLayout> {
+        self.saved.get(name)
+    }
 
-	pub fn analyze_name(&self, name: &str) {
-		let l = match self.layout_by_name(name) {
-  			Some(layout) => layout,
-  			None => {
-    			println!("layout {} does not exist!", name);
-    			return;
-  			}
-		};
-		println!("{}", name);
-		self.analyze(&l);
-	}
+    pub fn analyze_name(&self, name: &str) {
+        let l = match self.layout_by_name(name) {
+            Some(layout) => layout,
+            None => {
+                println!("layout {} does not exist!", name);
+                return;
+            }
+        };
+        println!("{}", name);
+        self.analyze(&l);
+    }
 
-	fn placeholder_name(&self, layout: &FastLayout) -> Result<String, String> {
-		for i in 1..1000usize {
-    		let new_name_bytes = layout.matrix[10..14].into_iter()
+    fn placeholder_name(&self, layout: &FastLayout) -> Result<String, String> {
+        for i in 1..1000usize {
+            let new_name_bytes = layout.matrix[10..14]
+                .into_iter()
                 .map(|b| *b)
                 .collect::<Vec<u8>>();
             let mut new_name = self.gen.data.convert_u8.as_str(new_name_bytes.as_slice());
-			
-			new_name.push_str(format!("{}", i).as_str());
 
-			if !self.saved.contains_key(&new_name) {
-				return Ok(new_name);
-			}
-		}
-		Err("Could not find a good placeholder name for the layout.".to_string())
-	}
+            new_name.push_str(format!("{}", i).as_str());
 
-	pub fn save(&mut self, mut layout: FastLayout, name: Option<String>) -> Result<(), String> {
-		let new_name = if let Some(n) = name {
-			n.replace(" ", "_")
-		} else {
-			self.placeholder_name(&layout).unwrap()
-		};
+            if !self.saved.contains_key(&new_name) {
+                return Ok(new_name);
+            }
+        }
+        Err("Could not find a good placeholder name for the layout.".to_string())
+    }
 
-		let mut f = std::fs::OpenOptions::new()
-			.write(true)
-			.create(true)
-			.truncate(true)
-			.open(format!("static/layouts/{}/{}.kb", self.language, new_name))
+    pub fn save(&mut self, mut layout: FastLayout, name: Option<String>) -> Result<(), String> {
+        let new_name = if let Some(n) = name {
+            n.replace(" ", "_")
+        } else {
+            self.placeholder_name(&layout).unwrap()
+        };
+
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(format!("static/layouts/{}/{}.kb", self.language, new_name))
             .map_err(|e| e.to_string())?;
-		
-		let layout_formatted = layout.formatted_string(&self.gen.data.convert_u8);
-		println!("saved {}\n{}", new_name, layout_formatted);
-		f.write(layout_formatted.as_bytes()).unwrap();
 
-		layout.score = self.gen.score(&layout);
-		self.saved.insert(new_name, layout);
-		self.saved.sort_by(|_, a, _, b| {
-			a.score.partial_cmp(&b.score).unwrap()
-		});
+        let layout_formatted = layout.formatted_string(&self.gen.data.convert_u8);
+        println!("saved {}\n{}", new_name, layout_formatted);
+        f.write(layout_formatted.as_bytes()).unwrap();
 
-		Ok(())
-	}
+        layout.score = self.gen.score(&layout);
+        self.saved.insert(new_name, layout);
+        self.saved
+            .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
 
-	pub fn analyze(&self, layout: &FastLayout) {
-		let stats = self.gen.get_layout_stats(layout);
-		let score = if layout.score == 0.000 {
-			self.gen.score(layout)
-		} else {
-			layout.score
-		};
+        Ok(())
+    }
 
-		let layout_str = heatmap_string(&self.gen.data, layout);
-		
-		println!("{}\n{}\nScore: {:.3}", layout_str, stats, score);
-	}
+    pub fn analyze(&self, layout: &FastLayout) {
+        let stats = self.gen.get_layout_stats(layout);
+        let score = if layout.score == 0.000 {
+            self.gen.score(layout)
+        } else {
+            layout.score
+        };
 
-	pub fn compare_name(&self, name1: &str, name2: &str) {
-		let l1 = match self.layout_by_name(name1) {
-  			Some(layout) => layout,
-  			None => {
-    			println!("layout {} does not exist!", name1);
-    			return;
-  			}
-		};
-		let l2 = match self.layout_by_name(name2) {
-  			Some(layout) => layout,
-  			None => {
-    			println!("layout {} does not exist!", name2);
-    			return;
-  			}
-		};
-		println!("\n{:31}{}", name1, name2);
-		for y in 0..3 {
-			for (n, layout) in [l1, l2].into_iter().enumerate() {
-				for x in 0..10 {
-					print!("{} ", heatmap_heat(&self.gen.data, layout.c(x + 10*y)));
-					if x == 4 {
-						print!(" ");
-					}
-				}
-				if n == 0 {
-					print!("          ");
-				}
-			}
-			println!();
-		}
-		let s1 = self.gen.get_layout_stats(l1);
-		let s2 = self.gen.get_layout_stats(l2);
-		let ts1 = s1.trigram_stats;
-		let ts2 = s2.trigram_stats;
-		println!(
-			concat!(
-			"Sfb:               {: <11} Sfb:               {:.3}%\n",
-			"Dsfb:              {: <11} Dsfb:              {:.3}%\n",
-			"Finger Speed:      {: <11} Finger Speed:      {:.3}\n",
-            "Scissors           {: <11} Scissors:          {:.3}%\n",
-			"Lsbs               {: <11} Lsbs:              {:.3}%\n\n",
-			"Inrolls:           {: <11} Inrolls:           {:.2}%\n",
-			"Outrolls:          {: <11} Outrolls:          {:.2}%\n",
-			"Total Rolls:       {: <11} Total Rolls:       {:.2}%\n",
-			"Onehands:          {: <11} Onehands:          {:.3}%\n\n",
-			"Alternates:        {: <11} Alternates:        {:.2}%\n",
-			"Alternates Sfs:    {: <11} Alternates Sfs:    {:.2}%\n",
-			"Total Alternates:  {: <11} Total Alternates:  {:.2}%\n\n",
-			"Redirects:         {: <11} Redirects:         {:.3}%\n",
-            "Redirects Sfs:     {: <11} Redirects Sfs:     {:.3}%\n",
-			"Bad Redirects:     {: <11} Bad Redirects:     {:.3}%\n",
-            "Bad Redirects Sfs: {: <11} Bad Redirects Sfs: {:.3}%\n",
-			"Total Redirects:   {: <11} Total Redirects:   {:.3}%\n\n",
-			"Bad Sfbs:          {: <11} Bad Sfbs:          {:.3}%\n",
-			"Sft:               {: <11} Sft:               {:.3}%\n\n",
-			"Score:             {: <11} Score:             {:.3}\n"
-		),
-			format!("{:.3}%", s1.sfb*100.0), s2.sfb*100.0,
-			format!("{:.3}%", s1.dsfb*100.0), s2.dsfb*100.0,
-			format!("{:.3}", s1.fspeed*10.0), s2.fspeed*10.0,
-			format!("{:.3}%", s1.scissors*100.0), s2.scissors*100.0,
-            format!("{:.3}%", s1.lsbs*100.0), s2.lsbs*100.0,
-			format!("{:.2}%", ts1.inrolls*100.0), ts2.inrolls*100.0,
-			format!("{:.2}%", ts1.outrolls*100.0), ts2.outrolls*100.0,
-			format!("{:.2}%", (ts1.inrolls + ts1.outrolls)*100.0), (ts2.inrolls + ts2.outrolls)*100.0,
-			format!("{:.3}%", ts1.onehands*100.0), ts2.onehands*100.0,
-			format!("{:.2}%", ts1.alternates*100.0), ts2.alternates*100.0,
-			format!("{:.2}%", ts1.alternates_sfs*100.0), ts2.alternates_sfs*100.0,
-			format!("{:.2}%", (ts1.alternates + ts1.alternates_sfs)*100.0), (ts2.alternates + ts2.alternates_sfs)*100.0,
-			format!("{:.3}%", ts1.redirects*100.0), ts2.redirects*100.0,
-            format!("{:.3}%", ts1.redirects_sfs*100.0), ts2.redirects_sfs*100.0,
-			format!("{:.3}%", ts1.bad_redirects*100.0), ts2.bad_redirects*100.0,
-            format!("{:.3}%", ts1.bad_redirects_sfs*100.0), ts2.bad_redirects_sfs*100.0,
-			format!("{:.3}%", (ts1.redirects + ts1.redirects_sfs + ts1.bad_redirects + ts1.bad_redirects_sfs)*100.0),
-            (ts2.redirects + ts2.redirects_sfs + ts2.bad_redirects + ts2.bad_redirects_sfs)*100.0,
-			format!("{:.3}%", ts1.bad_sfbs*100.0), ts2.bad_sfbs*100.0,
-			format!("{:.3}%", ts1.sfts*100.0), ts2.sfts*100.0,
-			format!("{:.3}", l1.score), l2.score
-		);
-	}
+        let layout_str = heatmap_string(&self.gen.data, layout);
+
+        println!("{}\n{}\nScore: {:.3}", layout_str, stats, score);
+    }
+
+    pub fn compare_name(&self, name1: &str, name2: &str) {
+        let l1 = match self.layout_by_name(name1) {
+            Some(layout) => layout,
+            None => {
+                println!("layout {} does not exist!", name1);
+                return;
+            }
+        };
+        let l2 = match self.layout_by_name(name2) {
+            Some(layout) => layout,
+            None => {
+                println!("layout {} does not exist!", name2);
+                return;
+            }
+        };
+        println!("\n{:31}{}", name1, name2);
+        for y in 0..3 {
+            for (n, layout) in [l1, l2].into_iter().enumerate() {
+                for x in 0..10 {
+                    print!("{} ", heatmap_heat(&self.gen.data, layout.c(x + 10 * y)));
+                    if x == 4 {
+                        print!(" ");
+                    }
+                }
+                if n == 0 {
+                    print!("          ");
+                }
+            }
+            println!();
+        }
+        let s1 = self.gen.get_layout_stats(l1);
+        let s2 = self.gen.get_layout_stats(l2);
+        let ts1 = s1.trigram_stats;
+        let ts2 = s2.trigram_stats;
+        println!(
+            concat!(
+                "Sfb:               {: <11} Sfb:               {:.3}%\n",
+                "Dsfb:              {: <11} Dsfb:              {:.3}%\n",
+                "Finger Speed:      {: <11} Finger Speed:      {:.3}\n",
+                "Scissors           {: <11} Scissors:          {:.3}%\n",
+                "Lsbs               {: <11} Lsbs:              {:.3}%\n\n",
+                "Inrolls:           {: <11} Inrolls:           {:.2}%\n",
+                "Outrolls:          {: <11} Outrolls:          {:.2}%\n",
+                "Total Rolls:       {: <11} Total Rolls:       {:.2}%\n",
+                "Onehands:          {: <11} Onehands:          {:.3}%\n\n",
+                "Alternates:        {: <11} Alternates:        {:.2}%\n",
+                "Alternates Sfs:    {: <11} Alternates Sfs:    {:.2}%\n",
+                "Total Alternates:  {: <11} Total Alternates:  {:.2}%\n\n",
+                "Redirects:         {: <11} Redirects:         {:.3}%\n",
+                "Redirects Sfs:     {: <11} Redirects Sfs:     {:.3}%\n",
+                "Bad Redirects:     {: <11} Bad Redirects:     {:.3}%\n",
+                "Bad Redirects Sfs: {: <11} Bad Redirects Sfs: {:.3}%\n",
+                "Total Redirects:   {: <11} Total Redirects:   {:.3}%\n\n",
+                "Bad Sfbs:          {: <11} Bad Sfbs:          {:.3}%\n",
+                "Sft:               {: <11} Sft:               {:.3}%\n\n",
+                "Score:             {: <11} Score:             {:.3}\n"
+            ),
+            format!("{:.3}%", s1.sfb * 100.0),
+            s2.sfb * 100.0,
+            format!("{:.3}%", s1.dsfb * 100.0),
+            s2.dsfb * 100.0,
+            format!("{:.3}", s1.fspeed * 10.0),
+            s2.fspeed * 10.0,
+            format!("{:.3}%", s1.scissors * 100.0),
+            s2.scissors * 100.0,
+            format!("{:.3}%", s1.lsbs * 100.0),
+            s2.lsbs * 100.0,
+            format!("{:.2}%", ts1.inrolls * 100.0),
+            ts2.inrolls * 100.0,
+            format!("{:.2}%", ts1.outrolls * 100.0),
+            ts2.outrolls * 100.0,
+            format!("{:.2}%", (ts1.inrolls + ts1.outrolls) * 100.0),
+            (ts2.inrolls + ts2.outrolls) * 100.0,
+            format!("{:.3}%", ts1.onehands * 100.0),
+            ts2.onehands * 100.0,
+            format!("{:.2}%", ts1.alternates * 100.0),
+            ts2.alternates * 100.0,
+            format!("{:.2}%", ts1.alternates_sfs * 100.0),
+            ts2.alternates_sfs * 100.0,
+            format!("{:.2}%", (ts1.alternates + ts1.alternates_sfs) * 100.0),
+            (ts2.alternates + ts2.alternates_sfs) * 100.0,
+            format!("{:.3}%", ts1.redirects * 100.0),
+            ts2.redirects * 100.0,
+            format!("{:.3}%", ts1.redirects_sfs * 100.0),
+            ts2.redirects_sfs * 100.0,
+            format!("{:.3}%", ts1.bad_redirects * 100.0),
+            ts2.bad_redirects * 100.0,
+            format!("{:.3}%", ts1.bad_redirects_sfs * 100.0),
+            ts2.bad_redirects_sfs * 100.0,
+            format!(
+                "{:.3}%",
+                (ts1.redirects + ts1.redirects_sfs + ts1.bad_redirects + ts1.bad_redirects_sfs)
+                    * 100.0
+            ),
+            (ts2.redirects + ts2.redirects_sfs + ts2.bad_redirects + ts2.bad_redirects_sfs) * 100.0,
+            format!("{:.3}%", ts1.bad_sfbs * 100.0),
+            ts2.bad_sfbs * 100.0,
+            format!("{:.3}%", ts1.sfts * 100.0),
+            ts2.sfts * 100.0,
+            format!("{:.3}", l1.score),
+            l2.score
+        );
+    }
 
     fn get_nth(&self, nr: usize) -> Option<FastLayout> {
         if nr < self.temp_generated.len() {
@@ -247,11 +270,11 @@ impl Repl {
     pub fn sfr_freq(&self) -> f64 {
         let len = self.gen.data.characters.len();
         let chars = 0..len;
-        chars.clone().cartesian_product(chars)
+        chars
+            .clone()
+            .cartesian_product(chars)
             .filter(|(i1, i2)| i1 == i2)
-            .map(|(c1, c2)|
-                self.gen.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0)
-            )
+            .map(|(c1, c2)| self.gen.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0))
             .sum()
     }
 
@@ -358,11 +381,11 @@ impl Repl {
                         let preferred_folder = args.next_positional();
                         let translator = CorpusConfig::new_translator(language, preferred_folder);
                         let is_raw_translator = translator.is_raw;
-                        
+
                         println!("loading data for {language}...");
                         load_text::load_data(language, translator)
                             .map_err(|e| e.to_string())?;
-                        
+
                         if !is_raw_translator {
                             let config = Config::new();
                             if let Ok(generator) = LayoutGeneration::new(
@@ -376,7 +399,7 @@ impl Repl {
                                     "static/layouts",
                                     language
                                 ).expect("couldn't load layouts lol");
-                                
+
                                 println!(
                                     "Set language to {}. Sfr: {:.2}%",
                                     language, self.sfr_freq() * 100.0
@@ -408,7 +431,7 @@ impl Repl {
                                 "static/layouts",
                                 language
                             ).expect("couldn't load layouts lol");
-                            
+
                             println!(
                                 "Set language to {}. Sfr: {:.2}%",
                                 language, self.sfr_freq() * 100.0
@@ -597,7 +620,7 @@ impl Repl {
             Some(c) => println!("error: the command '{c}' wasn't recognized"),
             None => {}
         }
-        
+
         Ok(false)
     }
 }

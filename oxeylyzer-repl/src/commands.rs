@@ -2,14 +2,14 @@
 pub(crate) enum ArgumentType<'a> {
     R(&'a str),
     O(&'a str),
-    A(&'a str)
+    A(&'a str),
 }
 
 impl<'a> ArgumentType<'a> {
     pub(crate) fn is_required(&self) -> bool {
         match *self {
             Self::R(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -26,11 +26,12 @@ impl<'a> ArgumentType<'a> {
 }
 
 fn usage(command_name: &str, args: &[ArgumentType]) -> String {
-    let args_left_right = args.into_iter()
+    let args_left_right = args
+        .into_iter()
         .map(ArgumentType::parse)
         .collect::<Vec<_>>()
         .join(" ");
-    
+
     format!("USAGE:\n    {command_name} {args_left_right}")
 }
 
@@ -40,17 +41,22 @@ pub(crate) fn print_help(command_name: &str, about: &str, args: &[ArgumentType])
 
 pub(crate) fn print_error(command_name: &str, args: &[ArgumentType]) {
     let plural = if args.len() > 1 { "s were" } else { " was" };
-    
-    let args_top_down = args.into_iter()
+
+    let args_top_down = args
+        .into_iter()
         .filter(|a| a.is_required())
         .map(ArgumentType::parse)
         .collect::<Vec<_>>()
         .join("\n    ");
 
-    println!(concat!(
-        "error: The following required argument{} not provided:\n    {}\n\n{}",
-        "\n\nFor more information try 'help'"),
-        plural, args_top_down, usage(command_name, args)
+    println!(
+        concat!(
+            "error: The following required argument{} not provided:\n    {}\n\n{}",
+            "\n\nFor more information try 'help'"
+        ),
+        plural,
+        args_top_down,
+        usage(command_name, args)
     );
 }
 
@@ -182,7 +188,7 @@ pub(crate) fn print_error(command_name: &str, args: &[ArgumentType]) {
 //                     ) {
 //                         self.language = language.to_string();
 //                         self.gen = generator;
-                        
+
 //                         println!(
 //                             "Set language to {}. Sfr: {:.2}%",
 //                             language, self.double_freq() * 100.0
@@ -242,7 +248,7 @@ pub(crate) fn print_error(command_name: &str, args: &[ArgumentType]) {
 //             match opts.next_positional() {
 //                 Some("generate") | Some("gen") | Some("g") => {
 //                     print_help(
-//                         "generate", 
+//                         "generate",
 //                         "(g, gen) Generate a number of layouts and shows the best 10, All layouts generated are accessible until reloading or quiting.",
 //                         &[R("amount")]
 //                     )
@@ -361,6 +367,6 @@ pub(crate) fn print_error(command_name: &str, args: &[ArgumentType]) {
 //         Some(c) => println!("error: the command '{c}' wasn't recognized"),
 //         None => {}
 //     }
-    
+
 //     Ok(false)
 // }

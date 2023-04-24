@@ -1,7 +1,7 @@
+use anyhow::Result;
 use arrayvec::ArrayVec;
 use fxhash::FxHashMap;
 use indexmap::IndexMap;
-use anyhow::Result;
 use itertools::Itertools;
 use serde::Deserialize;
 use serde_json;
@@ -18,7 +18,7 @@ pub type BigramData = Vec<f64>;
 pub type TrigramData = Vec<([u8; 3], f64)>;
 
 trait BigramLookup {
-	fn lookup(&self, c1: usize, c2: usize, char_count: usize) -> f64;
+    fn lookup(&self, c1: usize, c2: usize, char_count: usize) -> f64;
 }
 
 impl BigramLookup for BigramData {
@@ -29,102 +29,112 @@ impl BigramLookup for BigramData {
 
 #[derive(Deserialize)]
 struct LanguageDataInter {
-	pub language: String,
-	pub characters: FxHashMap<char, f64>,
-	pub bigrams: FxHashMap<String, f64>,
-	pub skipgrams: FxHashMap<String, f64>,
-	pub skipgrams2: FxHashMap<String, f64>,
-	pub skipgrams3: FxHashMap<String, f64>,
-	pub trigrams: IndexMap<String, f64>
+    pub language: String,
+    pub characters: FxHashMap<char, f64>,
+    pub bigrams: FxHashMap<String, f64>,
+    pub skipgrams: FxHashMap<String, f64>,
+    pub skipgrams2: FxHashMap<String, f64>,
+    pub skipgrams3: FxHashMap<String, f64>,
+    pub trigrams: IndexMap<String, f64>,
 }
 
 fn get_char_data(data: FxHashMap<char, f64>, con: &mut ConvertU8) -> CharacterData {
-	let mut res = CharacterData::new();
-	for (c, f) in data.into_iter() {
-		con.insert_single(c);
-		res.push(f);
-	}
-	res
+    let mut res = CharacterData::new();
+    for (c, f) in data.into_iter() {
+        con.insert_single(c);
+        res.push(f);
+    }
+    res
 }
 
 fn get_bigram_data(data: FxHashMap<String, f64>, con: &mut ConvertU8) -> BigramData {
-	(0..con.len()).into_iter()
-		.cartesian_product(0..con.len())
-		.map(|(c1, c2)| con.as_str(&[c1, c2]))
-		.map(|bigram| *data.get(&bigram).unwrap_or(&0.0))
-		.collect::<BigramData>()
+    (0..con.len())
+        .into_iter()
+        .cartesian_product(0..con.len())
+        .map(|(c1, c2)| con.as_str(&[c1, c2]))
+        .map(|bigram| *data.get(&bigram).unwrap_or(&0.0))
+        .collect::<BigramData>()
 }
 
 fn get_trigram_data(data: IndexMap<String, f64>, con: &mut ConvertU8) -> TrigramData {
-	let mut res = TrigramData::new();
-	for (trigram, freq) in data {
-		let tv = trigram.chars().collect::<Vec<char>>();
-		let tv_u8 = con.to(tv);
+    let mut res = TrigramData::new();
+    for (trigram, freq) in data {
+        let tv = trigram.chars().collect::<Vec<char>>();
+        let tv_u8 = con.to(tv);
 
-		if tv_u8[0] != tv_u8[1] && tv_u8[1] != tv_u8[2] {
-			let new_trigram = [tv_u8[0], tv_u8[1], tv_u8[2]];
-			res.push((new_trigram, freq));
-		}
-	}
-	res
+        if tv_u8[0] != tv_u8[1] && tv_u8[1] != tv_u8[2] {
+            let new_trigram = [tv_u8[0], tv_u8[1], tv_u8[2]];
+            res.push((new_trigram, freq));
+        }
+    }
+    res
 }
 pub struct LanguageData {
-	pub characters: CharacterData,
-	pub bigrams: BigramData,
-	pub skipgrams: BigramData,
-	pub skipgrams2: BigramData,
-	pub skipgrams3: BigramData,
-	pub weighted_bigrams: BigramData,
-	pub trigrams: TrigramData,
-	pub language: String,
-	pub convert_u8: ConvertU8
+    pub characters: CharacterData,
+    pub bigrams: BigramData,
+    pub skipgrams: BigramData,
+    pub skipgrams2: BigramData,
+    pub skipgrams3: BigramData,
+    pub weighted_bigrams: BigramData,
+    pub trigrams: TrigramData,
+    pub language: String,
+    pub convert_u8: ConvertU8,
 }
 
 impl From<LanguageDataInter> for LanguageData {
-	fn from(mut inter: LanguageDataInter) -> Self {
-		let mut convert_u8 = ConvertU8::new();
-		
-		for c in ['\'', ',', '.', ';', '/'] {
-			if !inter.characters.contains_key(&c) {
-				inter.characters.insert(c, 0.0);
-			}
-		}
+    fn from(mut inter: LanguageDataInter) -> Self {
+        let mut convert_u8 = ConvertU8::new();
 
-		let characters = get_char_data(inter.characters, &mut convert_u8);
+        for c in ['\'', ',', '.', ';', '/'] {
+            if !inter.characters.contains_key(&c) {
+                inter.characters.insert(c, 0.0);
+            }
+        }
 
-		let bigrams = get_bigram_data(inter.bigrams, &mut convert_u8);
-		let skipgrams = get_bigram_data(inter.skipgrams, &mut convert_u8);
-		let skipgrams2 = get_bigram_data(inter.skipgrams2, &mut convert_u8);
-		let skipgrams3 = get_bigram_data(inter.skipgrams3, &mut convert_u8);
+        let characters = get_char_data(inter.characters, &mut convert_u8);
 
-		let weighted_bigrams = BigramData::new();
+        let bigrams = get_bigram_data(inter.bigrams, &mut convert_u8);
+        let skipgrams = get_bigram_data(inter.skipgrams, &mut convert_u8);
+        let skipgrams2 = get_bigram_data(inter.skipgrams2, &mut convert_u8);
+        let skipgrams3 = get_bigram_data(inter.skipgrams3, &mut convert_u8);
 
-		let trigrams = get_trigram_data(inter.trigrams, &mut convert_u8);
+        let weighted_bigrams = BigramData::new();
 
-		Self {
-			characters, bigrams, skipgrams, skipgrams2, skipgrams3, trigrams,
-			weighted_bigrams, language: inter.language, convert_u8
-		}
-	}
+        let trigrams = get_trigram_data(inter.trigrams, &mut convert_u8);
+
+        Self {
+            characters,
+            bigrams,
+            skipgrams,
+            skipgrams2,
+            skipgrams3,
+            trigrams,
+            weighted_bigrams,
+            language: inter.language,
+            convert_u8,
+        }
+    }
 }
 
 impl LanguageData {
-	pub fn new(text: &str) -> Result<LanguageData> {
-		let data: LanguageDataInter = serde_json::from_str(text)?;
-		Ok(LanguageData::from(data))
-	}
+    pub fn new(text: &str) -> Result<LanguageData> {
+        let data: LanguageDataInter = serde_json::from_str(text)?;
+        Ok(LanguageData::from(data))
+    }
 
-	pub fn from_file<P>(base_path: P, language: &str) -> Result<LanguageData>
-		where P: AsRef<Path> {
-		let file_path = base_path.as_ref().join(language.to_lowercase() + ".json");
-		let mut file = File::open(file_path)?;
-		
-		let mut contents = String::new();
-		file.read_to_string(&mut contents)?;
+    pub fn from_file<P>(base_path: P, language: &str) -> Result<LanguageData>
+    where
+        P: AsRef<Path>,
+    {
+        let file_path = base_path.as_ref().join(language.to_lowercase() + ".json");
+        let mut file = File::open(file_path)?;
 
-		let data: LanguageDataInter = serde_json::from_str(contents.as_str())?;
-		let res = LanguageData::from(data);
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
 
-		Ok(res)
-	}
+        let data: LanguageDataInter = serde_json::from_str(contents.as_str())?;
+        let res = LanguageData::from(data);
+
+        Ok(res)
+    }
 }
