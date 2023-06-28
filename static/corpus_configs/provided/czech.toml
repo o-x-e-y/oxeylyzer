@@ -1,5 +1,7 @@
 inherits = ["default"]
 
+keep = "ěáí"
+
 [multiple]
 uppercase_versions = true # this tries to create a transposition for Č, Ď etc as well.
 list = [

@@ -85,7 +85,7 @@ impl From<LanguageDataInter> for LanguageData {
     fn from(mut inter: LanguageDataInter) -> Self {
         let mut convert_u8 = ConvertU8::new();
 
-        for c in ['\'', ',', '.', ';', '/'] {
+        for c in ['\'', ',', '.', ';', '/', '~'] {
             if !inter.characters.contains_key(&c) {
                 inter.characters.insert(c, 0.0);
             }

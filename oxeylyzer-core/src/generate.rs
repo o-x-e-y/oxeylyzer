@@ -312,6 +312,7 @@ impl LayoutGeneration {
         } else {
             std::fs::create_dir(language_dir_path)?;
         }
+
         Ok(res)
     }
 

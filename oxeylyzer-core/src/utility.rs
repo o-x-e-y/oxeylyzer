@@ -79,7 +79,7 @@ const fn get_possible_swaps() -> [PosPair; 435] {
     res
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ConvertU8 {
     from: Vec<char>,
     to: FxHashMap<char, u8>,
