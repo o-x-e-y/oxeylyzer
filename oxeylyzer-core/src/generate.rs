@@ -673,7 +673,7 @@ impl LayoutGeneration {
         res
     }
 
-    fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
+    pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
         let mut res = LayoutCache::default();
 
         for i in 0..layout.matrix.len() {
@@ -699,7 +699,7 @@ impl LayoutGeneration {
         res
     }
 
-    fn score_swap_cached(
+    pub fn score_swap_cached(
         &self,
         layout: &mut FastLayout,
         swap: &PosPair,
@@ -772,7 +772,7 @@ impl LayoutGeneration {
         trigrams_score - scissors_score - lsbs_score - effort_score - usage_score - fspeed_score
     }
 
-    fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
+    pub fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
         let trigrams_start = self.trigram_char_score(layout, swap);
 
         unsafe { layout.swap_no_bounds(swap) };
