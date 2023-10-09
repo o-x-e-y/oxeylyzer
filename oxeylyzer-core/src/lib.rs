@@ -1,10 +1,5 @@
-#![feature(fs_try_exists)]
-#![feature(exclusive_range_pattern)]
-#![feature(let_chains)]
-#![feature(const_slice_index)]
-#![feature(iterator_try_collect)]
-
 pub mod generate;
+pub mod generate_annealing;
 pub mod language_data;
 pub mod languages_cfg;
 pub mod layout;

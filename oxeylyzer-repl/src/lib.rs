@@ -1,7 +1,3 @@
-#![feature(fs_try_exists)]
-#![feature(exclusive_range_pattern)]
-#![feature(let_chains)]
-
 pub mod commands;
 pub mod corpus_transposition;
 pub mod repl;

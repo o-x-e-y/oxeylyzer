@@ -1040,14 +1040,16 @@ mod tests {
             let cache = GEN.initialize_cache(&layout);
 
             if let (Some(best_swap_normal), best_score_normal) =
-				GEN.best_swap(&mut layout, None, &POSSIBLE_SWAPS) &&
-				let (Some(best_swap_cached), best_score_cached) =
-				GEN.best_swap_cached(&mut layout, &cache, None, &POSSIBLE_SWAPS) {
-
-				if best_score_normal.approx_eq_dbg(best_score_cached, 7) {
-					assert_eq!(best_swap_normal, best_swap_cached);
-				}
-			}
+				GEN.best_swap(&mut layout, None, &POSSIBLE_SWAPS) {
+                
+                if let (Some(best_swap_cached), best_score_cached) =
+                    GEN.best_swap_cached(&mut layout, &cache, None, &POSSIBLE_SWAPS) {
+    
+                    if best_score_normal.approx_eq_dbg(best_score_cached, 7) {
+                        assert_eq!(best_swap_normal, best_swap_cached);
+                    }
+                }
+            }
         }
         println!(
 			"pruned {} times.\nRecalculated trigrams {} times.\namount pruned: {:.2}%\n analyzed {} swaps",
@@ -1101,15 +1103,17 @@ mod tests {
         let cache = GEN.initialize_cache(&qwerty);
 
         if let (Some(best_swap_normal), best_score_normal) =
-			GEN.best_swap(&mut qwerty, None, &POSSIBLE_SWAPS) &&
-			let (Some(best_swap_cached), best_score_cached) =
-			GEN.best_swap_cached(&mut qwerty, &cache, None, &POSSIBLE_SWAPS) {
-
-			if best_score_normal.approx_eq_dbg(best_score_cached, 7) {
-				assert_eq!(best_swap_normal, best_swap_cached);
-			} else {
-				println!("scores not the same")
-			}
+			GEN.best_swap(&mut qwerty, None, &POSSIBLE_SWAPS) {
+            
+            if let (Some(best_swap_cached), best_score_cached) =
+                GEN.best_swap_cached(&mut qwerty, &cache, None, &POSSIBLE_SWAPS) {
+    
+                if best_score_normal.approx_eq_dbg(best_score_cached, 7) {
+                    assert_eq!(best_swap_normal, best_swap_cached);
+                } else {
+                    println!("scores not the same")
+                }
+            }
 		}
     }
 

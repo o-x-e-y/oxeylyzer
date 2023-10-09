@@ -2,6 +2,7 @@ use crate::translation::Translator;
 
 use std::fs::{read_dir, File};
 use std::iter::FromIterator;
+use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::Result;
@@ -214,29 +215,33 @@ impl<'a> From<(TextNgrams<'a, 5>, &str, Translator)> for TextData {
 
         for (ngram, freq) in ngrams.ngrams.into_iter() {
             let first = unsafe { ngram.chars().next().unwrap_unchecked() };
-            if first != ' ' && let Some(first_t) = translator.table.get(&first) && first_t != " " {
-                let mut trans = translator.translate(ngram);
-                match trans.chars().count() {
-                    5.. => {
-                        trans.push(' ');
-
-                        let first_t_len = first_t.chars().count().max(1);
-                        let it1 = trans.char_indices().map(|(i, _)| i).take(first_t_len);
-                        let it2 = trans.char_indices().map(|(i, _)| i).skip(5).take(first_t_len);
-
-                        it1.zip(it2)
-                            .map(|(i1, i2)| &trans[i1..i2])
-                            .for_each(|ngram| res.from_n_subsequent::<5>(ngram, freq as f64)
-                        );
+            if first != ' ' {
+                if let Some(first_t) = translator.table.get(&first) {
+                    if first_t != " " {
+                        let mut trans = translator.translate(ngram);
+                        match trans.chars().count() {
+                            5.. => {
+                                trans.push(' ');
+        
+                                let first_t_len = first_t.chars().count().max(1);
+                                let it1 = trans.char_indices().map(|(i, _)| i).take(first_t_len);
+                                let it2 = trans.char_indices().map(|(i, _)| i).skip(5).take(first_t_len);
+        
+                                it1.zip(it2)
+                                    .map(|(i1, i2)| &trans[i1..i2])
+                                    .for_each(|ngram| res.from_n_subsequent::<5>(ngram, freq as f64)
+                                );
+                            }
+                            4 => {
+                                println!("4 long ngram: '{}'", &trans);
+                                res.from_n_subsequent::<4>(&trans, freq as f64)
+                            },
+                            3 => res.from_n_subsequent::<3>(&trans, freq as f64),
+                            2 => res.from_n_subsequent::<2>(&trans, freq as f64),
+                            1 => res.from_n_subsequent::<1>(&trans, freq as f64),
+                            _ => {}
+                        }
                     }
-                    4 => {
-                        println!("4 long ngram: '{}'", &trans);
-                        res.from_n_subsequent::<4>(&trans, freq as f64)
-                    },
-                    3 => res.from_n_subsequent::<3>(&trans, freq as f64),
-                    2 => res.from_n_subsequent::<2>(&trans, freq as f64),
-                    1 => res.from_n_subsequent::<1>(&trans, freq as f64),
-                    _ => {}
                 }
             }
         }
@@ -280,30 +285,46 @@ impl<'a> From<(TextNgrams<'a, 5>, &str, Translator)> for TextData {
 impl TextData {
     fn from_n_subsequent<const N: usize>(&mut self, ngram: &str, freq: f64) {
         let mut chars = ngram.chars();
-        if N > 0 && let Some(c1) = chars.next() && c1 != ' ' {
-            self.add_character(c1, freq);
-            // take first, first 2 etc chars of the trigram every time for the appropriate stat
-            // as long as they don't contain spaces. return `c2` so I don't iter.next() too much
-            let c2 = if N > 1 && let Some(c2) = chars.next() && c2 != ' ' {
-                self.add_bigram([c1, c2], freq);
-                c2
-            } else { ' ' };
-            // c1 and c3 for skipgrams
-            if N > 2 && let Some(c3) = chars.next() && c3 != ' ' {
-                self.add_skipgram([c1, c3], freq);
+        match chars.next() {
+            Some(c1) if N > 0 && c1 != ' ' => {
+                self.add_character(c1, freq);
+                // take first, first 2 etc chars of the trigram every time for the appropriate stat
+                // as long as they don't contain spaces. return `c2` so I don't iter.next() too much
+                let c2 = match chars.next() {
+                    Some(c2) if N > 1 && c2 != ' ' => {
+                        self.add_bigram([c1, c2], freq);
+                        c2
+                    },
+                    _ => ' '
+                };
 
-                if c2 != ' ' {
-                    self.add_trigram([c1, c2, c3], freq);
+                // c1 and c3 for skipgrams
+                match chars.next() {
+                    Some(c3) if N > 2 && c3 != ' ' => {
+                        self.add_skipgram([c1, c3], freq);
+
+                        if c2 != ' ' {
+                            self.add_trigram([c1, c2, c3], freq);
+                        }
+
+                        match chars.next() {
+                            Some(c4) if N > 3 && c4 != ' ' => {
+                                self.add_skipgram2([c1, c4], freq);
+
+                                match chars.next() {
+                                    Some(c5) if N > 4 && c5 != ' ' => {
+                                        self.add_skipgram3([c1, c5], freq);
+                                    },
+                                    _ => {}
+                                }
+                            },
+                            _ => {}
+                        }
+                    },
+                    _ => {}
                 }
-
-                if N > 3 && let Some(c4) = chars.next() && c4 != ' ' {
-                    self.add_skipgram2([c1, c4], freq);
-
-                    if N > 4 && let Some(c5) = chars.next() && c5 != ' ' {
-                        self.add_skipgram3([c1, c5], freq);
-                    }
-                }
-            }
+            },
+            _ => {},
         }
     }
 
@@ -364,9 +385,10 @@ impl TextData {
         let mut ser = serde_json::Serializer::with_formatter(buf, formatter);
         self.serialize(&mut ser).unwrap();
 
-        let data_dir = format!("static/language_data{}", if pass { "_raw" } else { "" });
+        let data_dir_str = format!("static/language_data{}", if pass { "_raw" } else { "" });
+        let data_dir = &PathBuf::from(data_dir_str);
 
-        if let Ok(true) = std::fs::try_exists(&data_dir) {
+        if let Ok(true) = data_dir.try_exists() {
             std::fs::create_dir_all(&data_dir)?;
         }
 
@@ -374,7 +396,7 @@ impl TextData {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("{}/{}.json", data_dir, self.language))?;
+            .open(format!("{}/{}.json", data_dir.to_str().expect("the provided path should be valid utf8"), self.language))?;
 
         file.write(ser.into_inner().as_slice())?;
         Ok(())

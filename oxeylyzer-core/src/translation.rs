@@ -218,8 +218,11 @@ impl TranslatorBuilder {
             self.ascii_lower()
         } else {
             for i in 0u32..75_000 {
-                if let Some(c) = char::from_u32(i) && !c.is_control() {
-                    self.keep_one(c);
+                match char::from_u32(i) {
+                    Some(c) if !c.is_control() => {
+                        self.keep_one(c);
+                    },
+                    _ => {}
                 }
             }
             self

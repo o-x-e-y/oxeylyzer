@@ -296,25 +296,28 @@ impl Repl {
 
         match args.next_positional() {
             Some("generate") | Some("gen") | Some("g") => {
-                if let Some(count_str) = args.next_positional()
-                && let Ok(count) = usize::from_str_radix(count_str, 10) {
-                    println!("generating {} layouts...", count_str);
-                    self.temp_generated = generate_n(&self.gen, count);
-                } else {
-                    print_error("generate", &[R("amount")]);
+                if let Some(count_str) = args.next_positional() {
+                    if let Ok(count) = usize::from_str_radix(count_str, 10) {
+                        println!("generating {} layouts...", count_str);
+                        self.temp_generated = generate_n(&self.gen, count);
+                    } else {
+                        print_error("generate", &[R("amount")]);
+                    }
                 }
             }
             Some("improve") | Some("i") => {
-                if let Some(name) = args.next_positional()
-                && let Some(amount_str) = args.next_positional()
-                && let Ok(amount) = usize::from_str_radix(amount_str, 10) {
-                    if let Some(l) = self.layout_by_name(name) {
-                        self.temp_generated = generate_n_with_pins(&self.gen, amount, l.clone(), &self.pins);
-                    } else {
-                        println!("'{name}' does not exist!")
+                if let Some(name) = args.next_positional() {
+                    if let Some(amount_str) = args.next_positional() {
+                        if let Ok(amount) = usize::from_str_radix(amount_str, 10) {
+                            if let Some(l) = self.layout_by_name(name) {
+                                self.temp_generated = generate_n_with_pins(&self.gen, amount, l.clone(), &self.pins);
+                            } else {
+                                println!("'{name}' does not exist!")
+                            }
+                        } else {
+                            print_error("improve", &[R("name"), R("amount")]);
+                        }
                     }
-                } else {
-                    print_error("improve", &[R("name"), R("amount")]);
                 }
             }
             Some("rank") => self.rank(),
@@ -332,11 +335,12 @@ impl Repl {
                 }
             }
             Some("compare") | Some("c") | Some("comp") | Some("cmopare") | Some("comprae") => {
-                if let Some(layout1) = args.next_positional()
-                && let Some(layout2) = args.next_positional() {
-                    self.compare_name(layout1, layout2);
-                } else {
-                    print_error("compare", &[R("layout 1"), R("layout 2")]);
+                if let Some(layout1) = args.next_positional() {
+                    if let Some(layout2) = args.next_positional() {
+                        self.compare_name(layout1, layout2);
+                    } else {
+                        print_error("compare", &[R("layout 1"), R("layout 2")]);
+                    }
                 }
             }
             Some("sfbs") | Some("sfb") => {
@@ -476,14 +480,15 @@ impl Repl {
                 }
             }
             Some("save") | Some("s") => {
-                if let Some(n_str) = args.next_positional()
-                && let Ok(nr) = usize::from_str_radix(n_str, 10) {
-                    if let Some(layout) = self.get_nth(nr) {
-                        let name = args.next_positional().map(str::to_string);
-                        self.save(layout, name).unwrap();
+                if let Some(n_str) = args.next_positional() {
+                    if let Ok(nr) = usize::from_str_radix(n_str, 10) {
+                        if let Some(layout) = self.get_nth(nr) {
+                            let name = args.next_positional().map(str::to_string);
+                            self.save(layout, name).unwrap();
+                        }
+                    } else {
+                        print_error("save", &[R("index"), O("name")])
                     }
-                } else {
-                    print_error("save", &[R("index"), O("name")])
                 }
             }
             Some("quit") | Some("exit") | Some("q") => {
