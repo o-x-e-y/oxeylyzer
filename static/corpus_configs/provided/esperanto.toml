@@ -1,3 +1,12 @@
 inherits = ["default"]
 
-letters_to_lowercase = "ŝĝĉŭĵĥ"
+letters_to_lowercase = "ĝĉ"
+
+[multiple]
+uppercase_versions = true
+list = [
+    ["ŝ", "*s"],
+    ["ŭ", "*u"],
+    ["ĵ", "*j"],
+    ["ĥ", "*h"],
+]

@@ -1,25 +1,25 @@
 pins = """
-..... .....
-..... .....
-..... .....
+.x... ..xxx
+.x... ..xxx
+..... ..xxx
 """
 
 [defaults]
 language = "english"
 trigram_precision = 1000
-keyboard_type = "ansi angle"
+keyboard_type = "iso angle"
 
 [weights]
-heatmap = 1.65
+heatmap = 1.70
 fspeed = 18.0
 lateral_penalty = 1.0
 dsfb_ratio = 0.11
 scissors = 4.5
-lsbs = 1.5
-inrolls = 1.5
-outrolls = 1.35
+lsbs = 1.0
+inrolls = 0.9
+outrolls = 0.85
 onehands = 0.9
-alternates = 0.9
+alternates = 0.4
 alternates_sfs = 0.6
 redirects = 1.4
 redirects_sfs = 2.2
