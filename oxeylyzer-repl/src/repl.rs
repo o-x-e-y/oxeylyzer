@@ -448,18 +448,17 @@ impl Repl {
                 }
             }
             Some("languages") | Some("langs") => {
-                for entry in std::fs::read_dir("static/language_data").unwrap() {
-                    if let Ok(p) = entry {
-                        let name = p
-                            .file_name()
-                            .to_string_lossy()
-                            .replace("_", " ")
-                            .replace(".json", "");
-                        if name != "test" {
-                            println!("{}", name);
-                        }
-                    }
-                }
+                std::fs::read_dir("static/language_data")
+                    .unwrap()
+                    .flatten()
+                    .map(|p| p
+                        .file_name()
+                        .to_string_lossy()
+                        .replace("_", " ")
+                        .replace(".json", "")
+                    )
+                    .filter(|n| n != "test")
+                    .for_each(|n| println!("{n}"))
             }
             Some("reload") | Some("r") => {
                 let config = Config::new();
