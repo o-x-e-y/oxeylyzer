@@ -11,6 +11,7 @@ pub enum TrigramPattern {
     BadRedirectSfs,
     Sfb,
     BadSfb,
+    BadPrb,
     Sft,
     Other,
     Invalid,
@@ -41,6 +42,20 @@ impl From<Finger> for Hand {
         value.hand()
     }
 }
+
+// HandedFinger really should be a product of Finger and Hand.
+
+#[repr(u8)]
+#[derive(Copy,Clone, Debug)]
+enum HandlessFinger {
+    Pinky,
+    Ring,
+    Middle,
+    Index,
+    Thumb,
+}
+
+use HandlessFinger::*;
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
@@ -94,6 +109,16 @@ impl Finger {
         match self {
             LP | LR | LM | LI | LT => Left,
             _ => Right,
+        }
+    }
+
+    const fn finger(&self) -> HandlessFinger {
+        match self {
+            LP | RP => Pinky,
+            LR | RR => Ring,
+            LM | RM => Middle,
+            LI | RI => Index,
+            LT | RT => Thumb,
         }
     }
 
@@ -219,6 +244,20 @@ impl Trigram {
         self.f1.eq(self.f2) || self.f2.eq(self.f3)
     }
 
+    const fn is_bad_prb(&self) -> bool {
+        match (self.f2.finger(), self.f2.finger(), self.f3.finger()) {
+            (Pinky, Pinky, _) => true,
+            (Ring,  Ring,  _) => true,
+            (Pinky, Ring, _) => true,
+            (Ring, Pinky, _) => true,
+            (_, Pinky, Pinky) => true,
+            (_, Ring,  Ring) => true,
+            (_, Pinky, Ring) => true,
+            (_, Ring,  Pinky) => true,
+            _ => false,
+        }
+    }
+
     const fn is_sft(&self) -> bool {
         self.f1.eq(self.f2) && self.f2.eq(self.f3)
     }
@@ -226,11 +265,14 @@ impl Trigram {
     const fn get_one_hand(&self) -> TrigramPattern {
         use TrigramPattern::*;
 
-        if self.is_sft() {
+        if self.is_bad_prb() {
+            BadPrb
+        } else if self.is_sft() {
             Sft
         } else if self.has_sfb() {
             BadSfb
-        } else if self.is_redir() {
+        }
+        else if self.is_redir() {
             match (self.is_sfs(), self.is_bad_redir()) {
                 (false, false) => Redirect,
                 (false, true) => BadRedirect,

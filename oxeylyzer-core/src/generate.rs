@@ -32,6 +32,7 @@ pub struct TrigramStats {
     pub bad_redirects_sfs: f64,
     pub sfbs: f64,
     pub bad_sfbs: f64,
+    pub bad_prbs: f64,
     pub sfts: f64,
     pub other: f64,
     pub invalid: f64,
@@ -54,6 +55,7 @@ impl std::fmt::Display for TrigramStats {
 			Bad Redirects Sfs: {:.3}%\n\
 			Total Redirects: {:.3}%\n\n\
 			Bad Sfbs: {:.3}%\n\
+			Bad Prbs: {:.3}%\n\
 			Sft: {:.3}%\n",
             self.inrolls * 100.0,
             self.outrolls * 100.0,
@@ -69,6 +71,7 @@ impl std::fmt::Display for TrigramStats {
             (self.redirects + self.redirects_sfs + self.bad_redirects + self.bad_redirects_sfs)
                 * 100.0,
             self.bad_sfbs * 100.0,
+            self.bad_prbs *100.0,
             self.sfts * 100.0
         )
     }
@@ -407,6 +410,7 @@ impl LayoutGeneration {
                 BadRedirectSfs => freqs.bad_redirects_sfs += freq,
                 Sfb => freqs.sfbs += freq,
                 BadSfb => freqs.bad_sfbs += freq,
+                BadPrb => freqs.bad_prbs += freq,
                 Sft => freqs.sfts += freq,
                 Other => freqs.other += freq,
                 Invalid => freqs.invalid += freq,
@@ -512,6 +516,7 @@ impl LayoutGeneration {
                 RedirectSfs => freqs.redirects += freq,
                 BadRedirect => freqs.bad_redirects += freq,
                 BadRedirectSfs => freqs.bad_redirects += freq,
+                BadPrb => freqs.bad_prbs += freq,
                 _ => {}
             }
         }
@@ -526,6 +531,7 @@ impl LayoutGeneration {
         score -= self.weights.redirects_sfs * freqs.redirects_sfs;
         score -= self.weights.bad_redirects * freqs.bad_redirects;
         score -= self.weights.bad_redirects_sfs * freqs.bad_redirects_sfs;
+        score -= 100.0 * freqs.bad_prbs;
         score
     }
 
