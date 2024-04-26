@@ -36,6 +36,10 @@ xflags::xflags! {
         cmd language l lang {
             optional language: PathBuf
         }
+        /// Include layouts stored under a different language
+        cmd include {
+            required language: String
+        }
         /// Lists all currently available languages.
         cmd languages langs {}
         /// Loads a corpus for a certain language.

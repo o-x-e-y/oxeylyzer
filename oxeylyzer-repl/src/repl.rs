@@ -356,6 +356,17 @@ impl Repl {
                 },
                 None => println!("Current language: {}", self.language)
             }
+            Include(l) => {
+                self
+                    .gen
+                    .load_layouts("static/layouts", &l.language)
+                    .map_err(|e| e.to_string())?
+                    .into_iter()
+                    .for_each(|(name, layout)| {
+                        self.saved.insert(name, layout);
+                    });
+                self.saved.sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
+            }
             Languages(_) => {
                 std::fs::read_dir("static/language_data")
                     .map_err(|e| e.to_string())?
