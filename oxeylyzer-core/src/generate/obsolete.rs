@@ -17,11 +17,12 @@ impl LayoutGeneration {
 
         let scissors = self.scissor_score(layout);
         let lsbs = self.lsb_score(layout);
+        let pinky_ring = self.pinky_ring_score(layout);
 
         let trigram_iter = self.data.trigrams.iter().take(trigram_precision);
         let trigram_score = self.trigram_score_iter(layout, trigram_iter);
 
-        trigram_score - effort - fspeed_usage - scissors - lsbs
+        trigram_score - effort - fspeed_usage - scissors - lsbs - pinky_ring
     }
 
     #[allow(dead_code)]
