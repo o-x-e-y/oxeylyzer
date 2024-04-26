@@ -41,6 +41,7 @@ impl std::ops::Add for Translator {
 }
 
 impl Translator {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> TranslatorBuilder {
         TranslatorBuilder {
             table: FxHashMap::default(),
@@ -91,7 +92,7 @@ impl Translator {
     pub fn translate_arr(&self, arr: &[char]) -> SmartString<LazyCompact> {
         let mut res = SmartString::<LazyCompact>::new();
 
-        for c in arr.into_iter() {
+        for c in arr.iter() {
             if let Some(replacement) = self.table.get(c) {
                 res.push_str(replacement);
             } else {
@@ -221,7 +222,7 @@ impl TranslatorBuilder {
                 match char::from_u32(i) {
                     Some(c) if !c.is_control() => {
                         self.keep_one(c);
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -511,7 +512,7 @@ impl TranslatorBuilder {
 
     pub fn build(&mut self) -> Translator {
         Translator {
-            is_empty: self.table.len() == 0,
+            is_empty: self.table.is_empty(),
             table: std::mem::take(&mut self.table),
             is_raw: self.is_raw,
         }

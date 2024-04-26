@@ -8,12 +8,10 @@ impl LayoutGeneration {
         trigram_precision: usize,
     ) -> f64 {
         let effort = (0..layout.matrix.len())
-            .into_iter()
             .map(|i| self.char_effort(layout, i))
             .sum::<f64>();
 
         let fspeed_usage = (0..8)
-            .into_iter()
             .map(|col| self.col_usage(layout, col) + self.col_fspeed(layout, col))
             .sum::<f64>();
 
@@ -62,7 +60,7 @@ impl LayoutGeneration {
     #[allow(dead_code)]
     pub(crate) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> f64 {
         unsafe { layout.swap_no_bounds(swap) };
-        let score = self.score_with_precision(&layout, 1000);
+        let score = self.score_with_precision(layout, 100000);
         unsafe { layout.swap_no_bounds(swap) };
         score
     }

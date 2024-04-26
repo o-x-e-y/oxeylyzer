@@ -49,7 +49,6 @@ fn get_char_data(data: FxHashMap<char, f64>, con: &mut ConvertU8) -> CharacterDa
 
 fn get_bigram_data(data: FxHashMap<String, f64>, con: &mut ConvertU8) -> BigramData {
     (0..con.len())
-        .into_iter()
         .cartesian_product(0..con.len())
         .map(|(c1, c2)| con.as_str(&[c1, c2]))
         .map(|bigram| *data.get(&bigram).unwrap_or(&0.0))
@@ -86,9 +85,7 @@ impl From<LanguageDataInter> for LanguageData {
         let mut convert_u8 = ConvertU8::new();
 
         for c in ['\'', ',', '.', ';', '/', '~'] {
-            if !inter.characters.contains_key(&c) {
-                inter.characters.insert(c, 0.0);
-            }
+            inter.characters.entry(c).or_insert(0.0);
         }
 
         let characters = get_char_data(inter.characters, &mut convert_u8);

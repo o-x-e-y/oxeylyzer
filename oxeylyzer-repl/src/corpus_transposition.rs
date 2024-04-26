@@ -152,12 +152,11 @@ impl CorpusConfig {
             .unwrap()
             .flatten()
             .filter(|pb| pb.is_dir())
-            .map(|pb| pb.file_name().unwrap().to_os_string().into_string())
-            .flatten()
+            .flat_map(|pb| pb.file_name().unwrap().to_os_string().into_string())
             .map(|l| (l.clone(), Self::new(&l, None)))
             .filter_map(|(l, c)| {
-                if c.is_ok() {
-                    Some((l, c.unwrap()))
+                if let Ok(c) = c {
+                    Some((l, c))
                 } else {
                     None
                 }

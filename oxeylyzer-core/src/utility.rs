@@ -187,7 +187,7 @@ impl ConvertU8 {
 
     pub fn as_str(&self, input: &[u8]) -> String {
         input
-            .into_iter()
+            .iter()
             .map(|&c| self.from.get(c as usize).unwrap_or(&' '))
             .collect()
     }
@@ -197,10 +197,15 @@ impl ConvertU8 {
 
         self.to.len() as u8
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.to.len() == 0
+    }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Default)]
 pub enum KeyboardType {
+    #[default]
     AnsiAngle,
     IsoAngle,
     RowstagDefault,
@@ -260,10 +265,10 @@ pub fn get_effort_map(heatmap_weight: f64, ktype: KeyboardType) -> [f64; 30] {
         ],
     };
 
-    for i in 0..res.len() {
-        res[i] -= 0.2;
-        res[i] /= 4.5;
-        res[i] *= heatmap_weight;
+    for r in &mut res {
+        *r -= 0.2;
+        *r /= 4.5;
+        *r *= heatmap_weight;
     }
 
     res
@@ -512,7 +517,7 @@ pub(crate) fn layout_name(entry: &std::fs::DirEntry) -> Option<String> {
 
 pub(crate) fn format_layout_str(layout_str: &str) -> String {
     layout_str
-        .split("\n")
+        .split('\n')
         .take(3)
         .map(|line| line.split_whitespace().take(10).collect::<String>())
         .collect::<String>()
@@ -527,17 +532,16 @@ mod tests {
     fn affects_scissors() {
         let indices = get_scissor_indices()
             .into_iter()
-            .map(|PosPair(i1, i2)| [i1, i2])
-            .flatten()
+            .flat_map(|PosPair(i1, i2)| [i1, i2])
             .collect::<FxHashSet<usize>>();
 
-        for i in 0..30 {
+        (0..30).for_each(|i| {
             if indices.contains(&i) {
                 assert!(AFFECTS_SCISSOR[i], "failed on {i}");
             } else {
                 assert!(!AFFECTS_SCISSOR[i], "failed on {i}");
             }
-        }
+        });
     }
 
     #[test]

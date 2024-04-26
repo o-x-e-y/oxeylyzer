@@ -4,6 +4,18 @@ use crate::utility::*;
 pub type CharToFinger = [usize; 60];
 pub type Matrix<T> = [T; 30];
 
+pub (crate) trait LayoutInternal<T: Copy + Default> {
+    unsafe fn cu(&self, i: usize) -> T;
+
+    unsafe fn swap_xy_no_bounds(&mut self, i1: usize, i2: usize);
+
+    unsafe fn swap_no_bounds(&mut self, pair: &PosPair);
+
+    unsafe fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize);
+
+    unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[T; 3]) -> TrigramPattern;
+}
+
 pub trait Layout<T: Copy + Default> {
     fn new() -> Self;
 
@@ -13,19 +25,11 @@ pub trait Layout<T: Copy + Default> {
 
     fn c(&self, i: usize) -> T;
 
-    unsafe fn cu(&self, i: usize) -> T;
-
     fn char(&self, x: usize, y: usize) -> T;
-
+    
     fn swap(&mut self, i1: usize, i2: usize) -> Option<()>;
 
-    unsafe fn swap_xy_no_bounds(&mut self, i1: usize, i2: usize);
-
     fn swap_pair(&mut self, pair: &PosPair) -> Option<()>;
-
-    unsafe fn swap_no_bounds(&mut self, pair: &PosPair);
-
-    unsafe fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize);
 
     fn swap_indexes(&mut self);
 
@@ -33,7 +37,6 @@ pub trait Layout<T: Copy + Default> {
 
     fn get_trigram_pattern(&self, trigram: &[T; 3]) -> TrigramPattern;
 
-    unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[T; 3]) -> TrigramPattern;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -68,7 +71,7 @@ impl TryFrom<&[u8]> for FastLayout {
         if layout_bytes.len() >= 30 {
             let mut new_layout = FastLayout::new();
 
-            for (i, &byte) in layout_bytes.into_iter().enumerate() {
+            for (i, &byte) in layout_bytes.iter().enumerate() {
                 new_layout.matrix[i] = byte;
                 new_layout.char_to_finger[byte as usize] = I_TO_COL[i];
             }
@@ -103,6 +106,54 @@ impl FastLayout {
     }
 }
 
+impl LayoutInternal<u8> for FastLayout {
+    #[inline(always)]
+    unsafe fn cu(&self, i: usize) -> u8 {
+        *self.matrix.get_unchecked(i)
+    }
+
+    #[inline(always)]
+    unsafe fn swap_xy_no_bounds(&mut self, i1: usize, i2: usize) {
+        let char1 = self.cu(i1);
+        let char2 = self.cu(i2);
+
+        *self.matrix.get_unchecked_mut(i1) = char2;
+        *self.matrix.get_unchecked_mut(i2) = char1;
+
+        *self.char_to_finger.get_unchecked_mut(char1 as usize) = *I_TO_COL.get_unchecked(i2);
+        *self.char_to_finger.get_unchecked_mut(char2 as usize) = *I_TO_COL.get_unchecked(i1);
+    }
+
+    #[inline(always)]
+    unsafe fn swap_no_bounds(&mut self, pair: &PosPair) {
+        self.swap_xy_no_bounds(pair.0, pair.1);
+    }
+
+    unsafe fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize) {
+        self.swap_xy_no_bounds(col1, col2);
+        self.swap_xy_no_bounds(col1 + 10, col2 + 10);
+        self.swap_xy_no_bounds(col1 + 20, col2 + 20);
+    }
+
+    unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[u8; 3]) -> TrigramPattern {
+        let a = *self
+            .char_to_finger
+            .get(trigram[0] as usize)
+            .unwrap_unchecked();
+        let b = *self
+            .char_to_finger
+            .get(trigram[1] as usize)
+            .unwrap_unchecked();
+        let c = *self
+            .char_to_finger
+            .get(trigram[2] as usize)
+            .unwrap_unchecked();
+        // a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 == 0b111)
+        let combination = (a << 6) | (b << 3) | c;
+        TRIGRAM_COMBINATIONS[combination]
+    }
+}
+
 impl Layout<u8> for FastLayout {
     fn new() -> FastLayout {
         FastLayout {
@@ -127,62 +178,6 @@ impl Layout<u8> for FastLayout {
         self.matrix[i]
     }
 
-    #[inline(always)]
-    unsafe fn cu(&self, i: usize) -> u8 {
-        *self.matrix.get_unchecked(i)
-    }
-
-    #[inline]
-    fn char(&self, x: usize, y: usize) -> u8 {
-        assert!(x < 10 && y < 3);
-        self.matrix[x + 10 * y]
-    }
-
-    fn swap(&mut self, i1: usize, i2: usize) -> Option<()> {
-        if i1 < 30 && i2 < 30 {
-            let char1 = self.matrix[i1];
-            let char2 = self.matrix[i2];
-
-            self.matrix[i1] = char2;
-            self.matrix[i2] = char1;
-            self.char_to_finger[char1 as usize] = I_TO_COL[i2];
-            self.char_to_finger[char2 as usize] = I_TO_COL[i1];
-
-            return Some(());
-        } else {
-            println!("Invalid coordinate, swap was cancelled");
-            None
-        }
-    }
-
-    #[inline(always)]
-    unsafe fn swap_xy_no_bounds(&mut self, i1: usize, i2: usize) {
-        let char1 = self.cu(i1);
-        let char2 = self.cu(i2);
-
-        *self.matrix.get_unchecked_mut(i1) = char2;
-        *self.matrix.get_unchecked_mut(i2) = char1;
-
-        *self.char_to_finger.get_unchecked_mut(char1 as usize) = *I_TO_COL.get_unchecked(i2);
-        *self.char_to_finger.get_unchecked_mut(char2 as usize) = *I_TO_COL.get_unchecked(i1);
-    }
-
-    #[inline(always)]
-    fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
-        self.swap(pair.0, pair.1)
-    }
-
-    #[inline(always)]
-    unsafe fn swap_no_bounds(&mut self, pair: &PosPair) {
-        self.swap_xy_no_bounds(pair.0, pair.1);
-    }
-
-    unsafe fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize) {
-        self.swap_xy_no_bounds(col1, col2);
-        self.swap_xy_no_bounds(col1 + 10, col2 + 10);
-        self.swap_xy_no_bounds(col1 + 20, col2 + 20);
-    }
-
     fn swap_indexes(&mut self) {
         unsafe {
             self.swap_cols_no_bounds(3, 6);
@@ -201,40 +196,50 @@ impl Layout<u8> for FastLayout {
         new_index
     }
 
+    #[inline]
+    fn char(&self, x: usize, y: usize) -> u8 {
+        assert!(x < 10 && y < 3);
+        self.matrix[x + 10 * y]
+    }
+
+    fn swap(&mut self, i1: usize, i2: usize) -> Option<()> {
+        if i1 < 30 && i2 < 30 {
+            let char1 = self.matrix[i1];
+            let char2 = self.matrix[i2];
+
+            self.matrix[i1] = char2;
+            self.matrix[i2] = char1;
+            self.char_to_finger[char1 as usize] = I_TO_COL[i2];
+            self.char_to_finger[char2 as usize] = I_TO_COL[i1];
+
+            Some(())
+        } else {
+            println!("Invalid coordinate, swap was cancelled");
+            None
+        }
+    }
+    
+    #[inline(always)]
+    fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
+        self.swap(pair.0, pair.1)
+    }
+
     fn get_trigram_pattern(&self, trigram: &[u8; 3]) -> TrigramPattern {
         let a = *self
             .char_to_finger
             .get(trigram[0] as usize)
-            .unwrap_or_else(|| &usize::MAX);
+            .unwrap_or(&usize::MAX);
         let b = *self
             .char_to_finger
             .get(trigram[1] as usize)
-            .unwrap_or_else(|| &usize::MAX);
+            .unwrap_or(&usize::MAX);
         let c = *self
             .char_to_finger
             .get(trigram[2] as usize)
-            .unwrap_or_else(|| &usize::MAX);
+            .unwrap_or(&usize::MAX);
         if (a | b | c) == usize::MAX {
             return TrigramPattern::Invalid;
         }
-        // a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 == 0b111)
-        let combination = (a << 6) | (b << 3) | c;
-        TRIGRAM_COMBINATIONS[combination]
-    }
-
-    unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[u8; 3]) -> TrigramPattern {
-        let a = *self
-            .char_to_finger
-            .get(trigram[0] as usize)
-            .unwrap_unchecked();
-        let b = *self
-            .char_to_finger
-            .get(trigram[1] as usize)
-            .unwrap_unchecked();
-        let c = *self
-            .char_to_finger
-            .get(trigram[2] as usize)
-            .unwrap_unchecked();
         // a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 == 0b111)
         let combination = (a << 6) | (b << 3) | c;
         TRIGRAM_COMBINATIONS[combination]

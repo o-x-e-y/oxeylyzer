@@ -8,18 +8,16 @@ use oxeylyzer_core::rayon::iter::ParallelIterator;
 use ansi_rgb::{rgb, Colorable};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 
-pub fn readline() -> Result<String, String> {
-    write!(std::io::stdout(), "> ").map_err(|e| e.to_string())?;
-    std::io::stdout().flush().map_err(|e| e.to_string())?;
+pub fn readline() -> std::io::Result<String> {
+    write!(std::io::stdout(), "> ")?;
+    std::io::stdout().flush()?;
     let mut buf = String::new();
-    std::io::stdin()
-        .read_line(&mut buf)
-        .map_err(|e| e.to_string())?;
+    std::io::stdin().read_line(&mut buf)?;
     Ok(buf)
 }
 
 pub fn heatmap_heat(data: &LanguageData, c: u8) -> String {
-    let complement = 215.0 - *data.characters.get(c as usize).unwrap_or_else(|| &0.0) * 1720.0;
+    let complement = 215.0 - *data.characters.get(c as usize).unwrap_or(&0.0) * 1720.0;
     let complement = complement.max(0.0) as u8;
     let heat = rgb(215, complement, complement);
     let c = data.convert_u8.from_single(c);

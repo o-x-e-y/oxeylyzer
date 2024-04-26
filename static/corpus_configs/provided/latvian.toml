@@ -1,0 +1,15 @@
+inherits = ["default"]
+
+keep = "āīēš"
+
+[multiple]
+uppercase_versions = true # this tries to create a transposition for Č, Ķ etc as well.
+list = [
+    ["č", "*c"],
+    ["ķ", "*k"],
+    ["ļ", "*l"],
+    ["ņ", "*n"],
+    ["ū", "*u"],
+    ["ž", "*z"],
+    ["ģ", "*g"],
+]

@@ -1,7 +1,14 @@
-pub mod commands;
 pub mod corpus_transposition;
+pub mod flags;
 pub mod repl;
 pub mod tui;
+
+#[test]
+fn thing() {
+    let x = std::path::PathBuf::from("this/is/a/path");
+
+    println!("{}", x.display())
+}
 
 // fn main() {
 // 	use languages::*;

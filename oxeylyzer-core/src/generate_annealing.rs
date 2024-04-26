@@ -1,14 +1,13 @@
-use nanorand::{RandomGen, RandomRange, Rng, WyRand};
+use nanorand::{Rng, WyRand};
 use std::f64;
 
 use ansi_rgb::{rgb, Colorable};
 
-use crate::generate::{LayoutCache, LayoutGeneration};
-use crate::language_data::{BigramData, LanguageData, TrigramData};
+use crate::generate::LayoutGeneration;
+use crate::language_data::LanguageData;
 use crate::layout::*;
-use crate::trigram_patterns::TrigramPattern;
+
 use crate::utility::*;
-use crate::weights::{Config, Weights};
 
 fn acceptance_probability(old_cost: f64, new_cost: f64, temperature: f64) -> f64 {
     // Calculate the acceptance probability based on the cost difference and temperature
@@ -61,7 +60,7 @@ fn simulated_annealing(
 }
 
 pub fn heatmap_heat(data: &LanguageData, c: u8) -> String {
-    let complement = 215.0 - *data.characters.get(c as usize).unwrap_or_else(|| &0.0) * 1720.0;
+    let complement = 215.0 - *data.characters.get(c as usize).unwrap_or(&0.0) * 1720.0;
     let complement = complement.max(0.0) as u8;
     let heat = rgb(215, complement, complement);
     let c = data.convert_u8.from_single(c);

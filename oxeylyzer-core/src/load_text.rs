@@ -31,11 +31,11 @@ pub(crate) fn load_default(language: &str) {
 pub(crate) fn load_all_default() -> Result<()> {
     let start_total = Instant::now();
 
-    std::fs::read_dir(format!("static/text/"))?
+    std::fs::read_dir("static/text/")?
         .filter_map(Result::ok)
         .for_each(|language_dir| {
-            let language = language_dir.path().display().to_string().replace("\\", "/");
-            let language = language.split("/").last().unwrap();
+            let language = language_dir.path().display().to_string().replace('\\', "/");
+            let language = language.split('/').last().unwrap();
             load_default(language);
         });
     println!(
@@ -98,9 +98,9 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
 
     let quingrams = strings
         .par_iter()
-        .map(|(s, last)| TextNgrams::from_str_last(s, &last))
+        .map(|(s, last)| TextNgrams::from_str_last(s, last))
         .reduce(
-            || TextNgrams::default(),
+            TextNgrams::default,
             |accum, new| accum.combine_with(new),
         );
 
@@ -203,9 +203,7 @@ impl std::fmt::Display for TextData {
 
 impl TextData {
     pub fn new(language: &str) -> Self {
-        let mut res = Self::default();
-        res.language = language.replace(" ", "_").to_lowercase().to_string();
-        res
+        TextData { language: language.replace(' ', "_").to_lowercase().to_string(), ..Default::default() }
     }
 }
 
@@ -222,23 +220,28 @@ impl<'a> From<(TextNgrams<'a, 5>, &str, Translator)> for TextData {
                         match trans.chars().count() {
                             5.. => {
                                 trans.push(' ');
-        
+
                                 let first_t_len = first_t.chars().count().max(1);
                                 let it1 = trans.char_indices().map(|(i, _)| i).take(first_t_len);
-                                let it2 = trans.char_indices().map(|(i, _)| i).skip(5).take(first_t_len);
-        
+                                let it2 = trans
+                                    .char_indices()
+                                    .map(|(i, _)| i)
+                                    .skip(5)
+                                    .take(first_t_len);
+
                                 it1.zip(it2)
                                     .map(|(i1, i2)| &trans[i1..i2])
-                                    .for_each(|ngram| res.from_n_subsequent::<5>(ngram, freq as f64)
-                                );
+                                    .for_each(|ngram| {
+                                        res.add_n_subsequent::<5>(ngram, freq as f64)
+                                    });
                             }
                             4 => {
                                 println!("4 long ngram: '{}'", &trans);
-                                res.from_n_subsequent::<4>(&trans, freq as f64)
-                            },
-                            3 => res.from_n_subsequent::<3>(&trans, freq as f64),
-                            2 => res.from_n_subsequent::<2>(&trans, freq as f64),
-                            1 => res.from_n_subsequent::<1>(&trans, freq as f64),
+                                res.add_n_subsequent::<4>(&trans, freq as f64)
+                            }
+                            3 => res.add_n_subsequent::<3>(&trans, freq as f64),
+                            2 => res.add_n_subsequent::<2>(&trans, freq as f64),
+                            1 => res.add_n_subsequent::<1>(&trans, freq as f64),
                             _ => {}
                         }
                     }
@@ -283,7 +286,7 @@ impl<'a> From<(TextNgrams<'a, 5>, &str, Translator)> for TextData {
 }
 
 impl TextData {
-    fn from_n_subsequent<const N: usize>(&mut self, ngram: &str, freq: f64) {
+    fn add_n_subsequent<const N: usize>(&mut self, ngram: &str, freq: f64) {
         let mut chars = ngram.chars();
         match chars.next() {
             Some(c1) if N > 0 && c1 != ' ' => {
@@ -294,8 +297,8 @@ impl TextData {
                     Some(c2) if N > 1 && c2 != ' ' => {
                         self.add_bigram([c1, c2], freq);
                         c2
-                    },
-                    _ => ' '
+                    }
+                    _ => ' ',
                 };
 
                 // c1 and c3 for skipgrams
@@ -314,17 +317,17 @@ impl TextData {
                                 match chars.next() {
                                     Some(c5) if N > 4 && c5 != ' ' => {
                                         self.add_skipgram3([c1, c5], freq);
-                                    },
+                                    }
                                     _ => {}
                                 }
-                            },
+                            }
                             _ => {}
                         }
-                    },
+                    }
                     _ => {}
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 
@@ -389,16 +392,22 @@ impl TextData {
         let data_dir = &PathBuf::from(data_dir_str);
 
         if let Ok(true) = data_dir.try_exists() {
-            std::fs::create_dir_all(&data_dir)?;
+            std::fs::create_dir_all(data_dir)?;
         }
 
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("{}/{}.json", data_dir.to_str().expect("the provided path should be valid utf8"), self.language))?;
+            .open(format!(
+                "{}/{}.json",
+                data_dir
+                    .to_str()
+                    .expect("the provided path should be valid utf8"),
+                self.language
+            ))?;
 
-        file.write(ser.into_inner().as_slice())?;
+        file.write_all(ser.into_inner().as_slice())?;
         Ok(())
     }
 }
@@ -483,8 +492,7 @@ mod tests {
         let total_b = 1.0
             / data
                 .bigrams
-                .iter()
-                .map(|&f| f)
+                .iter().copied()
                 .filter(|f| f > &0.0)
                 .reduce(f64::min)
                 .unwrap();
@@ -504,8 +512,7 @@ mod tests {
         let total_s = 1.0
             / data
                 .skipgrams
-                .iter()
-                .map(|&f| f)
+                .iter().copied()
                 .filter(|f| f > &0.0)
                 .reduce(f64::min)
                 .unwrap();
