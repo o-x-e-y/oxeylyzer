@@ -547,6 +547,7 @@ impl LayoutGeneration {
         }
     }
 
+    #[inline]
     fn scissor_score(&self, layout: &FastLayout) -> f64 {
         let mut res = 0.0;
         let len = self.data.characters.len();
@@ -561,6 +562,7 @@ impl LayoutGeneration {
         res * self.weights.scissors
     }
 
+    #[inline]
     fn lsb_score(&self, layout: &FastLayout) -> f64 {
         let mut res = 0.0;
         let len = self.data.characters.len();
@@ -594,7 +596,9 @@ impl LayoutGeneration {
         match col {
             0..=2 => {
                 for c in unsafe { [layout.cu(col), layout.cu(col + 10), layout.cu(col + 20)] } {
-                    res += *self.data.characters.get(c as usize).unwrap_or(&0.0);
+                    if let Some(v) = self.data.characters.get(c as usize) {
+                        res += v;
+                    }
                 }
             }
             3 | 4 => {
@@ -609,13 +613,17 @@ impl LayoutGeneration {
                         layout.cu(col + 21),
                     ]
                 } {
-                    res += *self.data.characters.get(c as usize).unwrap_or(&0.0);
+                    if let Some(v) = self.data.characters.get(c as usize) {
+                        res += v;
+                    }
                 }
             }
             5..=7 => {
                 let col = col + 2;
                 for c in unsafe { [layout.cu(col), layout.cu(col + 10), layout.cu(col + 20)] } {
-                    res += *self.data.characters.get(c as usize).unwrap_or(&0.0);
+                    if let Some(v) = self.data.characters.get(c as usize) {
+                        res += v;
+                    }
                 }
             }
             _ => unsafe { unreachable_unchecked() },
@@ -689,9 +697,11 @@ impl LayoutGeneration {
     #[inline]
     fn char_effort(&self, layout: &FastLayout, i: usize) -> f64 {
         let c = unsafe { layout.cu(i) };
-        let mut res = *self.data.characters.get(c as usize).unwrap_or(&0.0);
-        res *= self.effort_map[i];
-        res
+
+        match self.data.characters.get(c as usize) {
+            Some(&v) => v * unsafe { self.effort_map.get_unchecked(i) },
+            None => 0.0,
+        }
     }
 
     pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {

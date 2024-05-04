@@ -343,7 +343,7 @@ impl Repl {
                             .gen
                             .load_layouts("static/layouts", language)
                             .expect("couldn't load layouts lol");
-                        self.language = language.to_owned();
+                        self.language = language.to_string();
     
                         println!(
                             "Set language to {}. Sfr: {:.2}%",
@@ -433,7 +433,7 @@ impl Repl {
             Ngram(n) => println!("{}", get_ngram_info(&mut self.gen.data, &n.ngram)),
             Reload(_) => {
                 let config = Config::with_loaded_weights();
-                self.pins = config.pins.clone();
+                self.pins.clone_from(&config.pins);
 
                 match LayoutGeneration::new(&self.language, "static", Some(config)) {
                     Ok(generator) => {

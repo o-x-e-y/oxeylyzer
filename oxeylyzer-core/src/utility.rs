@@ -1,3 +1,5 @@
+use std::collections::hash_map::Entry;
+
 use crate::languages_cfg::read_cfg;
 
 use arrayvec::ArrayVec;
@@ -176,10 +178,10 @@ impl ConvertU8 {
     }
 
     pub fn insert_single(&mut self, c: char) {
-        if self.to.get(&c).is_none() {
-            let new = self.len();
+        let new = self.len();
+        if let Entry::Vacant(e) = self.to.entry(c) {
             self.from.push(c);
-            self.to.insert(c, new);
+            e.insert(new);
         }
     }
 

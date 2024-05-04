@@ -12,8 +12,6 @@ pub (crate) trait LayoutInternal<T: Copy + Default> {
     unsafe fn swap_no_bounds(&mut self, pair: &PosPair);
 
     unsafe fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize);
-
-    unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[T; 3]) -> TrigramPattern;
 }
 
 pub trait Layout<T: Copy + Default> {
@@ -134,24 +132,6 @@ impl LayoutInternal<u8> for FastLayout {
         self.swap_xy_no_bounds(col1 + 10, col2 + 10);
         self.swap_xy_no_bounds(col1 + 20, col2 + 20);
     }
-
-    unsafe fn get_trigram_pattern_unchecked(&self, trigram: &[u8; 3]) -> TrigramPattern {
-        let a = *self
-            .char_to_finger
-            .get(trigram[0] as usize)
-            .unwrap_unchecked();
-        let b = *self
-            .char_to_finger
-            .get(trigram[1] as usize)
-            .unwrap_unchecked();
-        let c = *self
-            .char_to_finger
-            .get(trigram[2] as usize)
-            .unwrap_unchecked();
-        // a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 == 0b111)
-        let combination = (a << 6) | (b << 3) | c;
-        TRIGRAM_COMBINATIONS[combination]
-    }
 }
 
 impl Layout<u8> for FastLayout {
@@ -224,22 +204,21 @@ impl Layout<u8> for FastLayout {
         self.swap(pair.0, pair.1)
     }
 
-    fn get_trigram_pattern(&self, trigram: &[u8; 3]) -> TrigramPattern {
-        let a = *self
-            .char_to_finger
-            .get(trigram[0] as usize)
-            .unwrap_or(&usize::MAX);
-        let b = *self
-            .char_to_finger
-            .get(trigram[1] as usize)
-            .unwrap_or(&usize::MAX);
-        let c = *self
-            .char_to_finger
-            .get(trigram[2] as usize)
-            .unwrap_or(&usize::MAX);
-        if (a | b | c) == usize::MAX {
-            return TrigramPattern::Invalid;
-        }
+    #[inline(always)]
+    fn get_trigram_pattern(&self, &[t1, t2, t3]: &[u8; 3]) -> TrigramPattern {
+        let a = match self.char_to_finger.get(t1 as usize) {
+            Some(&v) if v != usize::MAX => v,
+            _ => return TrigramPattern::Invalid,
+        };
+        let b = match self.char_to_finger.get(t2 as usize) {
+            Some(&v) if v != usize::MAX => v,
+            _ => return TrigramPattern::Invalid,
+        };
+        let c = match self.char_to_finger.get(t3 as usize) {
+            Some(&v) if v != usize::MAX => v,
+            _ => return TrigramPattern::Invalid,
+        };
+
         // a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 == 0b111)
         let combination = (a << 6) | (b << 3) | c;
         TRIGRAM_COMBINATIONS[combination]
