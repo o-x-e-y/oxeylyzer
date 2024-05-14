@@ -1,9 +1,9 @@
-use std::hash::BuildHasherDefault;
 use std::hint::unreachable_unchecked;
 use std::path::Path;
 
 use anyhow::Result;
-use fxhash::FxHashMap;
+// use fxhash::FxHashMap;
+use ahash::AHashMap as HashMap;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -172,7 +172,7 @@ pub struct LayoutCache {
     fspeed: [f64; 8],
     fspeed_total: f64,
 
-    // trigrams: FxHashMap<(char, Option<char>), f64>,
+    // trigrams: HashMap<(char, Option<char>), f64>,
     trigrams_total: f64,
 
     total_score: f64,
@@ -190,7 +190,7 @@ impl LayoutCache {
     }
 }
 
-type PerCharTrigrams = FxHashMap<[u8; 2], TrigramData>;
+type PerCharTrigrams = HashMap<[u8; 2], TrigramData>;
 
 static COLS: [usize; 6] = [0, 1, 2, 7, 8, 9];
 
@@ -227,7 +227,7 @@ pub struct LayoutGeneration {
     per_char_trigrams: PerCharTrigrams,
 
     pub weights: Weights,
-    pub layouts: IndexMap<String, FastLayout, BuildHasherDefault<fxhash::FxHasher>>,
+    pub layouts: IndexMap<String, FastLayout>,
 }
 
 impl LayoutGeneration {

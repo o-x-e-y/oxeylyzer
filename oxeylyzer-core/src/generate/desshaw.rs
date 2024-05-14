@@ -5,7 +5,7 @@ use crate::{
 };
 
 use arrayvec::ArrayVec;
-use fxhash::FxHashMap;
+use ahash::AHashMap as HashMap;
 
 trait LayoutHeuristic {
     fn evaluate(incomplete: IncompleteLayout);

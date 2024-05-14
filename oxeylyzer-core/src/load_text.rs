@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use anyhow::Result;
 use file_chunker::FileChunker;
-use fxhash::FxHashMap as HashMap;
+use ahash::AHashMap as HashMap;
 use indexmap::IndexMap;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};

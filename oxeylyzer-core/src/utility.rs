@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry;
 use crate::languages_cfg::read_cfg;
 
 use arrayvec::ArrayVec;
-use fxhash::FxHashMap;
+use ahash::AHashMap as HashMap;
 use nanorand::{tls_rng, Rng};
 use serde::Deserialize;
 
@@ -95,7 +95,7 @@ const fn get_possible_swaps() -> [PosPair; 435] {
 #[derive(Clone, Debug, Default)]
 pub struct ConvertU8 {
     from: Vec<char>,
-    to: FxHashMap<char, u8>,
+    to: HashMap<char, u8>,
 }
 
 impl ConvertU8 {
@@ -563,14 +563,14 @@ pub(crate) fn format_layout_str(layout_str: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fxhash::FxHashSet;
+    use ahash::AHashSet as HashSet;
 
     #[test]
     fn affects_scissors() {
         let indices = get_scissor_indices()
             .into_iter()
             .flat_map(|PosPair(i1, i2)| [i1, i2])
-            .collect::<FxHashSet<usize>>();
+            .collect::<HashSet<_>>();
 
         (0..30).for_each(|i| {
             if indices.contains(&i) {

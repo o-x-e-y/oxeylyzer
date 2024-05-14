@@ -1,8 +1,8 @@
-use fxhash::FxHashMap;
+use ahash::AHashMap as HashMap;
 use std::io::Read;
 
-pub fn read_cfg() -> FxHashMap<String, String> {
-    let mut res = FxHashMap::default();
+pub fn read_cfg() -> HashMap<String, String> {
+    let mut res = HashMap::default();
 
     if let Ok(mut f) = std::fs::File::open("languages_default.cfg") {
         let mut file_contents = String::new();

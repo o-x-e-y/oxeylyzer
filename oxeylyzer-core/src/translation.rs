@@ -1,10 +1,10 @@
 use anyhow::Result;
-use fxhash::FxHashMap;
+use ahash::AHashMap as HashMap;
 use smartstring::{Compact, LazyCompact, SmartString};
 
 #[derive(Clone)]
 pub struct Translator {
-    pub table: FxHashMap<char, SmartString<Compact>>,
+    pub table: HashMap<char, SmartString<Compact>>,
     pub is_raw: bool,
     pub(crate) is_empty: bool,
 }
@@ -44,7 +44,7 @@ impl Translator {
     #[allow(clippy::new_ret_no_self)]
     pub fn new() -> TranslatorBuilder {
         TranslatorBuilder {
-            table: FxHashMap::default(),
+            table: HashMap::default(),
             is_raw: false,
         }
     }
@@ -104,7 +104,7 @@ impl Translator {
 }
 
 pub struct TranslatorBuilder {
-    table: FxHashMap<char, SmartString<Compact>>,
+    table: HashMap<char, SmartString<Compact>>,
     is_raw: bool,
 }
 

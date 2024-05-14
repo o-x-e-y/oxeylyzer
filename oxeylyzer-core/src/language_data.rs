@@ -1,6 +1,7 @@
 use anyhow::Result;
 use arrayvec::ArrayVec;
-use fxhash::FxHashMap;
+// use fxhash::FxHashMap;
+use ahash::AHashMap as HashMap;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::Deserialize;
@@ -13,7 +14,7 @@ use std::path::Path;
 use crate::utility::ConvertU8;
 
 pub type CharacterData = ArrayVec<f64, 60>;
-pub type SlowBigramData = FxHashMap<[u8; 2], f64>;
+pub type SlowBigramData = HashMap<[u8; 2], f64>;
 pub type BigramData = Vec<f64>;
 pub type TrigramData = Vec<([u8; 3], f64)>;
 
@@ -30,15 +31,15 @@ impl BigramLookup for BigramData {
 #[derive(Deserialize)]
 struct LanguageDataInter {
     pub language: String,
-    pub characters: FxHashMap<char, f64>,
-    pub bigrams: FxHashMap<String, f64>,
-    pub skipgrams: FxHashMap<String, f64>,
-    pub skipgrams2: FxHashMap<String, f64>,
-    pub skipgrams3: FxHashMap<String, f64>,
+    pub characters: HashMap<char, f64>,
+    pub bigrams: HashMap<String, f64>,
+    pub skipgrams: HashMap<String, f64>,
+    pub skipgrams2: HashMap<String, f64>,
+    pub skipgrams3: HashMap<String, f64>,
     pub trigrams: IndexMap<String, f64>,
 }
 
-fn get_char_data(data: FxHashMap<char, f64>, con: &mut ConvertU8) -> CharacterData {
+fn get_char_data(data: HashMap<char, f64>, con: &mut ConvertU8) -> CharacterData {
     let mut res = CharacterData::new();
     for (c, f) in data.into_iter() {
         con.insert_single(c);
@@ -47,7 +48,7 @@ fn get_char_data(data: FxHashMap<char, f64>, con: &mut ConvertU8) -> CharacterDa
     res
 }
 
-fn get_bigram_data(data: FxHashMap<String, f64>, con: &mut ConvertU8) -> BigramData {
+fn get_bigram_data(data: HashMap<String, f64>, con: &mut ConvertU8) -> BigramData {
     (0..con.len())
         .cartesian_product(0..con.len())
         .map(|(c1, c2)| con.as_str(&[c1, c2]))

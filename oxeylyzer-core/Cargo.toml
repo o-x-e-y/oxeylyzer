@@ -13,9 +13,9 @@ rayon = "1.5.1"
 file-chunker = "0.1.1"
 anyhow = "1.0.57"
 indexmap = { version = "2.2.6", features = ["serde"] }
-fxhash = "0.2.1"
 toml = "0.8.12"
 smartstring = { git = "https://github.com/O-X-E-Y/smartstring", features = ["serde"] }
 arrayvec = "0.7.2"
 once_cell = "1.16.0"
 ansi_rgb = { git = "https://github.com/O-X-E-Y/ansi_rgb" }
+ahash = { version = "0.8.11", features = ["serde"] }
