@@ -4,3 +4,5 @@ static/text/*
 static/stats
 static/corpus_configs/custom/*.toml
 static/language_data/reddit.json
+.direnv
+result
