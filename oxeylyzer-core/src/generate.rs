@@ -386,13 +386,19 @@ impl LayoutGeneration {
             .map(|(p, _)| {
                 let u1 = layout.c(p.0);
                 let u2 = layout.c(p.1);
+
                 let bigram = self.convert_u8.as_str(&[u1, u2]);
+                let bigram2 = self.convert_u8.as_str(&[u2, u1]);
 
                 let i = (u1 as usize) * self.data.characters.len() + (u2 as usize);
-                let freq = self.data.bigrams[i];
+                let i2 = (u2 as usize) * self.data.characters.len() + (u1 as usize);
 
-                (bigram, freq)
+                let freq = self.data.bigrams[i];
+                let freq2 = self.data.bigrams[i2];
+
+                [(bigram, freq), (bigram2, freq2)]
             })
+            .flatten()
             .sorted_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap())
             .take(top_n)
             .collect::<Vec<_>>()
