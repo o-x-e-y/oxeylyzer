@@ -824,11 +824,17 @@ impl LayoutGeneration {
     }
 
     pub fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
+        let PosPair(i1, i2) = *swap;
+
+        if layout.c(i1) == layout.c(i2)
+            || (self.data.characters[i1] == 0.0 && self.data.characters[i2] == 0.0)
+        {
+            return;
+        }
+
         let trigrams_start = self.trigram_char_score(layout, swap);
 
         unsafe { layout.swap_no_bounds(swap) };
-
-        let PosPair(i1, i2) = *swap;
 
         let col1 = I_TO_COL[i1];
         let col2 = I_TO_COL[i2];
