@@ -748,9 +748,15 @@ impl LayoutGeneration {
         swap: &PosPair,
         cache: &LayoutCache,
     ) -> Option<f64> {
-        unsafe { layout.swap_no_bounds(swap) };
-
         let PosPair(i1, i2) = *swap;
+
+        if layout.c(i1) == layout.c(i2)
+            || (self.data.characters[i1] == 0.0 && self.data.characters[i2] == 0.0)
+        {
+            return None;
+        }
+
+        unsafe { layout.swap_no_bounds(swap) };
 
         let col1 = I_TO_COL[i1];
         let col2 = I_TO_COL[i2];
