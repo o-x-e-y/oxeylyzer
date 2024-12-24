@@ -742,7 +742,7 @@ impl LayoutGeneration {
         res
     }
 
-    pub fn score_swap_cached_prune(
+    pub fn score_swap_cached(
         &self,
         layout: &mut FastLayout,
         swap: &PosPair,
@@ -815,111 +815,6 @@ impl LayoutGeneration {
                 - usage_score
                 - fspeed_score,
         )
-    }
-
-    pub fn score_swap_cached_prune2(
-        &self,
-        layout: &mut FastLayout,
-        swap: &PosPair,
-        cache: &LayoutCache,
-    ) -> Option<f64> {
-        #[cfg(test)]
-        ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-        let PosPair(i1, i2) = *swap;
-
-        let col1 = I_TO_COL[i1];
-        let col2 = I_TO_COL[i2];
-
-        let trigrams_score = if col1 != col2 {
-            let trigrams_end = self.trigram_char_score(layout, swap);
-            unsafe { layout.swap_no_bounds(swap) };
-            let trigrams_start = self.trigram_char_score(layout, swap);
-
-            cache.trigrams_total - trigrams_start + trigrams_end
-        } else {
-            cache.trigrams_total
-        };
-
-        let effort1 = self.char_effort(layout, i1);
-        let effort2 = self.char_effort(layout, i2);
-        let effort_score =
-            cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
-
-        let total = trigrams_score - effort_score;
-
-        let fspeed_score = if total >= cache.total_score {
-            if col1 == col2 {
-                let fspeed = self.col_fspeed(layout, col1);
-
-                cache.fspeed_total - cache.fspeed[col1] + fspeed
-            } else {
-                let fspeed1 = self.col_fspeed(layout, col1);
-                let fspeed2 = self.col_fspeed(layout, col2);
-
-                cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + fspeed1 + fspeed2
-            }
-        } else {
-            unsafe { layout.swap_no_bounds(swap) };
-            return None;
-        };
-
-        let total = total - fspeed_score;
-
-        let usage_score = if total >= cache.total_score {
-            if col1 == col2 {
-                let usage = self.col_usage(layout, col1);
-                cache.usage_total - cache.usage[col1] + usage
-            } else {
-                let usage1 = self.col_usage(layout, col1);
-                let usage2 = self.col_usage(layout, col2);
-                cache.usage_total - cache.usage[col1] - cache.usage[col2] + usage1 + usage2
-            }
-        } else {
-            unsafe { layout.swap_no_bounds(swap) };
-            return None;
-        };
-
-        let total = total - usage_score;
-
-        let scissors_score = if total >= cache.total_score {
-            if swap.affects_scissor() {
-                self.scissor_score(layout)
-            } else {
-                cache.scissors
-            }
-        } else {
-            unsafe { layout.swap_no_bounds(swap) };
-            return None;
-        };
-
-        let total = total - scissors_score;
-
-        let lsbs_score = if total >= cache.total_score {
-            if swap.affects_lsb() {
-                self.lsb_score(layout)
-            } else {
-                cache.lsbs
-            }
-        } else {
-            unsafe { layout.swap_no_bounds(swap) };
-            return None;
-        };
-
-        let total = total - lsbs_score;
-
-        let pinky_ring_score = if total >= cache.total_score {
-            if swap.affects_pinky_ring() {
-                self.pinky_ring_score(layout)
-            } else {
-                cache.pinky_ring
-            }
-        } else {
-            unsafe { layout.swap_no_bounds(swap) };
-            return None;
-        };
-
-        Some(total - pinky_ring_score)
     }
 
     pub fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
@@ -1006,7 +901,7 @@ impl LayoutGeneration {
         let mut best_swap: Option<PosPair> = None;
 
         for swap in possible_swaps {
-            if let Some(score) = self.score_swap_cached_prune(layout, swap, cache) {
+            if let Some(score) = self.score_swap_cached(layout, swap, cache) {
                 if score > best_score {
                     best_score = score;
                     best_swap = Some(*swap);
@@ -1266,7 +1161,7 @@ mod tests {
 
         for (i, swap) in POSSIBLE_SWAPS.iter().enumerate() {
             let score_normal = GEN.score_swap(&mut qwerty, swap);
-            let maybe_score_cached = GEN.score_swap_cached_prune(&mut qwerty, swap, &cache);
+            let maybe_score_cached = GEN.score_swap_cached(&mut qwerty, swap, &cache);
 
             assert_eq!(base, qwerty);
 

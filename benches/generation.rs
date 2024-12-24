@@ -37,7 +37,7 @@ fn score_swap(bencher: Bencher, swap: PosPair) {
     let (_name, mut layout) = saved.into_iter().next().unwrap();
     let cache = g.initialize_cache(&layout);
 
-    bencher.bench(|| g.score_swap_cached_prune(&mut layout, &swap, &cache))
+    bencher.bench(|| g.score_swap_cached(&mut layout, &swap, &cache))
 }
 
 fn score_layout(bencher: Bencher, name: String) {
