@@ -14,10 +14,10 @@ use crate::trigram_patterns::TrigramPattern;
 use crate::utility::*;
 use crate::weights::{Config, Weights};
 
+const SMALLEST_SCORE: f64 = f64::MIN / 2.0;
+
 #[cfg(test)]
-static PRUNED_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-#[cfg(test)]
-static NOT_PRUNED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static ANALYZED_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 #[derive(Clone, Default)]
 pub struct TrigramStats {
@@ -216,6 +216,7 @@ pub struct LayoutGeneration {
     pub convert_u8: ConvertU8,
     pub repeat_key: usize,
     pub chars_for_generation: [u8; 30],
+    pub trigram_precision: usize,
 
     fspeed_vals: [(PosPair, f64); 48],
     effort_map: [f64; 30],
@@ -255,15 +256,16 @@ impl LayoutGeneration {
                 per_char_trigrams: Self::per_char_trigrams(
                     &data.trigrams,
                     data.characters.len() as u8,
-                    config.defaults.trigram_precision,
+                    config.trigram_precision(),
                 ),
                 convert_u8: data.convert_u8.clone(),
                 repeat_key: data.convert_u8.to_single('@') as usize,
+                trigram_precision: config.trigram_precision(),
                 data,
 
                 fspeed_vals: get_fspeed(config.weights.lateral_penalty),
                 effort_map: get_effort_map(config.weights.heatmap, config.defaults.keyboard_type),
-                
+
                 scissor_indices: get_scissor_indices(),
                 lsb_indices: get_lsb_indices(),
                 pinky_ring_indices: get_pinky_ring_indices(),
@@ -288,10 +290,7 @@ impl LayoutGeneration {
         let language_dir_path = base_directory.as_ref().join(language);
 
         if let Ok(paths) = std::fs::read_dir(&language_dir_path) {
-            let valid = paths
-                .flatten()
-                .filter(is_kb_file)
-                .collect::<Vec<_>>();
+            let valid = paths.flatten().filter(is_kb_file).collect::<Vec<_>>();
 
             // let stats_dir = base_directory.as_ref().join("stats").join(language);
             // if let Ok(false) = std::fs::try_exists(stats_dir) {
@@ -383,7 +382,7 @@ impl LayoutGeneration {
     pub fn sfbs(&self, layout: &FastLayout, top_n: usize) -> Vec<(String, f64)> {
         self.fspeed_vals
             .iter()
-            .map(|(p, _)| {
+            .flat_map(|(p, _)| {
                 let u1 = layout.c(p.0);
                 let u2 = layout.c(p.1);
 
@@ -398,7 +397,6 @@ impl LayoutGeneration {
 
                 [(bigram, freq), (bigram2, freq2)]
             })
-            .flatten()
             .sorted_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap())
             .take(top_n)
             .collect::<Vec<_>>()
@@ -711,6 +709,9 @@ impl LayoutGeneration {
     }
 
     pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
+        #[cfg(test)]
+        ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         let mut res = LayoutCache::default();
 
         for i in 0..layout.matrix.len() {
@@ -731,20 +732,22 @@ impl LayoutGeneration {
 
         res.pinky_ring = self.pinky_ring_score(layout);
 
-        res.trigrams_total =
-            self.trigram_score_iter(layout, self.data.trigrams.iter().take(100000));
+        res.trigrams_total = self.trigram_score_iter(
+            layout,
+            self.data.trigrams.iter().take(self.trigram_precision),
+        );
 
         res.total_score = res.total_score();
 
         res
     }
 
-    pub fn score_swap_cached(
+    pub fn score_swap_cached_prune(
         &self,
         layout: &mut FastLayout,
         swap: &PosPair,
         cache: &LayoutCache,
-    ) -> f64 {
+    ) -> Option<f64> {
         unsafe { layout.swap_no_bounds(swap) };
 
         let PosPair(i1, i2) = *swap;
@@ -754,12 +757,12 @@ impl LayoutGeneration {
 
         let fspeed_score = if col1 == col2 {
             let fspeed = self.col_fspeed(layout, col1);
-            
+
             cache.fspeed_total - cache.fspeed[col1] + fspeed
         } else {
             let fspeed1 = self.col_fspeed(layout, col1);
             let fspeed2 = self.col_fspeed(layout, col2);
-            
+
             cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + fspeed1 + fspeed2
         };
 
@@ -795,27 +798,128 @@ impl LayoutGeneration {
             cache.pinky_ring
         };
 
-        // let _new_heur = cache.trigrams_total - scissors_score - effort_score - usage_score - fspeed_score;
-
-        let trigrams_score = if cache.total_score < (f64::MAX) {
-            //new_heur + new_heur.abs() * 0.0) {
+        let trigrams_score = {
             let trigrams_end = self.trigram_char_score(layout, swap);
             unsafe { layout.swap_no_bounds(swap) };
             let trigrams_start = self.trigram_char_score(layout, swap);
 
-            #[cfg(test)]
-            NOT_PRUNED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            cache.trigrams_total - trigrams_start + trigrams_end
+        };
+
+        Some(
+            trigrams_score
+                - scissors_score
+                - lsbs_score
+                - pinky_ring_score
+                - effort_score
+                - usage_score
+                - fspeed_score,
+        )
+    }
+
+    pub fn score_swap_cached_prune2(
+        &self,
+        layout: &mut FastLayout,
+        swap: &PosPair,
+        cache: &LayoutCache,
+    ) -> Option<f64> {
+        #[cfg(test)]
+        ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        let PosPair(i1, i2) = *swap;
+
+        let col1 = I_TO_COL[i1];
+        let col2 = I_TO_COL[i2];
+
+        let trigrams_score = if col1 != col2 {
+            let trigrams_end = self.trigram_char_score(layout, swap);
+            unsafe { layout.swap_no_bounds(swap) };
+            let trigrams_start = self.trigram_char_score(layout, swap);
 
             cache.trigrams_total - trigrams_start + trigrams_end
         } else {
-            #[cfg(test)]
-            PRUNED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-            unsafe { layout.swap_no_bounds(swap) };
-            return f64::MIN + 1000.0;
+            cache.trigrams_total
         };
 
-        trigrams_score - scissors_score - lsbs_score - pinky_ring_score - effort_score - usage_score - fspeed_score
+        let effort1 = self.char_effort(layout, i1);
+        let effort2 = self.char_effort(layout, i2);
+        let effort_score =
+            cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
+
+        let total = trigrams_score - effort_score;
+
+        let fspeed_score = if total >= cache.total_score {
+            if col1 == col2 {
+                let fspeed = self.col_fspeed(layout, col1);
+
+                cache.fspeed_total - cache.fspeed[col1] + fspeed
+            } else {
+                let fspeed1 = self.col_fspeed(layout, col1);
+                let fspeed2 = self.col_fspeed(layout, col2);
+
+                cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + fspeed1 + fspeed2
+            }
+        } else {
+            unsafe { layout.swap_no_bounds(swap) };
+            return None;
+        };
+
+        let total = total - fspeed_score;
+
+        let usage_score = if total >= cache.total_score {
+            if col1 == col2 {
+                let usage = self.col_usage(layout, col1);
+                cache.usage_total - cache.usage[col1] + usage
+            } else {
+                let usage1 = self.col_usage(layout, col1);
+                let usage2 = self.col_usage(layout, col2);
+                cache.usage_total - cache.usage[col1] - cache.usage[col2] + usage1 + usage2
+            }
+        } else {
+            unsafe { layout.swap_no_bounds(swap) };
+            return None;
+        };
+
+        let total = total - usage_score;
+
+        let scissors_score = if total >= cache.total_score {
+            if swap.affects_scissor() {
+                self.scissor_score(layout)
+            } else {
+                cache.scissors
+            }
+        } else {
+            unsafe { layout.swap_no_bounds(swap) };
+            return None;
+        };
+
+        let total = total - scissors_score;
+
+        let lsbs_score = if total >= cache.total_score {
+            if swap.affects_lsb() {
+                self.lsb_score(layout)
+            } else {
+                cache.lsbs
+            }
+        } else {
+            unsafe { layout.swap_no_bounds(swap) };
+            return None;
+        };
+
+        let total = total - lsbs_score;
+
+        let pinky_ring_score = if total >= cache.total_score {
+            if swap.affects_pinky_ring() {
+                self.pinky_ring_score(layout)
+            } else {
+                cache.pinky_ring
+            }
+        } else {
+            unsafe { layout.swap_no_bounds(swap) };
+            return None;
+        };
+
+        Some(total - pinky_ring_score)
     }
 
     pub fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
@@ -898,15 +1002,15 @@ impl LayoutGeneration {
         current_best_score: Option<f64>,
         possible_swaps: &[PosPair],
     ) -> (Option<PosPair>, f64) {
-        let mut best_score = current_best_score.unwrap_or(f64::MIN / 2.0);
+        let mut best_score = current_best_score.unwrap_or(SMALLEST_SCORE);
         let mut best_swap: Option<PosPair> = None;
 
         for swap in possible_swaps {
-            let score = self.score_swap_cached(layout, swap, cache);
-
-            if score > best_score {
-                best_score = score;
-                best_swap = Some(*swap);
+            if let Some(score) = self.score_swap_cached_prune(layout, swap, cache) {
+                if score > best_score {
+                    best_score = score;
+                    best_swap = Some(*swap);
+                }
             }
         }
 
@@ -919,7 +1023,7 @@ impl LayoutGeneration {
         cache: &mut LayoutCache,
         possible_swaps: &[PosPair],
     ) -> f64 {
-        let mut current_best_score = f64::MIN / 2.0;
+        let mut current_best_score = SMALLEST_SCORE;
 
         while let (Some(best_swap), new_score) =
             self.best_swap_cached(layout, cache, Some(current_best_score), possible_swaps)
@@ -984,7 +1088,7 @@ impl LayoutGeneration {
         possible_swaps: &[PosPair],
     ) -> FastLayout {
         let mut with_col_score = f64::MIN;
-        let mut optimized_score = f64::MIN / 2.0;
+        let mut optimized_score = SMALLEST_SCORE;
 
         while with_col_score < optimized_score {
             optimized_score = self.optimize_cached(&mut layout, cache, possible_swaps);
@@ -1003,7 +1107,7 @@ impl LayoutGeneration {
         possible_swaps: &[PosPair],
     ) {
         let mut with_col_score = f64::MIN;
-        let mut optimized_score = f64::MIN / 2.0;
+        let mut optimized_score = SMALLEST_SCORE;
 
         while with_col_score < optimized_score {
             optimized_score = self.optimize_cached(layout, cache, possible_swaps);
@@ -1023,10 +1127,9 @@ impl LayoutGeneration {
         amount: usize,
         based_on: FastLayout,
         pins: &'a [usize],
-    ) -> impl ParallelIterator<Item = FastLayout> + '_ {
+    ) -> impl ParallelIterator<Item = FastLayout> + 'a {
         let possible_swaps = pinned_swaps(pins);
 
-        
         (0..amount)
             .into_par_iter()
             .map(move |_| self.generate_with_pins(&based_on, pins, Some(&possible_swaps)))
@@ -1061,10 +1164,20 @@ mod tests {
     use crate::utility::ApproxEq;
     use nanorand::Rng;
     use once_cell::sync::Lazy;
+    use rayon::iter::ParallelIterator;
     use std::sync::atomic::Ordering;
 
     static GEN: Lazy<LayoutGeneration> =
         Lazy::new(|| LayoutGeneration::new("english", "static", None).unwrap());
+
+    #[test]
+    fn generate() {
+        GEN.generate_n_iter(2).collect::<Vec<_>>();
+
+        time_this::time!(GEN.generate_n_iter(250).collect::<Vec<_>>());
+
+        println!("{}", ANALYZED_COUNT.load(Ordering::Relaxed));
+    }
 
     #[allow(dead_code)]
     fn fspeed_per_pair() {
@@ -1077,36 +1190,6 @@ mod tests {
                 pair.1 / 10
             );
         }
-    }
-
-    #[test]
-    fn prune_heuristic_correctness() {
-        //has been tested with 10000 runs
-        let runs = 200;
-
-        for _ in 0..runs {
-            let mut layout = FastLayout::random(GEN.chars_for_generation);
-            let cache = GEN.initialize_cache(&layout);
-
-            if let (Some(best_swap_normal), best_score_normal) =
-                GEN.best_swap(&mut layout, None, &POSSIBLE_SWAPS)
-            {
-                if let (Some(best_swap_cached), best_score_cached) =
-                    GEN.best_swap_cached(&mut layout, &cache, None, &POSSIBLE_SWAPS)
-                {
-                    if best_score_normal.approx_eq_dbg(best_score_cached, 7) {
-                        assert_eq!(best_swap_normal, best_swap_cached);
-                    }
-                }
-            }
-        }
-        println!(
-			"pruned {} times.\nRecalculated trigrams {} times.\namount pruned: {:.2}%\n analyzed {} swaps",
-			PRUNED_COUNT.load(Ordering::Relaxed),
-			435 * runs - PRUNED_COUNT.load(Ordering::Relaxed),
-			(PRUNED_COUNT.load(Ordering::Relaxed) as f64) / (435.0 * runs as f64) * 100.0,
-			435 * runs
-		);
     }
 
     #[test]
@@ -1133,14 +1216,19 @@ mod tests {
                 .fspeed_total
                 .approx_eq_dbg(GEN.fspeed_score(&qwerty), 7));
             assert!(cache.trigrams_total.approx_eq_dbg(
-                GEN.trigram_score_iter(&qwerty, GEN.data.trigrams.iter().take(1000)),
+                GEN.trigram_score_iter(
+                    &qwerty,
+                    GEN.data.trigrams.iter().take(GEN.trigram_precision)
+                ),
                 7
             ));
             assert!(cache.lsbs.approx_eq_dbg(GEN.lsb_score(&qwerty), 7));
-            assert!(cache.pinky_ring.approx_eq_dbg(GEN.pinky_ring_score(&qwerty), 7));
+            assert!(cache
+                .pinky_ring
+                .approx_eq_dbg(GEN.pinky_ring_score(&qwerty), 7));
             assert!(cache
                 .total_score
-                .approx_eq_dbg(GEN.score_with_precision(&qwerty, 1000), 7));
+                .approx_eq_dbg(GEN.score_with_precision(&qwerty, GEN.trigram_precision), 7));
         }
     }
 
@@ -1178,15 +1266,18 @@ mod tests {
 
         for (i, swap) in POSSIBLE_SWAPS.iter().enumerate() {
             let score_normal = GEN.score_swap(&mut qwerty, swap);
-            let score_cached = GEN.score_swap_cached(&mut qwerty, swap, &cache);
+            let maybe_score_cached = GEN.score_swap_cached_prune(&mut qwerty, swap, &cache);
 
             assert_eq!(base, qwerty);
 
-            assert!(
-                score_cached == f64::MIN + 1000.0 || score_normal.approx_eq_dbg(score_cached, 7),
-                "failed on iteration {i} for {}",
-                POSSIBLE_SWAPS[i]
-            );
+            if let Some(score_cached) = maybe_score_cached {
+                assert!(
+                    score_cached == f64::MIN + 1000.0
+                        || score_normal.approx_eq_dbg(score_cached, 7),
+                    "failed on iteration {i} for {}",
+                    POSSIBLE_SWAPS[i]
+                );
+            }
         }
     }
 
@@ -1198,7 +1289,7 @@ mod tests {
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
 
         let optimized_normal = GEN.optimize_normal_no_cols(qwerty.clone(), &POSSIBLE_SWAPS);
-        let normal_score = GEN.score_with_precision(&optimized_normal, 100000);
+        let normal_score = GEN.score_with_precision(&optimized_normal, GEN.trigram_precision);
 
         let mut qwerty_for_cached = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
         let mut cache = GEN.initialize_cache(&qwerty_for_cached);
@@ -1221,7 +1312,7 @@ mod tests {
             let mut layout_for_cached = layout.clone();
 
             let optimized_normal = GEN.optimize_normal_no_cols(layout, &POSSIBLE_SWAPS);
-            let normal_score = GEN.score_with_precision(&optimized_normal, 100000);
+            let normal_score = GEN.score_with_precision(&optimized_normal, GEN.trigram_precision);
 
             let mut cache = GEN.initialize_cache(&layout_for_cached);
             let best_cached_score =

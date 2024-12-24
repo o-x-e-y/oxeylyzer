@@ -61,7 +61,7 @@ impl LayoutGeneration {
     #[allow(dead_code)]
     pub(crate) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> f64 {
         unsafe { layout.swap_no_bounds(swap) };
-        let score = self.score_with_precision(layout, 100000);
+        let score = self.score_with_precision(layout, self.trigram_precision);
         unsafe { layout.swap_no_bounds(swap) };
         score
     }

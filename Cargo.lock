@@ -384,6 +384,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -472,13 +481,14 @@ dependencies = [
  "arrayvec",
  "file-chunker",
  "indexmap",
- "itertools",
+ "itertools 0.13.0",
  "nanorand",
  "once_cell",
  "rayon",
  "serde",
  "serde_json",
  "smartstring",
+ "time_this",
  "toml",
 ]
 
@@ -490,7 +500,7 @@ dependencies = [
  "glob",
  "indexmap",
  "indicatif",
- "itertools",
+ "itertools 0.12.1",
  "oxeylyzer-core",
  "serde",
  "serde_json",
@@ -743,6 +753,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "time_this"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ccf50267eaf59a5424091959f8701df309b1bf2fcbfbdc80039eaf9416e7d68"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

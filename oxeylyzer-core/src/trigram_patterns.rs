@@ -147,7 +147,10 @@ impl Trigram {
     }
 
     const fn is_alt(&self) -> bool {
-        matches!((self.h1, self.h2, self.h3), (Left, Right, Left) | (Right, Left, Right))
+        matches!(
+            (self.h1, self.h2, self.h3),
+            (Left, Right, Left) | (Right, Left, Right)
+        )
     }
 
     const fn is_sfs(&self) -> bool {
@@ -164,7 +167,6 @@ impl Trigram {
     }
 
     const fn is_roll(&self) -> bool {
-
         #[allow(clippy::match_like_matches_macro)]
         match (self.h1, self.h2, self.h3) {
             (Left, Left, Right) => true,
@@ -195,7 +197,10 @@ impl Trigram {
     }
 
     const fn on_one_hand(&self) -> bool {
-        matches!((self.h1, self.h2, self.h3), (Left, Left, Left) | (Right, Right, Right))
+        matches!(
+            (self.h1, self.h2, self.h3),
+            (Left, Left, Left) | (Right, Right, Right)
+        )
     }
 
     const fn is_redir(&self) -> bool {

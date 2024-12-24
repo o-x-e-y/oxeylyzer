@@ -4,7 +4,7 @@ use crate::utility::*;
 pub type CharToFinger = [usize; 60];
 pub type Matrix<T> = [T; 30];
 
-pub (crate) trait LayoutInternal<T: Copy + Default> {
+pub(crate) trait LayoutInternal<T: Copy + Default> {
     unsafe fn cu(&self, i: usize) -> T;
 
     unsafe fn swap_xy_no_bounds(&mut self, i1: usize, i2: usize);
@@ -24,7 +24,7 @@ pub trait Layout<T: Copy + Default> {
     fn c(&self, i: usize) -> T;
 
     fn char(&self, x: usize, y: usize) -> T;
-    
+
     fn swap(&mut self, i1: usize, i2: usize) -> Option<()>;
 
     fn swap_pair(&mut self, pair: &PosPair) -> Option<()>;
@@ -34,7 +34,6 @@ pub trait Layout<T: Copy + Default> {
     fn get_index(&self, index: usize) -> [T; 6];
 
     fn get_trigram_pattern(&self, trigram: &[T; 3]) -> TrigramPattern;
-
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -198,7 +197,7 @@ impl Layout<u8> for FastLayout {
             None
         }
     }
-    
+
     #[inline(always)]
     fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
         self.swap(pair.0, pair.1)

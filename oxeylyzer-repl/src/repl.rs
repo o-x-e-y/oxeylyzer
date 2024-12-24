@@ -332,11 +332,12 @@ impl Repl {
             Language(l) => match l.language {
                 Some(l) => {
                     let config = Config::with_loaded_weights();
-                    let language = l.to_str()
+                    let language = l
+                        .to_str()
                         .ok_or_else(|| format!("Language is invalid utf8: {:?}", l))?;
-    
+
                     println!("{language:?}");
-    
+
                     if let Ok(generator) = LayoutGeneration::new(language, "static", Some(config)) {
                         self.gen = generator;
                         self.saved = self
@@ -344,7 +345,7 @@ impl Repl {
                             .load_layouts("static/layouts", language)
                             .expect("couldn't load layouts lol");
                         self.language = language.to_string();
-    
+
                         println!(
                             "Set language to {}. Sfr: {:.2}%",
                             &language,
@@ -353,19 +354,19 @@ impl Repl {
                     } else {
                         return Err(format!("Could not load data for {}", language));
                     }
-                },
-                None => println!("Current language: {}", self.language)
-            }
+                }
+                None => println!("Current language: {}", self.language),
+            },
             Include(l) => {
-                self
-                    .gen
+                self.gen
                     .load_layouts("static/layouts", &l.language)
                     .map_err(|e| e.to_string())?
                     .into_iter()
                     .for_each(|(name, layout)| {
                         self.saved.insert(name, layout);
                     });
-                self.saved.sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
+                self.saved
+                    .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
             }
             Languages(_) => {
                 std::fs::read_dir("static/language_data")
@@ -399,7 +400,9 @@ impl Repl {
                     load_text::load_raw(&l.language.display().to_string());
                 }
                 (false, false) => {
-                    let language = l.language.to_str()
+                    let language = l
+                        .language
+                        .to_str()
                         .ok_or_else(|| format!("Language is invalid utf8: {:?}", l.language))?;
 
                     let translator = CorpusConfig::new_translator(language, None);

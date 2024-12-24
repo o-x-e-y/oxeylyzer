@@ -5,9 +5,9 @@ use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use ahash::AHashMap as HashMap;
 use anyhow::Result;
 use file_chunker::FileChunker;
-use ahash::AHashMap as HashMap;
 use indexmap::IndexMap;
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -99,10 +99,7 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
     let quingrams = strings
         .par_iter()
         .map(|(s, last)| TextNgrams::from_str_last(s, last))
-        .reduce(
-            TextNgrams::default,
-            |accum, new| accum.combine_with(new),
-        );
+        .reduce(TextNgrams::default, |accum, new| accum.combine_with(new));
 
     TextData::from((quingrams, language, translator)).save(is_raw)?;
     println!(
@@ -140,7 +137,7 @@ impl<'a, const N: usize> TextNgrams<'a, N> {
     }
 }
 
-impl<'a, const N: usize> TextNgrams<'a, N> {
+impl<const N: usize> TextNgrams<'_, N> {
     fn combine_with(mut self, rhs: Self) -> Self {
         for (trigram, freq) in rhs.ngrams.into_iter() {
             self.ngrams
@@ -203,11 +200,14 @@ impl std::fmt::Display for TextData {
 
 impl TextData {
     pub fn new(language: &str) -> Self {
-        TextData { language: language.replace(' ', "_").to_lowercase().to_string(), ..Default::default() }
+        TextData {
+            language: language.replace(' ', "_").to_lowercase().to_string(),
+            ..Default::default()
+        }
     }
 }
 
-impl<'a> From<(TextNgrams<'a, 5>, &str, Translator)> for TextData {
+impl From<(TextNgrams<'_, 5>, &str, Translator)> for TextData {
     fn from((ngrams, language, translator): (TextNgrams<5>, &str, Translator)) -> Self {
         let mut res = TextData::new(language);
 
@@ -492,7 +492,8 @@ mod tests {
         let total_b = 1.0
             / data
                 .bigrams
-                .iter().copied()
+                .iter()
+                .copied()
                 .filter(|f| f > &0.0)
                 .reduce(f64::min)
                 .unwrap();
@@ -512,7 +513,8 @@ mod tests {
         let total_s = 1.0
             / data
                 .skipgrams
-                .iter().copied()
+                .iter()
+                .copied()
                 .filter(|f| f > &0.0)
                 .reduce(f64::min)
                 .unwrap();

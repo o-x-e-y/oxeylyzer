@@ -18,16 +18,6 @@ pub type SlowBigramData = HashMap<[u8; 2], f64>;
 pub type BigramData = Vec<f64>;
 pub type TrigramData = Vec<([u8; 3], f64)>;
 
-trait BigramLookup {
-    fn lookup(&self, c1: usize, c2: usize, char_count: usize) -> f64;
-}
-
-impl BigramLookup for BigramData {
-    fn lookup(&self, c1: usize, c2: usize, char_count: usize) -> f64 {
-        *self.get(c1 * char_count + c2).unwrap_or(&0.0)
-    }
-}
-
 #[derive(Deserialize)]
 struct LanguageDataInter {
     pub language: String,

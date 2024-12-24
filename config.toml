@@ -5,7 +5,7 @@ pins = """
 """
 
 [defaults]
-language = "english"
+language = "shai"
 trigram_precision = 1000
 keyboard_type = "ansi"
 
@@ -23,9 +23,9 @@ onehands = 0.9
 alternates = 0.4
 alternates_sfs = 0.6
 redirects = 5.4
-redirects_sfs = 9.2
-bad_redirects = 6.5
-bad_redirects_sfs = 7.5
+redirects_sfs = 7.2
+bad_redirects = 6.9
+bad_redirects_sfs = 9.5
 
 [weights.max_finger_use]
 penalty = 2.5

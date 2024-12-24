@@ -1,5 +1,5 @@
-use anyhow::Result;
 use ahash::AHashMap as HashMap;
+use anyhow::Result;
 use smartstring::{Compact, LazyCompact, SmartString};
 
 #[derive(Clone)]
@@ -56,20 +56,12 @@ impl Translator {
 
     #[allow(dead_code)]
     pub(crate) fn language_or_default(language: &str) -> Self {
-        if let Ok(t) = Self::language(language) {
-            t
-        } else {
-            Self::default()
-        }
+        Self::language(language).unwrap_or_default()
     }
 
     #[allow(dead_code)]
     pub(crate) fn language_or_raw(language: &str) -> Self {
-        if let Ok(t) = Self::language(language) {
-            t
-        } else {
-            Self::raw(true)
-        }
+        Self::language(language).unwrap_or_else(|_| Self::raw(true))
     }
 
     pub fn raw(unshift_chars: bool) -> Self {

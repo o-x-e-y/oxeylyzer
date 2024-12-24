@@ -58,14 +58,3 @@ xflags::xflags! {
         cmd quit q exit {}
     }
 }
-
-#[test]
-fn thing() {
-    fn slice_op<T>(s: &[T]) -> Option<&T> {
-        s.first()
-    }
-
-    let s = [1usize, 2, 3];
-
-    slice_op(&s);   
-}

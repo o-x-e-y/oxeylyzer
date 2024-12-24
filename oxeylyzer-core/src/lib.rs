@@ -1,5 +1,4 @@
 pub mod generate;
-pub mod generate_annealing;
 pub mod language_data;
 pub mod languages_cfg;
 pub mod layout;

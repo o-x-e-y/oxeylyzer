@@ -37,16 +37,20 @@ def save_json(obj: dict):
         json.dump(obj, new_file, indent='\t', separators=(',', ': '), ensure_ascii=False)
 
 
-(lang1, weight1) = ("french_qu", 50)
-(lang2, weight2) = ("english", 50)
+(lang1, weight1) = ("dutch", 45)
+(lang2, weight2) = ("english", 45)
+(lang3, weight3) = ("hungarian", 10)
 
-weight_sum = weight1 + weight2
+weight_sum = weight1 + weight2 + weight3
 weight1 = weight1/weight_sum
 weight2 = weight2/weight_sum
+weight3 = weight3/weight_sum
 
 data1 = load_json(lang1, weight1)
 data2 = load_json(lang2, weight2)
+data3 = load_json(lang3, weight3)
 
-new_data = add_jsons(data1, data2, "frq-en_50-50")
+new_data = add_jsons(data1, data2, "du-en_50-50")
+new_data = add_jsons(new_data, data3, "du-en-hu_45-45-10")
 
 save_json(new_data)

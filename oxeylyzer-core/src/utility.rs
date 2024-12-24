@@ -2,8 +2,8 @@ use std::collections::hash_map::Entry;
 
 use crate::languages_cfg::read_cfg;
 
-use arrayvec::ArrayVec;
 use ahash::AHashMap as HashMap;
+use arrayvec::ArrayVec;
 use nanorand::{tls_rng, Rng};
 use serde::Deserialize;
 
@@ -37,9 +37,9 @@ const AFFECTS_LSB: [bool; 30] = [
 ];
 
 const AFFECTS_PINKY_RING: [bool; 30] = [
-    true, true, false, false, false, false, false, false, true, true,
-    true, true, false, false, false, false, false, false, true, true,
-    true, true, false, false, false, false, false, false, true, true,
+    true, true, false, false, false, false, false, false, true, true, true, true, false, false,
+    false, false, false, false, true, true, true, true, false, false, false, false, false, false,
+    true, true,
 ];
 
 impl PosPair {
@@ -63,7 +63,9 @@ impl PosPair {
 
     #[inline]
     pub fn affects_pinky_ring(&self) -> bool {
-        unsafe { *AFFECTS_PINKY_RING.get_unchecked(self.0) || *AFFECTS_PINKY_RING.get_unchecked(self.1) }
+        unsafe {
+            *AFFECTS_PINKY_RING.get_unchecked(self.0) || *AFFECTS_PINKY_RING.get_unchecked(self.1)
+        }
     }
 }
 
@@ -440,7 +442,6 @@ pub const fn get_pinky_ring_indices() -> [PosPair; 18] {
         PosPair(21, 1),
         PosPair(21, 11),
         PosPair(21, 21),
-
         PosPair(8, 9),
         PosPair(8, 19),
         PosPair(8, 29),

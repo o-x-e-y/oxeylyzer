@@ -154,13 +154,7 @@ impl CorpusConfig {
             .filter(|pb| pb.is_dir())
             .flat_map(|pb| pb.file_name().unwrap().to_os_string().into_string())
             .map(|l| (l.clone(), Self::new(&l, None)))
-            .filter_map(|(l, c)| {
-                if let Ok(c) = c {
-                    Some((l, c))
-                } else {
-                    None
-                }
-            })
+            .flat_map(|(l, c)| c.ok().map(|cc| (l, cc)))
             .collect::<Vec<_>>()
     }
 
