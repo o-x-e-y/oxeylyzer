@@ -8,6 +8,7 @@ pins = """
 language = "english"
 trigram_precision = 1000
 keyboard_type = "ansi angle"
+max_cores = 32
 
 [weights]
 heatmap = 1.65

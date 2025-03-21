@@ -3,7 +3,7 @@ use std::path::Path;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
-use oxeylyzer_core::{generate::LayoutGeneration, layout::*, load_text, weights::Config};
+use oxeylyzer_core::{generate::LayoutGeneration, layout::*, load_text, rayon, weights::Config};
 
 use crate::corpus_transposition::CorpusConfig;
 use crate::tui::*;
@@ -14,6 +14,7 @@ pub struct Repl {
     saved: IndexMap<String, FastLayout>,
     temp_generated: Vec<FastLayout>,
     pins: Vec<usize>,
+    thread_pool: rayon::ThreadPool,
 }
 
 impl Repl {
@@ -24,6 +25,11 @@ impl Repl {
         let config = Config::with_loaded_weights();
         let language = config.defaults.language.clone();
         let pins = config.pins.clone();
+
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(config.defaults.max_cores)
+            .build()
+            .unwrap();
 
         let mut gen = LayoutGeneration::new(
             config.defaults.language.clone().as_str(),
@@ -43,6 +49,7 @@ impl Repl {
             gen,
             temp_generated: Vec::new(),
             pins,
+            thread_pool,
         })
     }
 
@@ -306,13 +313,14 @@ impl Repl {
             Rank(_) => self.rank(),
             Generate(g) => {
                 println!("generating {} layouts...", g.count);
-                self.temp_generated = generate_n(&self.gen, g.count);
+                self.thread_pool.install(|| {
+                    self.temp_generated = generate_n(&self.gen, g.count);
+                });
             }
-            Improve(i) => match self.layout_by_name(&i.name) {
-                Some(l) => {
-                    self.temp_generated =
-                        generate_n_with_pins(&self.gen, i.count, l.clone(), &self.pins)
-                }
+            Improve(i) => match self.layout_by_name(&i.name).cloned() {
+                Some(l) => self.thread_pool.install(|| {
+                    self.temp_generated = generate_n_with_pins(&self.gen, i.count, l, &self.pins)
+                }),
                 None => return Err(format!("'{}' does not exist!", i.name)),
             },
             Save(s) => match (self.get_nth(s.n), s.name) {

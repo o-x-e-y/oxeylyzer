@@ -8,6 +8,7 @@ pins = """
 language = "shai"
 trigram_precision = 1000
 keyboard_type = "ansi"
+max_cores = 32
 
 [weights]
 heatmap = 1.70

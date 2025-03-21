@@ -7,7 +7,8 @@ use std::io::Read;
 pub struct WeightDefaultsLoad {
     pub language: String,
     pub keyboard_type: String,
-    trigram_precision: usize,
+    pub trigram_precision: usize,
+    pub max_cores: usize,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -15,6 +16,7 @@ pub struct WeightDefaults {
     pub language: String,
     pub keyboard_type: KeyboardType,
     pub trigram_precision: usize,
+    pub max_cores: usize,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -106,6 +108,7 @@ impl Config {
                 keyboard_type: KeyboardType::try_from(load.defaults.keyboard_type)
                     .unwrap_or(KeyboardType::AnsiAngle),
                 trigram_precision: load.defaults.trigram_precision,
+                max_cores: load.defaults.max_cores,
             },
             weights: load.weights,
         }
@@ -117,6 +120,7 @@ impl Config {
                 language: "english".to_string(),
                 keyboard_type: KeyboardType::AnsiAngle,
                 trigram_precision: 100000,
+                max_cores: 128,
             },
             weights: Weights {
                 heatmap: 0.85,
