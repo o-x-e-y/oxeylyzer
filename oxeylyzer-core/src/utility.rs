@@ -18,28 +18,35 @@ pub fn shuffle_pins<const N: usize, T>(slice: &mut [T], pins: &[usize]) {
     }
 }
 
+#[rustfmt::skip]
 pub static I_TO_COL: [usize; 30] = [
-    0, 1, 2, 3, 3, 4, 4, 5, 6, 7, 0, 1, 2, 3, 3, 4, 4, 5, 6, 7, 0, 1, 2, 3, 3, 4, 4, 5, 6, 7,
+    0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
+    0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
+    0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
 ];
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct PosPair(pub usize, pub usize);
 
+#[rustfmt::skip]
 const AFFECTS_SCISSOR: [bool; 30] = [
-    true, true, true, true, true, true, true, true, true, true, true, true, false, false, false,
-    false, false, false, true, true, true, true, true, false, true, false, false, true, true, true,
+    true,   true,   true,   true,   true,      true,   true,   true,   true,   true,
+    true,   true,   false,  false,  false,     false,  false,  false,  true,   true,
+    true,   true,   true,   false,  true,      false,  false,  true,   true,   true,
 ];
 
+#[rustfmt::skip]
 const AFFECTS_LSB: [bool; 30] = [
-    false, false, true, false, true, true, false, true, false, false, false, false, true, false,
-    true, true, false, true, false, false, false, false, true, false, true, true, false, true,
-    false, false,
+    false,  false,  true,   false,  true,      true,   false,  true,   false,  false,
+    false,  false,  true,   false,  true,      true,   false,  true,   false,  false,
+    false,  false,  true,   false,  true,      true,   false,  true,   false,  false,
 ];
 
+#[rustfmt::skip]
 const AFFECTS_PINKY_RING: [bool; 30] = [
-    true, true, false, false, false, false, false, false, true, true, true, true, false, false,
-    false, false, false, false, true, true, true, true, false, false, false, false, false, false,
-    true, true,
+    true,   true,   false,  false,  false,     false,  false,  false,  true,   true,
+    true,   true,   false,  false,  false,     false,  false,  false,  true,   true,
+    true,   true,   false,  false,  false,     false,  false,  false,  true,   true,
 ];
 
 impl PosPair {
@@ -257,26 +264,32 @@ impl TryFrom<String> for KeyboardType {
 pub fn get_effort_map(heatmap_weight: f64, ktype: KeyboardType) -> [f64; 30] {
     use KeyboardType::*;
 
+    #[rustfmt::skip]
     let mut res = match ktype {
         IsoAngle => [
-            3.0, 2.4, 2.0, 2.2, 2.4, 3.3, 2.2, 2.0, 2.4, 3.0, 1.8, 1.3, 1.1, 1.0, 2.6, 2.6, 1.0,
-            1.1, 1.3, 1.8, 3.3, 2.8, 2.4, 1.8, 2.2, 2.2, 1.8, 2.4, 2.8, 3.3,
+            3.0, 2.4, 2.0, 2.2, 2.4,  3.3, 2.2, 2.0, 2.4, 3.0,
+            1.8, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.8,
+            3.3, 2.8, 2.4, 1.8, 2.2,  2.2, 1.8, 2.4, 2.8, 3.3,
         ],
         AnsiAngle => [
-            3.0, 2.4, 2.0, 2.2, 2.4, 3.3, 2.2, 2.0, 2.4, 3.0, 1.8, 1.3, 1.1, 1.0, 2.6, 2.6, 1.0,
-            1.1, 1.3, 1.8, 3.7, 2.8, 2.4, 1.8, 2.2, 2.2, 1.8, 2.4, 2.8, 3.3,
+            3.0, 2.4, 2.0, 2.2, 2.4,  3.3, 2.2, 2.0, 2.4, 3.0,
+            1.8, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.8,
+            3.7, 2.8, 2.4, 1.8, 2.2,  2.2, 1.8, 2.4, 2.8, 3.3,
         ],
         RowstagDefault => [
-            3.0, 2.4, 2.0, 2.2, 2.4, 3.3, 2.2, 2.0, 2.4, 3.0, 1.8, 1.3, 1.1, 1.0, 2.6, 2.6, 1.0,
-            1.1, 1.3, 1.8, 3.5, 3.0, 2.7, 2.3, 3.7, 2.2, 1.8, 2.4, 2.8, 3.3,
+            3.0, 2.4, 2.0, 2.2, 2.4,  3.3, 2.2, 2.0, 2.4, 3.0,
+            1.8, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.8,
+            3.5, 3.0, 2.7, 2.3, 3.7,  2.2, 1.8, 2.4, 2.8, 3.3,
         ],
         Ortho => [
-            3.0, 2.4, 2.0, 2.2, 3.1, 3.1, 2.2, 2.0, 2.4, 3.0, 1.7, 1.3, 1.1, 1.0, 2.6, 2.6, 1.0,
-            1.1, 1.3, 1.7, 3.2, 2.6, 2.3, 1.6, 3.0, 3.0, 1.6, 2.3, 2.6, 3.2,
+            3.0, 2.4, 2.0, 2.2, 3.1,  3.1, 2.2, 2.0, 2.4, 3.0,
+            1.7, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.7,
+            3.2, 2.6, 2.3, 1.6, 3.0,  3.0, 1.6, 2.3, 2.6, 3.2,
         ],
         Colstag => [
-            3.0, 2.4, 2.0, 2.2, 3.1, 3.1, 2.2, 2.0, 2.4, 3.0, 1.7, 1.3, 1.1, 1.0, 2.6, 2.6, 1.0,
-            1.1, 1.3, 1.7, 3.4, 2.6, 2.2, 1.8, 3.2, 3.2, 1.8, 2.2, 2.6, 3.4,
+            3.0, 2.4, 2.0, 2.2, 3.1,  3.1, 2.2, 2.0, 2.4, 3.0,
+            1.7, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.7,
+            3.4, 2.6, 2.2, 1.8, 3.2,  3.2, 1.8, 2.2, 2.6, 3.4,
         ],
     };
 
