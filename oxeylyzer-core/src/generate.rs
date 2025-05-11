@@ -930,6 +930,7 @@ impl LayoutGeneration {
         cache: &mut LayoutCache,
         possible_swaps: &[PosPair],
     ) -> f64 {
+        let mut max_swaps = 200; // too high, but makes the system cut off after a while
         let mut current_best_score = SMALLEST_SCORE;
 
         while let (Some(best_swap), new_score) =
@@ -937,6 +938,10 @@ impl LayoutGeneration {
         {
             current_best_score = new_score;
             self.accept_swap(layout, &best_swap, cache);
+            max_swaps -= 1;
+            if max_swaps == 0 {
+                return current_best_score;
+            }
         }
         current_best_score
     }
@@ -1005,24 +1010,6 @@ impl LayoutGeneration {
 
         layout.score = optimized_score;
         layout
-    }
-
-    pub fn optimize_mut(
-        &self,
-        layout: &mut FastLayout,
-        cache: &mut LayoutCache,
-        possible_swaps: &[PosPair],
-    ) {
-        let mut with_col_score = f64::MIN;
-        let mut optimized_score = SMALLEST_SCORE;
-
-        while with_col_score < optimized_score {
-            optimized_score = self.optimize_cached(layout, cache, possible_swaps);
-            self.optimize_cols(layout, cache, Some(optimized_score));
-            with_col_score = layout.score;
-        }
-
-        layout.score = optimized_score;
     }
 
     pub fn generate_n_iter(&self, amount: usize) -> impl ParallelIterator<Item = FastLayout> + '_ {
