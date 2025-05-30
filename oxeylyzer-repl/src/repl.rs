@@ -99,8 +99,19 @@ impl Repl {
 
     fn placeholder_name(&self, layout: &FastLayout) -> Result<String, String> {
         for i in 1..1000usize {
-            let new_name_bytes = layout.matrix[10..14].to_vec();
-            let mut new_name = self.gen.data.convert_u8.as_str(new_name_bytes.as_slice());
+            let new_name_bytes = layout
+                .matrix
+                .into_iter()
+                .skip(10)
+                .take(4)
+                .collect::<Vec<_>>();
+
+            let mut new_name = self
+                .gen
+                .data
+                .convert_u8
+                .as_str(new_name_bytes.as_slice())
+                .replace('*', "");
 
             new_name.push_str(format!("{}", i).as_str());
 
