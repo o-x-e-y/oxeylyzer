@@ -35,7 +35,7 @@ pub(crate) fn load_all_default() -> Result<()> {
         .filter_map(Result::ok)
         .for_each(|language_dir| {
             let language = language_dir.path().display().to_string().replace('\\', "/");
-            let language = language.split('/').last().unwrap();
+            let language = language.split('/').next_back().unwrap();
             load_default(language);
         });
     println!(

@@ -60,7 +60,7 @@ impl CorpusConfigLoad {
                 .parent()
                 .unwrap()
                 .components()
-                .last()
+                .next_back()
                 .unwrap()
                 .as_os_str();
             Ok(PathBuf::from(res))
