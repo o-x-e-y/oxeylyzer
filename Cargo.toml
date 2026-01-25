@@ -9,7 +9,7 @@ lto = "fat"
 name = "oxeylyzer"
 version = "0.1.0"
 authors = ["O_X_E_Y <lucoerlemans37@gmail.com>"]
-edition = "2021"
+edition = "2024"
 
 [workspace]
 members = [

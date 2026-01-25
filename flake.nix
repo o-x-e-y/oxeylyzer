@@ -1,49 +1,29 @@
 {
-  description = "oxeylyzer";
+  description = "A Rust devshell";
+
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    flake-parts.url = "github:hercules-ci/flake-parts";
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    devshell = {
-      url = "github:numtide/devshell";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    nixpkgs.url      = "github:NixOS/nixpkgs/nixos-unstable";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    flake-utils.url  = "github:numtide/flake-utils";
   };
 
-  outputs =
-    { self, ... }@inputs:
-    inputs.flake-parts.lib.mkFlake { inherit inputs; } {
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "aarch64-darwin"
-        "x86_64-darwin"
-      ];
-      imports = [ inputs.devshell.flakeModule ];
-      perSystem =
-        {
-          pkgs,
-          self',
-          system,
-          ...
-        }:
-        {
-          _module.args.pkgs = import inputs.nixpkgs {
-            inherit system;
-            overlays = [ inputs.rust-overlay.overlays.default ];
-          };
-          packages.default = pkgs.callPackage ./. {
-            inherit ((builtins.fromTOML (builtins.readFile ./Cargo.toml)).package) name version;
-          };
-          devshells.default = {
-            packages = with pkgs; [
-              gcc
-              (rust-bin.selectLatestNightlyWith (toolchain: toolchain.default))
-            ];
-          };
+  outputs = { nixpkgs, rust-overlay, flake-utils, ... }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        overlays = [ (import rust-overlay) ];
+        pkgs = import nixpkgs {
+          inherit system overlays;
         };
-    };
+        rust = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+      in
+      {
+        devShells.default = with pkgs; mkShell {
+          buildInputs = [
+            rust
+            pkg-config
+            cargo-tarpaulin
+          ];
+        };
+      }
+    );
 }
