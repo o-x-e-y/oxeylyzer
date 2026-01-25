@@ -68,7 +68,7 @@ impl TryFrom<&[u8]> for FastLayout {
         if layout_bytes.len() >= 30 {
             let mut new_layout = FastLayout::new();
 
-            for (i, &byte) in layout_bytes.iter().enumerate() {
+            for (i, &byte) in layout_bytes.iter().enumerate().take(30) {
                 new_layout.matrix[i] = byte;
                 new_layout.char_to_finger[byte as usize] = I_TO_COL[i];
             }
