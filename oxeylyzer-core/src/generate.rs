@@ -1041,7 +1041,7 @@ impl LayoutGeneration {
         pins: &[usize],
         possible_swaps: Option<&[PosPair]>,
     ) -> FastLayout {
-        let mut layout = FastLayout::random_pins(based_on.matrix, pins);
+        let mut layout = FastLayout::random_pins(based_on.matrix.as_slice().try_into().unwrap(), pins);
         let mut cache = self.initialize_cache(&layout);
 
         if let Some(ps) = possible_swaps {

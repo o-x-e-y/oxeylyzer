@@ -1,8 +1,8 @@
 use crate::trigram_patterns::{TrigramPattern, TRIGRAM_COMBINATIONS};
 use crate::utility::*;
 
-pub type CharToFinger = [usize; 60];
-pub type Matrix<T> = [T; 30];
+pub type CharToFinger = Box<[usize]>;
+pub type Matrix<T> = Box<[T; 30]>;
 
 pub(crate) trait LayoutInternal<T: Copy + Default> {
     unsafe fn cu(&self, i: usize) -> T;
@@ -81,7 +81,7 @@ impl TryFrom<&[u8]> for FastLayout {
 
 impl FastLayout {
     pub fn layout_str(&self, con: &ConvertU8) -> String {
-        con.as_str(&self.matrix)
+        con.as_str(self.matrix.as_slice())
     }
 
     pub fn formatted_string(&self, con: &ConvertU8) -> String {
@@ -136,8 +136,8 @@ impl LayoutInternal<u8> for FastLayout {
 impl Layout<u8> for FastLayout {
     fn new() -> FastLayout {
         FastLayout {
-            matrix: [u8::MAX; 30],
-            char_to_finger: [usize::MAX; 60],
+            matrix: Box::new([u8::MAX; 30]),
+            char_to_finger: Box::new([usize::MAX; 60]),
             score: 0.0,
         }
     }
@@ -238,7 +238,7 @@ mod tests {
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
         assert_eq!(
-            CON.from(qwerty.matrix),
+            CON.from(qwerty.matrix.into_iter()),
             vec![
                 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h',
                 'j', 'k', 'l', ';', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'
