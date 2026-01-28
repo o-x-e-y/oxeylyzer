@@ -429,6 +429,9 @@ impl LayoutGeneration {
     }
 
     pub fn score(&self, layout: &FastLayout) -> f64 {
+        #[cfg(test)]
+        ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        
         let effort = (0..layout.matrix.len())
             .map(|i| self.char_effort(layout, i))
             .sum::<f64>();
@@ -748,6 +751,9 @@ impl LayoutGeneration {
         swap: &PosPair,
         cache: &LayoutCache,
     ) -> Option<f64> {
+        #[cfg(test)]
+        ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        
         let PosPair(i1, i2) = *swap;
 
         if layout.c(i1) == layout.c(i2)
@@ -1066,8 +1072,6 @@ mod tests {
 
     #[test]
     fn generate() {
-        GEN.generate_n_iter(2).collect::<Vec<_>>();
-
         time_this::time!(GEN.generate_n_iter(250).collect::<Vec<_>>());
 
         println!("{}", ANALYZED_COUNT.load(Ordering::Relaxed));
