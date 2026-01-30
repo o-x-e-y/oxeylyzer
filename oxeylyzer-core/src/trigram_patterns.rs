@@ -188,29 +188,20 @@ impl Trigram {
     }
 }
 
-pub fn get_trigram_combinations() -> [TrigramPattern; 1000] {
-    let mut combinations: [TrigramPattern; 1000] = [TrigramPattern::Other; 1000];
+pub fn get_trigram_combinations() -> Box<[TrigramPattern]> {
+    let mut combinations = [TrigramPattern::Other; 1000];
 
-    let mut c3 = 0;
-    while c3 < 10 {
-        let mut c2 = 0;
-        while c2 < 10 {
-            let mut c1 = 0;
-            while c1 < 10 {
-                let index = c3 * 100 + c2 * 10 + c1;
-                let trigram = Trigram::new(
-                    Finger::FINGERS[c3],
-                    Finger::FINGERS[c2],
-                    Finger::FINGERS[c1],
-                );
+    for f3 in Finger::FINGERS {
+        for f2 in Finger::FINGERS {
+            for f1 in Finger::FINGERS {
+                let index = (f3 as usize) * 100 + (f2 as usize) * 10 + (f1 as usize);
+                let trigram = Trigram::new(f3, f2, f1);
                 combinations[index] = trigram.get_trigram_pattern();
-                c1 += 1;
             }
-            c2 += 1;
         }
-        c3 += 1;
     }
-    combinations
+
+    Box::new(combinations)
 }
 
 #[cfg(test)]

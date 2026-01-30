@@ -274,7 +274,7 @@ impl LayoutGeneration {
                 convert_u8: data.convert_u8.clone(),
                 repeat_key: data.convert_u8.to_single('@') as usize,
                 trigram_precision: config.trigram_precision(),
-                trigram_patterns: Box::new(get_trigram_combinations()),
+                trigram_patterns: get_trigram_combinations(),
                 data,
 
                 fspeed_vals: get_fspeed(config.weights.lateral_penalty),
