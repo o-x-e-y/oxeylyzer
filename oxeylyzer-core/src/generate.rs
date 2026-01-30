@@ -1,4 +1,3 @@
-use std::hint::unreachable_unchecked;
 use std::path::Path;
 
 use anyhow::Result;
@@ -362,8 +361,8 @@ impl LayoutGeneration {
         let len = self.data.characters.len();
 
         for (PosPair(i1, i2), _) in self.fspeed_vals {
-            let c1 = unsafe { layout.cu(i1) } as usize;
-            let c2 = unsafe { layout.cu(i2) } as usize;
+            let c1 = layout.cu(i1) as usize;
+            let c2 = layout.cu(i2) as usize;
 
             // if c1 != self.repeat_key && c2 != self.repeat_key {
             // 	res += data.get(c1 * len + c2).unwrap_or(&0.0);
@@ -544,8 +543,8 @@ impl LayoutGeneration {
     }
 
     fn trigram_char_score(&self, layout: &FastLayout, pos: &PosPair) -> f64 {
-        let c1 = unsafe { layout.cu(pos.0) };
-        let c2 = unsafe { layout.cu(pos.1) };
+        let c1 = layout.cu(pos.0);
+        let c2 = layout.cu(pos.1);
 
         if let Some(t_vec) = self.per_char_trigrams.get(&[c1, c2]) {
             self.trigram_score_iter(layout, t_vec)
@@ -560,8 +559,8 @@ impl LayoutGeneration {
         let len = self.data.characters.len();
 
         for PosPair(i1, i2) in self.scissor_indices {
-            let c1 = unsafe { layout.cu(i1) } as usize;
-            let c2 = unsafe { layout.cu(i2) } as usize;
+            let c1 = layout.cu(i1) as usize;
+            let c2 = layout.cu(i2) as usize;
             res += self.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0);
             res += self.data.bigrams.get(c2 * len + c1).unwrap_or(&0.0);
         }
@@ -575,8 +574,8 @@ impl LayoutGeneration {
         let len = self.data.characters.len();
 
         for PosPair(i1, i2) in self.lsb_indices {
-            let c1 = unsafe { layout.cu(i1) } as usize;
-            let c2 = unsafe { layout.cu(i2) } as usize;
+            let c1 = layout.cu(i1) as usize;
+            let c2 = layout.cu(i2) as usize;
             res += self.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0);
             res += self.data.bigrams.get(c2 * len + c1).unwrap_or(&0.0);
         }
@@ -589,8 +588,8 @@ impl LayoutGeneration {
         let len = self.data.characters.len();
 
         for PosPair(i1, i2) in self.pinky_ring_indices {
-            let c1 = unsafe { layout.cu(i1) } as usize;
-            let c2 = unsafe { layout.cu(i2) } as usize;
+            let c1 = layout.cu(i1) as usize;
+            let c2 = layout.cu(i2) as usize;
             res += self.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0);
             res += self.data.bigrams.get(c2 * len + c1).unwrap_or(&0.0);
         }
@@ -602,7 +601,7 @@ impl LayoutGeneration {
         let mut res = 0.0;
         match col {
             0..=2 => {
-                for c in unsafe { [layout.cu(col), layout.cu(col + 10), layout.cu(col + 20)] } {
+                for c in [layout.cu(col), layout.cu(col + 10), layout.cu(col + 20)] {
                     if let Some(v) = self.data.characters.get(c as usize) {
                         res += v;
                     }
@@ -610,16 +609,14 @@ impl LayoutGeneration {
             }
             3 | 4 => {
                 let col = (col - 3) * 2 + 3;
-                for c in unsafe {
-                    [
-                        layout.cu(col),
-                        layout.cu(col + 10),
-                        layout.cu(col + 20),
-                        layout.cu(col + 1),
-                        layout.cu(col + 11),
-                        layout.cu(col + 21),
-                    ]
-                } {
+                for c in [
+                    layout.cu(col),
+                    layout.cu(col + 10),
+                    layout.cu(col + 20),
+                    layout.cu(col + 1),
+                    layout.cu(col + 11),
+                    layout.cu(col + 21),
+                ] {
                     if let Some(v) = self.data.characters.get(c as usize) {
                         res += v;
                     }
@@ -627,13 +624,13 @@ impl LayoutGeneration {
             }
             5..=7 => {
                 let col = col + 2;
-                for c in unsafe { [layout.cu(col), layout.cu(col + 10), layout.cu(col + 20)] } {
+                for c in [layout.cu(col), layout.cu(col + 10), layout.cu(col + 20)] {
                     if let Some(v) = self.data.characters.get(c as usize) {
                         res += v;
                     }
                 }
             }
-            _ => unsafe { unreachable_unchecked() },
+            _ => unreachable!(),
         };
 
         self.weights.max_finger_use.penalty
@@ -642,14 +639,14 @@ impl LayoutGeneration {
                 1 | 6 => (res - self.weights.max_finger_use.ring).max(0.0),
                 2 | 5 => (res - self.weights.max_finger_use.middle).max(0.0),
                 3 | 4 => (res - self.weights.max_finger_use.index).max(0.0),
-                _ => unsafe { unreachable_unchecked() },
+                _ => unreachable!(),
             }
     }
 
     #[inline]
     fn pair_fspeed(&self, layout: &FastLayout, pair: &PosPair, dist: f64) -> f64 {
-        let c1 = unsafe { layout.cu(pair.0) } as usize;
-        let c2 = unsafe { layout.cu(pair.1) } as usize;
+        let c1 = layout.cu(pair.0) as usize;
+        let c2 = layout.cu(pair.1) as usize;
         // if c1 != self.repeat_key && c1 != self.repeat_key {
         // 	let mut res = 0.0;
 
@@ -674,7 +671,7 @@ impl LayoutGeneration {
     }
 
     #[inline(always)]
-    unsafe fn col_to_start_len(col: usize) -> (usize, usize) {
+    fn col_to_start_len(col: usize) -> (usize, usize) {
         *[
             (0, 3),
             (3, 3),
@@ -685,16 +682,17 @@ impl LayoutGeneration {
             (12, 3),
             (15, 3),
         ]
-        .get_unchecked(col)
+        .get(col)
+        .unwrap()
     }
 
     #[inline]
     fn col_fspeed(&self, layout: &FastLayout, col: usize) -> f64 {
-        let (start, len) = unsafe { Self::col_to_start_len(col) };
+        let (start, len) = Self::col_to_start_len(col);
         let mut res = 0.0;
 
         for i in start..(start + len) {
-            let (pair, dist) = unsafe { self.fspeed_vals.get_unchecked(i) };
+            let (pair, dist) = self.fspeed_vals.get(i).unwrap();
 
             res += self.pair_fspeed(layout, pair, *dist);
         }
@@ -703,10 +701,10 @@ impl LayoutGeneration {
 
     #[inline]
     fn char_effort(&self, layout: &FastLayout, i: usize) -> f64 {
-        let c = unsafe { layout.cu(i) };
+        let c = layout.cu(i);
 
         match self.data.characters.get(c as usize) {
-            Some(&v) => v * unsafe { self.effort_map.get_unchecked(i) },
+            Some(&v) => v * self.effort_map.get(i).unwrap(),
             None => 0.0,
         }
     }
@@ -762,7 +760,7 @@ impl LayoutGeneration {
             return None;
         }
 
-        unsafe { layout.swap_no_bounds(swap) };
+        layout.swap_no_bounds(swap);
 
         let col1 = I_TO_COL[i1];
         let col2 = I_TO_COL[i2];
@@ -812,7 +810,7 @@ impl LayoutGeneration {
 
         let trigrams_score = {
             let trigrams_end = self.trigram_char_score(layout, swap);
-            unsafe { layout.swap_no_bounds(swap) };
+            layout.swap_no_bounds(swap);
             let trigrams_start = self.trigram_char_score(layout, swap);
 
             cache.trigrams_total - trigrams_start + trigrams_end
@@ -840,7 +838,7 @@ impl LayoutGeneration {
 
         let trigrams_start = self.trigram_char_score(layout, swap);
 
-        unsafe { layout.swap_no_bounds(swap) };
+        layout.swap_no_bounds(swap);
 
         let col1 = I_TO_COL[i1];
         let col2 = I_TO_COL[i2];

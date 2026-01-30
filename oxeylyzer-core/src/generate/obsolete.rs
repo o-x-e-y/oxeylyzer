@@ -27,7 +27,7 @@ impl LayoutGeneration {
 
     #[allow(dead_code)]
     fn col_fspeed_before(&self, layout: &FastLayout, col: usize) -> f64 {
-        let (start, len) = unsafe { Self::col_to_start_len(col) };
+        let (start, len) = Self::col_to_start_len(col);
 
         let mut res = 0.0;
         let dsfb_ratio = self.weights.dsfb_ratio;
@@ -37,8 +37,8 @@ impl LayoutGeneration {
         for i in start..(start + len) {
             let (PosPair(i1, i2), dist) = self.fspeed_vals[i];
 
-            let c1 = unsafe { layout.cu(i1) } as usize;
-            let c2 = unsafe { layout.cu(i2) } as usize;
+            let c1 = layout.cu(i1) as usize;
+            let c2 = layout.cu(i2) as usize;
 
             let (pair, rev) = (c1 * len + c2, c2 * len + c1);
 
@@ -60,9 +60,9 @@ impl LayoutGeneration {
 
     #[allow(dead_code)]
     pub(crate) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> f64 {
-        unsafe { layout.swap_no_bounds(swap) };
+        layout.swap_no_bounds(swap);
         let score = self.score_with_precision(layout, self.trigram_precision);
-        unsafe { layout.swap_no_bounds(swap) };
+        layout.swap_no_bounds(swap);
         score
     }
 
@@ -100,7 +100,7 @@ impl LayoutGeneration {
             self.best_swap(&mut layout, Some(current_best_score), possible_swaps)
         {
             current_best_score = new_score;
-            unsafe { layout.swap_no_bounds(&best_swap) };
+            layout.swap_no_bounds(&best_swap);
         }
 
         layout
