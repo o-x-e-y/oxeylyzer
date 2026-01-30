@@ -260,7 +260,7 @@ impl Trigram {
     }
 }
 
-const fn get_trigram_combinations() -> [TrigramPattern; 1000] {
+pub const fn get_trigram_combinations() -> [TrigramPattern; 1000] {
     let mut combinations: [TrigramPattern; 1000] = [TrigramPattern::Other; 1000];
 
     let mut c3 = 0;
@@ -285,18 +285,19 @@ const fn get_trigram_combinations() -> [TrigramPattern; 1000] {
     combinations
 }
 
-pub static TRIGRAM_COMBINATIONS: [TrigramPattern; 1000] = get_trigram_combinations();
+// pub static TRIGRAM_COMBINATIONS: [TrigramPattern; 1000] = get_trigram_combinations();
 
 #[cfg(test)]
 mod tests {
     use super::{TrigramPattern::*, *};
-    use crate::*;
-    use layout::{FastLayout, Layout};
+    use crate::{generate::LayoutGeneration, layout::FastLayout, utility::ConvertU8};
     use once_cell::sync::Lazy;
-    use utility::ConvertU8;
 
     static CON: Lazy<ConvertU8> =
         Lazy::new(|| ConvertU8::with_chars("abcdefghijklmnopqrstuvwxyz',.;"));
+
+    static GEN: Lazy<LayoutGeneration> =
+        Lazy::new(|| LayoutGeneration::new("english", "./static", None).unwrap());
 
     #[test]
     fn is_alt() {
@@ -423,108 +424,108 @@ mod tests {
         let dvorak = FastLayout::try_from(dvorak_bytes.as_slice()).expect("couldn't create dvorak");
 
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['h', 'o', 't'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['h', 'o', 't'])),
             Alternate
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['l', 'o', 'w'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['l', 'o', 'w'])),
             Alternate
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['l', 'a', 'z'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['l', 'a', 'z'])),
             AlternateSfs
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['i', 'r', 'k'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['i', 'r', 'k'])),
             AlternateSfs
         );
 
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['a', 'b', 'c'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['a', 'b', 'c'])),
             Outroll
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['u', '\'', 'v'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['u', '\'', 'v'])),
             Outroll
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['t', 'h', 'e'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['t', 'h', 'e'])),
             Inroll
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['o', 'u', 't'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['o', 'u', 't'])),
             Inroll
         );
 
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['r', 't', 'h'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['r', 't', 'h'])),
             Onehand
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['h', 't', 'r'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['h', 't', 'r'])),
             Onehand
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['o', 'e', 'u'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['o', 'e', 'u'])),
             Onehand
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy([';', '.', 'x'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy([';', '.', 'x'])),
             Onehand
         );
 
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['r', 'd', 's'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['r', 'd', 's'])),
             Redirect
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['f', 'n', 'w'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['f', 'n', 'w'])),
             Redirect
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['c', 'b', 't'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['c', 'b', 't'])),
             RedirectSfs
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['t', 'b', 'c'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['t', 'b', 'c'])),
             RedirectSfs
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['d', 's', 'f'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['d', 's', 'f'])),
             RedirectSfs
         );
 
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['r', 't', 's'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['r', 't', 's'])),
             BadRedirect
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['s', 't', 'r'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['s', 't', 'r'])),
             BadRedirect
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['a', 'j', 'a'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['a', 'j', 'a'])),
             BadRedirectSfs
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['j', 'a', 'j'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['j', 'a', 'j'])),
             BadRedirectSfs
         );
 
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['g', 'h', 't'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['g', 'h', 't'])),
             BadSfb
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['u', 'p', '.'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['u', 'p', '.'])),
             BadSfb
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['p', 'u', 'k'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['p', 'u', 'k'])),
             Sft
         );
         assert_eq!(
-            dvorak.get_trigram_pattern(&CON.to_trigram_lossy(['n', 'v', 'r'])),
+            GEN.get_trigram_pattern(&dvorak, &CON.to_trigram_lossy(['n', 'v', 'r'])),
             Sft
         );
     }

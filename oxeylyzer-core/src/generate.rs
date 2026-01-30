@@ -9,7 +9,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::language_data::{BigramData, LanguageData, TrigramData};
 use crate::layout::*;
-use crate::trigram_patterns::TrigramPattern;
+use crate::trigram_patterns::{get_trigram_combinations, TrigramPattern};
 use crate::utility::*;
 use crate::weights::{Config, Weights};
 
@@ -229,6 +229,7 @@ pub struct LayoutGeneration {
     pub repeat_key: usize,
     pub chars_for_generation: [u8; 30],
     pub trigram_precision: usize,
+    pub trigram_patterns: Box<[TrigramPattern]>,
 
     fspeed_vals: [(PosPair, f64); 48],
     effort_map: [f64; 30],
@@ -273,6 +274,7 @@ impl LayoutGeneration {
                 convert_u8: data.convert_u8.clone(),
                 repeat_key: data.convert_u8.to_single('@') as usize,
                 trigram_precision: config.trigram_precision(),
+                trigram_patterns: Box::new(get_trigram_combinations()),
                 data,
 
                 fspeed_vals: get_fspeed(config.weights.lateral_penalty),
@@ -414,13 +416,35 @@ impl LayoutGeneration {
             .collect::<Vec<_>>()
     }
 
+    pub fn get_trigram_pattern(
+        &self,
+        layout: &FastLayout,
+        &[t1, t2, t3]: &[u8; 3],
+    ) -> TrigramPattern {
+        let a = match layout.char_to_finger.get(t1 as usize) {
+            Some(&Some(v)) => v as usize,
+            _ => return TrigramPattern::Invalid,
+        };
+        let b = match layout.char_to_finger.get(t2 as usize) {
+            Some(&Some(v)) => v as usize,
+            _ => return TrigramPattern::Invalid,
+        };
+        let c = match layout.char_to_finger.get(t3 as usize) {
+            Some(&Some(v)) => v as usize,
+            _ => return TrigramPattern::Invalid,
+        };
+
+        let index = a * 100 + b * 10 + c;
+        self.trigram_patterns[index] // TODO: handle out of bounds
+    }
+
     pub fn trigram_stats(&self, layout: &FastLayout, trigram_precision: usize) -> TrigramStats {
         use TrigramPattern::*;
 
         let mut freqs = TrigramStats::default();
 
         for (trigram, freq) in self.data.trigrams.iter().take(trigram_precision) {
-            match layout.get_trigram_pattern(trigram) {
+            match self.get_trigram_pattern(layout, trigram) {
                 Alternate => freqs.alternates += freq,
                 AlternateSfs => freqs.alternates_sfs += freq,
                 Inroll => freqs.inrolls += freq,
@@ -529,7 +553,7 @@ impl LayoutGeneration {
         let mut freqs = TrigramStats::default();
 
         for (trigram, freq) in trigrams {
-            match layout.get_trigram_pattern(trigram) {
+            match self.get_trigram_pattern(layout, trigram) {
                 Alternate => freqs.alternates += freq,
                 AlternateSfs => freqs.alternates_sfs += freq,
                 Inroll => freqs.inrolls += freq,

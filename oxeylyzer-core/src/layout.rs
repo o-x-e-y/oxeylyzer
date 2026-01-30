@@ -1,6 +1,5 @@
 use libdof::prelude::Finger;
 
-use crate::trigram_patterns::{TrigramPattern, TRIGRAM_COMBINATIONS};
 use crate::utility::*;
 
 pub type CharToFinger = Box<[Option<Finger>]>;
@@ -24,8 +23,6 @@ pub trait Layout<T: Copy + Default> {
     fn swap_indexes(&mut self);
 
     fn get_index(&self, index: usize) -> [T; 6];
-
-    fn get_trigram_pattern(&self, trigram: &[T; 3]) -> TrigramPattern;
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -170,26 +167,6 @@ impl Layout<u8> for FastLayout {
     #[inline(always)]
     fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
         self.swap(pair.0, pair.1)
-    }
-
-    #[inline(always)]
-    fn get_trigram_pattern(&self, &[t1, t2, t3]: &[u8; 3]) -> TrigramPattern {
-        let a = match self.char_to_finger.get(t1 as usize) {
-            Some(&Some(v)) => v as usize,
-            _ => return TrigramPattern::Invalid,
-        };
-        let b = match self.char_to_finger.get(t2 as usize) {
-            Some(&Some(v)) => v as usize,
-            _ => return TrigramPattern::Invalid,
-        };
-        let c = match self.char_to_finger.get(t3 as usize) {
-            Some(&Some(v)) => v as usize,
-            _ => return TrigramPattern::Invalid,
-        };
-
-        // a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 == 0b111)
-        let combination = a * 100 + b * 10 + c;
-        TRIGRAM_COMBINATIONS[combination]
     }
 }
 
