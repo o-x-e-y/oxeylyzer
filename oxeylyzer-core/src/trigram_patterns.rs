@@ -19,40 +19,39 @@ pub enum TrigramPattern {
     Invalid,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct TrigramFinger(Finger);
+trait TrigramFinger {
+    fn eq(self, other: Self) -> bool;
 
-impl TrigramFinger {
-    pub fn eq(self, other: Self) -> bool {
-        self.0 as u8 == other.0 as u8
+    fn gt(self, other: Self) -> bool;
+
+    fn lt(self, other: Self) -> bool;
+
+    fn is_bad(&self) -> bool;
+}
+
+impl TrigramFinger for Finger {
+    fn eq(self, other: Self) -> bool {
+        self as u8 == other as u8
     }
 
-    pub fn gt(self, other: Self) -> bool {
-        self.0 as u8 > other.0 as u8
+    fn gt(self, other: Self) -> bool {
+        self as u8 > other as u8
     }
 
-    pub fn lt(self, other: Self) -> bool {
-        (self.0 as u8) < (other.0 as u8)
-    }
-
-    fn hand(&self) -> Hand {
-        self.0.hand()
+    fn lt(self, other: Self) -> bool {
+        (self as u8) < (other as u8)
     }
 
     fn is_bad(&self) -> bool {
-        matches!(self.0, LP | LR | LM | RM | RR | RP)
-    }
-
-    fn is_thumb(&self) -> bool {
-        self.0.is_thumb()
+        matches!(self, LP | LR | LM | RM | RR | RP)
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct Trigram {
-    f1: TrigramFinger,
-    f2: TrigramFinger,
-    f3: TrigramFinger,
+    f1: Finger,
+    f2: Finger,
+    f3: Finger,
     h1: Hand,
     h2: Hand,
     h3: Hand,
@@ -60,14 +59,12 @@ pub(crate) struct Trigram {
 
 impl std::fmt::Display for Trigram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}, {}, {}", self.f1.0, self.f2.0, self.f3.0)
+        write!(f, "{}, {}, {}", self.f1, self.f2, self.f3)
     }
 }
 
 impl Trigram {
     fn new(f1: Finger, f2: Finger, f3: Finger) -> Self {
-        let (f1, f2, f3) = (TrigramFinger(f1), TrigramFinger(f2), TrigramFinger(f3));
-
         Trigram {
             f1,
             f2,
