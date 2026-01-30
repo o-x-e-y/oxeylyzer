@@ -4,7 +4,10 @@ use crate::languages_cfg::read_cfg;
 
 use ahash::AHashMap as HashMap;
 use arrayvec::ArrayVec;
-use libdof::prelude::Finger::{self, *};
+use libdof::prelude::{
+    Finger::{self, *},
+    PhysicalKey,
+};
 use nanorand::{tls_rng, Rng};
 use serde::Deserialize;
 
@@ -17,6 +20,18 @@ pub fn shuffle_pins<const N: usize, T>(slice: &mut [T], pins: &[usize]) {
         let swap2 = rng.generate_range(m..mapping.len());
         slice.swap(swap1, mapping[swap2]);
     }
+}
+
+pub fn default_physical_map() -> Box<[PhysicalKey]> {
+    let mut res = Vec::new();
+
+    for y in 0..3 {
+        for x in 0..10 {
+            res.push(PhysicalKey::xy(x as f64, y as f64))
+        }
+    }
+
+    res.into()
 }
 
 #[rustfmt::skip]

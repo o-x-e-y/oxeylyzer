@@ -398,9 +398,9 @@ impl LayoutGeneration {
         let mut res = 0.0;
         let len = self.data.characters.len();
 
-        for (PosPair(i1, i2), _) in self.fspeed_vals {
-            let c1 = layout.char(i1).unwrap() as usize;
-            let c2 = layout.char(i2).unwrap() as usize;
+        for BigramPair { pair, .. } in &layout.fspeed_indices.all {
+            let c1 = layout.char(pair.0).unwrap() as usize;
+            let c2 = layout.char(pair.1).unwrap() as usize;
 
             // if c1 != self.repeat_key && c2 != self.repeat_key {
             // 	res += data.get(c1 * len + c2).unwrap_or(&0.0);
@@ -417,9 +417,11 @@ impl LayoutGeneration {
     }
 
     pub fn sfbs(&self, layout: &FastLayout, top_n: usize) -> Vec<(String, f64)> {
-        self.fspeed_vals
+        layout
+            .fspeed_indices
+            .all
             .iter()
-            .flat_map(|(p, _)| {
+            .flat_map(|BigramPair { pair: p, .. }| {
                 let u1 = layout.char(p.0).unwrap();
                 let u2 = layout.char(p.1).unwrap();
 
@@ -764,12 +766,10 @@ impl LayoutGeneration {
 
     #[inline]
     fn finger_fspeed(&self, layout: &FastLayout, finger: Finger) -> f64 {
-        let (start, len) = Self::col_to_start_len(finger);
         let mut res = 0.0;
 
-        for i in start..(start + len) {
-            let (pair, dist) = self.fspeed_vals.get(i).unwrap();
-
+        // TODO: make helper function
+        for BigramPair { pair, dist } in layout.fspeed_indices.fingers.get(finger as usize).unwrap() {
             res += self.pair_fspeed(layout, pair, *dist);
         }
         res
@@ -838,8 +838,8 @@ impl LayoutGeneration {
 
         layout.swap_pair(swap);
 
-        let f1 = DEFAULT_FINGERMAP[i1];
-        let f2 = DEFAULT_FINGERMAP[i2];
+        let f1 = layout.matrix_fingers[i1];
+        let f2 = layout.matrix_fingers[i2];
 
         let fspeed_score = if f1 == f2 {
             let fspeed = self.finger_fspeed(layout, f1);
@@ -920,8 +920,8 @@ impl LayoutGeneration {
 
         layout.swap_pair(swap).unwrap();
 
-        let f1 = DEFAULT_FINGERMAP[i1];
-        let f2 = DEFAULT_FINGERMAP[i2];
+        let f1 = layout.matrix_fingers[i1];
+        let f2 = layout.matrix_fingers[i2];
 
         cache.fspeed_total = if f1 == f2 {
             let fspeed = self.finger_fspeed(layout, f1);
@@ -1160,7 +1160,12 @@ mod tests {
 
     #[allow(dead_code)]
     fn fspeed_per_pair() {
-        for (pair, dist) in GEN.fspeed_vals {
+        let qwerty_bytes = GEN
+            .convert_u8
+            .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
+
+        for BigramPair { pair, dist } in qwerty.fspeed_indices.all {
             println!(
                 "({}, {}) <-> ({}, {}): {dist}",
                 pair.0 % 10,

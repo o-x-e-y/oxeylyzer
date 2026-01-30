@@ -1,7 +1,10 @@
 use anyhow::{bail, Result};
-use libdof::{prelude::Finger, Dof, Keyboard};
+use itertools::Itertools;
+use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey};
 
 use crate::{utility::*, *};
+
+const KEY_EDGE_OFFSET: f64 = 0.5;
 
 pub trait Layout<T: Copy + Default> {
     fn new() -> Self;
@@ -27,6 +30,9 @@ pub trait Layout<T: Copy + Default> {
 pub struct FastLayout {
     pub matrix: Box<[u8]>,
     pub char_to_finger: Box<[Option<Finger>]>,
+    pub matrix_fingers: Box<[Finger]>,
+    pub matrix_physical: Box<[PhysicalKey]>,
+    pub fspeed_indices: FSpeedIndices,
     pub score: f64,
 }
 
@@ -42,7 +48,7 @@ impl From<[u8; 30]> for FastLayout {
 
         for (i, byte) in layout.into_iter().enumerate() {
             new_layout.matrix[i] = byte;
-            new_layout.char_to_finger[byte as usize] = Some(DEFAULT_FINGERMAP[i]);
+            new_layout.char_to_finger[byte as usize] = Some(new_layout.matrix_fingers[i]);
         }
         new_layout
     }
@@ -57,7 +63,7 @@ impl TryFrom<&[u8]> for FastLayout {
 
             for (i, &byte) in layout_bytes.iter().enumerate().take(30) {
                 new_layout.matrix[i] = byte;
-                new_layout.char_to_finger[byte as usize] = Some(DEFAULT_FINGERMAP[i]);
+                new_layout.char_to_finger[byte as usize] = Some(new_layout.matrix_fingers[i]);
             }
             Ok(new_layout)
         } else {
@@ -113,20 +119,27 @@ impl FastLayout {
             .map(|c| convert.to_single(c))
             .collect::<Box<_>>();
 
+        let matrix_fingers = dof.fingering().keys().copied().collect::<Box<_>>();
+        let matrix_physical = default_physical_map();
+
         let mut char_to_finger = Box::new([None; 60]);
         matrix
             .iter()
             .enumerate()
-            .for_each(|(i, &c)| char_to_finger[c as usize] = Some(DEFAULT_FINGERMAP[i]));
+            .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
+
+        let sfb_indices = FSpeedIndices::new(&matrix_fingers, &matrix_physical);
 
         // let name = dof.name().to_owned();
-        // let fingers = dof.fingering().keys().copied().collect();
         // let keyboard = dof.board().keys().cloned().map(Into::into).collect();
         // let shape = dof.main_layer().shape();
 
         let layout = Self {
             matrix,
+            matrix_fingers,
+            matrix_physical,
             char_to_finger,
+            fspeed_indices: sfb_indices,
             score: 0.0,
         };
 
@@ -136,10 +149,20 @@ impl FastLayout {
 
 impl Layout<u8> for FastLayout {
     fn new() -> FastLayout {
+        let matrix = Box::new([u8::MAX; 30]);
+        let matrix_fingers = Box::new(DEFAULT_FINGERMAP);
+        let matrix_physical = default_physical_map();
+        let char_to_finger = Box::new([None; 64]);
+        let sfb_indices = FSpeedIndices::new(matrix_fingers.as_slice(), &matrix_physical);
+        let score = 0.0;
+
         FastLayout {
-            matrix: Box::new([u8::MAX; 30]),
-            char_to_finger: Box::new([None; 64]),
-            score: 0.0,
+            matrix,
+            matrix_fingers,
+            matrix_physical,
+            char_to_finger,
+            fspeed_indices: sfb_indices,
+            score,
         }
     }
 
@@ -200,8 +223,8 @@ impl Layout<u8> for FastLayout {
         *self.matrix.get_mut(i1)? = char2;
         *self.matrix.get_mut(i2)? = char1;
 
-        *self.char_to_finger.get_mut(char1 as usize)? = Some(*DEFAULT_FINGERMAP.get(i2)?);
-        *self.char_to_finger.get_mut(char2 as usize)? = Some(*DEFAULT_FINGERMAP.get(i1)?);
+        *self.char_to_finger.get_mut(char1 as usize)? = Some(*self.matrix_fingers.get(i2)?);
+        *self.char_to_finger.get_mut(char2 as usize)? = Some(*self.matrix_fingers.get(i1)?);
 
         Some(())
     }
@@ -209,6 +232,103 @@ impl Layout<u8> for FastLayout {
     #[inline(always)]
     fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
         self.swap(pair.0, pair.1)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BigramPair {
+    pub pair: PosPair,
+    pub dist: f64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FSpeedIndices {
+    pub fingers: Box<[Box<[BigramPair]>; 10]>,
+    pub all: Box<[BigramPair]>,
+}
+
+fn dx_dy(k1: &PhysicalKey, k2: &PhysicalKey, _f1: Finger, _f2: Finger) -> (f64, f64) {
+    let ox1 = (k1.width() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
+    let ox2 = (k1.width() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
+
+    let oy1 = (k2.height() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
+    let oy2 = (k2.height() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
+
+    let l1 = k1.x() + ox1;
+    let r1 = k1.x() - ox1 + k1.width();
+    let t1 = k1.y() + oy1;
+    let b1 = k1.y() - oy1 + k1.height();
+
+    let l2 = k2.x() + ox2;
+    let r2 = k2.x() - ox2 + k2.width();
+    let t2 = k2.y() + oy2;
+    let b2 = k2.y() - oy2 + k2.height();
+
+    let dx = (l1.max(l2) - r1.min(r2)).max(0.0);
+    let dy = (t1.max(t2) - b1.min(b2)).max(0.0);
+
+    (dx, dy)
+}
+
+fn dist(k1: &PhysicalKey, k2: &PhysicalKey, f1: Finger, f2: Finger) -> f64 {
+    if f1 != f2 {
+        todo!("only supports distance between keys pressed with the same finger")
+    }
+
+    // TODO: move this to weights
+    static F_WEIGHTS: [f64; 10] = [1.4, 3.6, 4.8, 5.5, 3.3, 3.3, 5.5, 4.8, 3.6, 1.4];
+
+    let (dx, dy) = dx_dy(k1, k2, f1, f2);
+
+    // TODO: think about scaling differently
+    dx.hypot(dy).powf(1.3) * (5.5 / F_WEIGHTS[f1 as usize])
+}
+
+impl FSpeedIndices {
+    pub fn get_finger(&self, finger: Finger) -> &[BigramPair] {
+        &self.fingers[finger as usize]
+    }
+
+    pub fn new(
+        fingers: &[Finger],
+        keyboard: &[PhysicalKey],
+        // finger_weights: &FingerWeights,
+    ) -> Self {
+        assert!(
+            fingers.len() <= u8::MAX as usize,
+            "Too many keys to index with u8, max is {}",
+            u8::MAX
+        );
+        assert_eq!(
+            fingers.len(),
+            keyboard.len(),
+            "finger len is not the same as keyboard len: "
+        );
+
+        let fingers: Box<[_; 10]> = Finger::FINGERS
+            .map(|finger| {
+                fingers
+                    .iter()
+                    .zip(keyboard)
+                    .zip(0usize..)
+                    .filter_map(|((f, k), i)| (f == &finger).then_some((k, i)))
+                    .tuple_combinations::<(_, _)>()
+                    .map(|((k1, i1), (k2, i2))| BigramPair {
+                        pair: PosPair(i1, i2),
+                        dist: dist(k1, k2, finger, finger),
+                        // * finger_weights.get(finger),
+                    })
+                    .collect::<Box<_>>()
+            })
+            .into();
+
+        let all = fingers
+            .iter()
+            .flat_map(|f| f.iter())
+            .cloned()
+            .collect::<Box<_>>();
+
+        Self { fingers, all }
     }
 }
 
