@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use anyhow::Result;
-// use fxhash::FxHashMap;
 use ahash::AHashMap as HashMap;
+use anyhow::Result;
 use indexmap::IndexMap;
 use itertools::Itertools;
+use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::language_data::{BigramData, LanguageData, TrigramData};
@@ -473,8 +473,9 @@ impl LayoutGeneration {
             .map(|i| self.char_effort(layout, i))
             .sum::<f64>();
 
-        let fspeed_usage = (0..10)
-            .map(|col| self.col_usage(layout, col) + self.col_fspeed(layout, col))
+        let fspeed_usage = Finger::FINGERS
+            .into_iter()
+            .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
             .sum::<f64>();
 
         let scissors = self.scissor_score(layout);
@@ -635,10 +636,11 @@ impl LayoutGeneration {
         res * self.weights.pinky_ring_bigrams
     }
 
-    fn col_usage(&self, layout: &FastLayout, col: usize) -> f64 {
+    fn finger_usage(&self, layout: &FastLayout, finger: Finger) -> f64 {
         let mut res = 0.0;
-        match col {
-            0..=2 => {
+        match finger {
+            Finger::LP | Finger::LR | Finger::LM => {
+                let col = finger as usize;
                 for c in [
                     layout.char(col).unwrap(),
                     layout.char(col + 10).unwrap(),
@@ -649,13 +651,12 @@ impl LayoutGeneration {
                     }
                 }
             }
-            3 | 6 => {
-                let col = if col == 3 {
-                    (col - 3) * 2 + 3
+            Finger::LI | Finger::RI => {
+                let col = if finger == Finger::LI {
+                    (finger as usize - 3) * 2 + 3
                 } else {
-                    (col - 5) * 2 + 3
+                    (finger as usize - 5) * 2 + 3
                 };
-                // let col = (col - 3) * 2 + 3;
                 // let x = layout.get_index(index)
                 for c in [
                     layout.char(col).unwrap(),
@@ -670,8 +671,9 @@ impl LayoutGeneration {
                     }
                 }
             }
-            4 | 5 => { /* TODO: fix for thumbs */ }
-            7..=9 => {
+            Finger::LT | Finger::RT => { /* TODO: fix for thumbs */ }
+            Finger::RM | Finger::RR | Finger::RP => {
+                let col = finger as usize;
                 for c in [
                     layout.char(col).unwrap(),
                     layout.char(col + 10).unwrap(),
@@ -682,17 +684,15 @@ impl LayoutGeneration {
                     }
                 }
             }
-            _ => unreachable!(),
         };
 
         self.weights.max_finger_use.penalty
-            * match col {
-                0 | 9 => (res - self.weights.max_finger_use.pinky).max(0.0),
-                1 | 8 => (res - self.weights.max_finger_use.ring).max(0.0),
-                2 | 7 => (res - self.weights.max_finger_use.middle).max(0.0),
-                3 | 6 => (res - self.weights.max_finger_use.index).max(0.0),
-                4 | 5 => 0.0, // TODO: fix for thumb
-                _ => unreachable!(),
+            * match finger {
+                Finger::LP | Finger::RP => (res - self.weights.max_finger_use.pinky).max(0.0),
+                Finger::LR | Finger::RR => (res - self.weights.max_finger_use.ring).max(0.0),
+                Finger::LM | Finger::RM => (res - self.weights.max_finger_use.middle).max(0.0),
+                Finger::LI | Finger::RI => (res - self.weights.max_finger_use.index).max(0.0),
+                Finger::LT | Finger::RT => 0.0, // TODO: fix for thumb
             }
     }
 
@@ -724,26 +724,24 @@ impl LayoutGeneration {
     }
 
     #[inline(always)]
-    fn col_to_start_len(col: usize) -> (usize, usize) {
-        *[
-            (0, 3),
-            (3, 3),
-            (6, 3),
-            (18, 15),
-            (0, 0), // LT
-            (0, 0), // RT
-            (33, 15),
-            (9, 3),
-            (12, 3),
-            (15, 3),
-        ]
-        .get(col)
-        .unwrap()
+    fn col_to_start_len(finger: Finger) -> (usize, usize) {
+        match finger {
+            Finger::LP => (0, 3),
+            Finger::LR => (3, 3),
+            Finger::LM => (6, 3),
+            Finger::LI => (18, 15),
+            Finger::LT => (0, 0), // LT
+            Finger::RT => (0, 0), // RT
+            Finger::RI => (33, 15),
+            Finger::RM => (9, 3),
+            Finger::RR => (12, 3),
+            Finger::RP => (15, 3),
+        }
     }
 
     #[inline]
-    fn col_fspeed(&self, layout: &FastLayout, col: usize) -> f64 {
-        let (start, len) = Self::col_to_start_len(col);
+    fn finger_fspeed(&self, layout: &FastLayout, finger: Finger) -> f64 {
+        let (start, len) = Self::col_to_start_len(finger);
         let mut res = 0.0;
 
         for i in start..(start + len) {
@@ -775,9 +773,9 @@ impl LayoutGeneration {
         }
         res.effort_total = res.effort.iter().sum();
 
-        for col in 0..res.fspeed.len() {
-            res.usage[col] = self.col_usage(layout, col);
-            res.fspeed[col] = self.col_fspeed(layout, col)
+        for finger in Finger::FINGERS {
+            res.usage[finger as usize] = self.finger_usage(layout, finger);
+            res.fspeed[finger as usize] = self.finger_fspeed(layout, finger)
         }
         res.usage_total = res.usage.iter().sum();
         res.fspeed_total = res.fspeed.iter().sum();
@@ -817,27 +815,31 @@ impl LayoutGeneration {
 
         layout.swap_pair(swap);
 
-        let col1 = DEFAULT_FINGERMAP[i1] as usize;
-        let col2 = DEFAULT_FINGERMAP[i2] as usize;
+        let f1 = DEFAULT_FINGERMAP[i1];
+        let f2 = DEFAULT_FINGERMAP[i2];
 
-        let fspeed_score = if col1 == col2 {
-            let fspeed = self.col_fspeed(layout, col1);
+        let fspeed_score = if f1 == f2 {
+            let fspeed = self.finger_fspeed(layout, f1);
 
-            cache.fspeed_total - cache.fspeed[col1] + fspeed
+            cache.fspeed_total - cache.fspeed[f1 as usize] + fspeed
         } else {
-            let fspeed1 = self.col_fspeed(layout, col1);
-            let fspeed2 = self.col_fspeed(layout, col2);
+            let fspeed1 = self.finger_fspeed(layout, f1);
+            let fspeed2 = self.finger_fspeed(layout, f2);
 
-            cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + fspeed1 + fspeed2
+            cache.fspeed_total - cache.fspeed[f1 as usize] - cache.fspeed[f2 as usize]
+                + fspeed1
+                + fspeed2
         };
 
-        let usage_score = if col1 == col2 {
-            let usage = self.col_usage(layout, col1);
-            cache.usage_total - cache.usage[col1] + usage
+        let usage_score = if f1 == f2 {
+            let usage = self.finger_usage(layout, f1);
+            cache.usage_total - cache.usage[f1 as usize] + usage
         } else {
-            let usage1 = self.col_usage(layout, col1);
-            let usage2 = self.col_usage(layout, col2);
-            cache.usage_total - cache.usage[col1] - cache.usage[col2] + usage1 + usage2
+            let usage1 = self.finger_usage(layout, f1);
+            let usage2 = self.finger_usage(layout, f2);
+            cache.usage_total - cache.usage[f1 as usize] - cache.usage[f2 as usize]
+                + usage1
+                + usage2
         };
 
         let effort1 = self.char_effort(layout, i1);
@@ -895,42 +897,45 @@ impl LayoutGeneration {
 
         layout.swap_pair(swap).unwrap();
 
-        let col1 = DEFAULT_FINGERMAP[i1] as usize;
-        let col2 = DEFAULT_FINGERMAP[i2] as usize;
+        let f1 = DEFAULT_FINGERMAP[i1];
+        let f2 = DEFAULT_FINGERMAP[i2];
 
-        cache.fspeed_total = if col1 == col2 {
-            let fspeed = self.col_fspeed(layout, col1);
-            let total = cache.fspeed_total - cache.fspeed[col1] + fspeed;
+        cache.fspeed_total = if f1 == f2 {
+            let fspeed = self.finger_fspeed(layout, f1);
+            let total = cache.fspeed_total - cache.fspeed[f1 as usize] + fspeed;
 
-            cache.fspeed[col1] = fspeed;
+            cache.fspeed[f1 as usize] = fspeed;
 
             total
         } else {
-            let fspeed1 = self.col_fspeed(layout, col1);
-            let fspeed2 = self.col_fspeed(layout, col2);
-            let total =
-                cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + fspeed1 + fspeed2;
+            let fspeed1 = self.finger_fspeed(layout, f1);
+            let fspeed2 = self.finger_fspeed(layout, f2);
+            let total = cache.fspeed_total - cache.fspeed[f1 as usize] - cache.fspeed[f2 as usize]
+                + fspeed1
+                + fspeed2;
 
-            cache.fspeed[col1] = fspeed1;
-            cache.fspeed[col2] = fspeed2;
+            cache.fspeed[f1 as usize] = fspeed1;
+            cache.fspeed[f2 as usize] = fspeed2;
 
             total
         };
 
-        cache.usage_total = if col1 == col2 {
-            let usage = self.col_usage(layout, col1);
-            let total = cache.usage_total - cache.usage[col1] + usage;
+        cache.usage_total = if f1 == f2 {
+            let usage = self.finger_usage(layout, f1);
+            let total = cache.usage_total - cache.usage[f1 as usize] + usage;
 
-            cache.usage[col1] = usage;
+            cache.usage[f1 as usize] = usage;
 
             total
         } else {
-            let usage1 = self.col_usage(layout, col1);
-            let usage2 = self.col_usage(layout, col2);
-            let total = cache.usage_total - cache.usage[col1] - cache.usage[col2] + usage1 + usage2;
+            let usage1 = self.finger_usage(layout, f1);
+            let usage2 = self.finger_usage(layout, f2);
+            let total = cache.usage_total - cache.usage[f1 as usize] - cache.usage[f2 as usize]
+                + usage1
+                + usage2;
 
-            cache.usage[col1] = usage1;
-            cache.usage[col2] = usage2;
+            cache.usage[f1 as usize] = usage1;
+            cache.usage[f2 as usize] = usage2;
 
             total
         };

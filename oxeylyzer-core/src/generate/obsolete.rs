@@ -1,3 +1,5 @@
+use libdof::prelude::Finger;
+
 use crate::{generate::LayoutGeneration, layout::*, utility::*};
 
 impl LayoutGeneration {
@@ -11,8 +13,9 @@ impl LayoutGeneration {
             .map(|i| self.char_effort(layout, i))
             .sum::<f64>();
 
-        let fspeed_usage = (0..10)
-            .map(|col| self.col_usage(layout, col) + self.col_fspeed(layout, col))
+        let fspeed_usage = Finger::FINGERS
+            .into_iter()
+            .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
             .sum::<f64>();
 
         let scissors = self.scissor_score(layout);
@@ -26,8 +29,8 @@ impl LayoutGeneration {
     }
 
     #[allow(dead_code)]
-    fn col_fspeed_before(&self, layout: &FastLayout, col: usize) -> f64 {
-        let (start, len) = Self::col_to_start_len(col);
+    fn col_fspeed_before(&self, layout: &FastLayout, finger: Finger) -> f64 {
+        let (start, len) = Self::col_to_start_len(finger);
 
         let mut res = 0.0;
         let dsfb_ratio = self.weights.dsfb_ratio;
@@ -115,11 +118,17 @@ impl LayoutGeneration {
 
     #[allow(dead_code)]
     pub(crate) fn usage_score(&self, layout: &FastLayout) -> f64 {
-        (0..10).map(|i| self.col_usage(layout, i)).sum()
+        Finger::FINGERS
+            .into_iter()
+            .map(|f| self.finger_usage(layout, f))
+            .sum()
     }
 
     #[allow(dead_code)]
     pub(crate) fn fspeed_score(&self, layout: &FastLayout) -> f64 {
-        (0..10).map(|i| self.col_fspeed(layout, i)).sum()
+        Finger::FINGERS
+            .into_iter()
+            .map(|f| self.finger_fspeed(layout, f))
+            .sum()
     }
 }
