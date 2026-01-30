@@ -60,19 +60,17 @@ impl PosPair {
 
     #[inline]
     pub fn affects_scissor(&self) -> bool {
-        unsafe { *AFFECTS_SCISSOR.get_unchecked(self.0) || *AFFECTS_SCISSOR.get_unchecked(self.1) }
+        *AFFECTS_SCISSOR.get(self.0).unwrap() || *AFFECTS_SCISSOR.get(self.1).unwrap()
     }
 
     #[inline]
     pub fn affects_lsb(&self) -> bool {
-        unsafe { *AFFECTS_LSB.get_unchecked(self.0) || *AFFECTS_LSB.get_unchecked(self.1) }
+        *AFFECTS_LSB.get(self.0).unwrap() || *AFFECTS_LSB.get(self.1).unwrap()
     }
 
     #[inline]
     pub fn affects_pinky_ring(&self) -> bool {
-        unsafe {
-            *AFFECTS_PINKY_RING.get_unchecked(self.0) || *AFFECTS_PINKY_RING.get_unchecked(self.1)
-        }
+        *AFFECTS_PINKY_RING.get(self.0).unwrap() || *AFFECTS_PINKY_RING.get(self.1).unwrap()
     }
 }
 

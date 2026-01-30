@@ -82,7 +82,7 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
                 .rev()
                 .take(5)
                 .enumerate()
-                .for_each(|(i, c)| unsafe { *inter.get_unchecked_mut(4 - i) = c });
+                .for_each(|(i, c)| *inter.get_mut(4 - i).unwrap() = c);
 
             inter.into_iter().for_each(|c| last_chars.push(c));
             last_chars.push_str("     ");
@@ -212,7 +212,7 @@ impl From<(TextNgrams<'_, 5>, &str, Translator)> for TextData {
         let mut res = TextData::new(language);
 
         for (ngram, freq) in ngrams.ngrams.into_iter() {
-            let first = unsafe { ngram.chars().next().unwrap_unchecked() };
+            let first = ngram.chars().next().unwrap();
             if first != ' ' {
                 if let Some(first_t) = translator.table.get(&first) {
                     if first_t != " " {
