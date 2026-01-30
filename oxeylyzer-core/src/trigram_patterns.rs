@@ -1,3 +1,5 @@
+use libdof::dofinitions::{Finger, Finger::*, Hand, Hand::*};
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum TrigramPattern {
     Alternate,
@@ -17,113 +19,40 @@ pub enum TrigramPattern {
     Invalid,
 }
 
-#[repr(u8)]
-#[derive(Copy, Clone, Debug)]
-enum Hand {
-    Left,
-    Right,
-}
+#[derive(Debug, Clone, Copy)]
+struct TrigramFinger(Finger);
 
-use Hand::*;
-
-impl std::ops::Not for Hand {
-    type Output = Self;
-
-    fn not(self) -> Self::Output {
-        match self {
-            Left => Right,
-            Right => Left,
-        }
-    }
-}
-
-impl From<Finger> for Hand {
-    fn from(value: Finger) -> Self {
-        value.hand()
-    }
-}
-
-#[repr(u8)]
-#[derive(Copy, Clone, Debug)]
-pub enum Finger {
-    LP,
-    LR,
-    LM,
-    LI,
-    RI,
-    RM,
-    RR,
-    RP,
-    LT,
-    RT,
-}
-
-use Finger::*;
-
-impl std::fmt::Display for Finger {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let to_write = match self {
-            LP => "left pinky",
-            LR => "left ring",
-            LM => "left middle",
-            LI => "left index",
-            RI => "right index",
-            RM => "right middle",
-            RR => "right ring",
-            RP => "right pinky",
-            LT => "left thumb",
-            RT => "right thumb",
-        };
-        write!(f, "{}", to_write)
-    }
-}
-
-impl Finger {
+impl TrigramFinger {
     pub const fn eq(self, other: Self) -> bool {
-        self as u8 == other as u8
+        self.0 as u8 == other.0 as u8
     }
 
     pub const fn gt(self, other: Self) -> bool {
-        self as u8 > other as u8
+        self.0 as u8 > other.0 as u8
     }
 
     pub const fn lt(self, other: Self) -> bool {
-        (self as u8) < (other as u8)
+        (self.0 as u8) < (other.0 as u8)
     }
 
     const fn hand(&self) -> Hand {
-        match self {
-            LP | LR | LM | LI | LT => Left,
-            _ => Right,
-        }
+        self.0.hand()
     }
 
     const fn is_bad(&self) -> bool {
-        matches!(self, LP | LR | LM | RM | RR | RP)
+        matches!(self.0, LP | LR | LM | RM | RR | RP)
     }
 
-    pub const fn from_usize(value: usize) -> Self {
-        match value {
-            0 => LP,
-            1 => LR,
-            2 => LM,
-            3 => LI,
-            4 => LT,
-            5 => RT,
-            6 => RI,
-            7 => RM,
-            8 => RR,
-            9 => RP,
-            _ => unreachable!(),
-        }
+    const fn is_thumb(&self) -> bool {
+        self.0.is_thumb()
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct Trigram {
-    f1: Finger,
-    f2: Finger,
-    f3: Finger,
+    f1: TrigramFinger,
+    f2: TrigramFinger,
+    f3: TrigramFinger,
     h1: Hand,
     h2: Hand,
     h3: Hand,
@@ -131,12 +60,14 @@ pub(crate) struct Trigram {
 
 impl std::fmt::Display for Trigram {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}, {}, {}", self.f1, self.f2, self.f3)
+        write!(f, "{}, {}, {}", self.f1.0, self.f2.0, self.f3.0)
     }
 }
 
 impl Trigram {
     const fn new(f1: Finger, f2: Finger, f3: Finger) -> Self {
+        let (f1, f2, f3) = (TrigramFinger(f1), TrigramFinger(f2), TrigramFinger(f3));
+
         Trigram {
             f1,
             f2,
@@ -148,7 +79,7 @@ impl Trigram {
     }
 
     const fn is_thumb(&self) -> bool {
-        matches!(self.f1, LT | RT) || matches!(self.f2, LT | RT) || matches!(self.f3, LT | RT)
+        self.f1.is_thumb() || self.f2.is_thumb() || self.f3.is_thumb()
     }
 
     const fn is_alt(&self) -> bool {
@@ -271,9 +202,9 @@ pub const fn get_trigram_combinations() -> [TrigramPattern; 1000] {
             while c1 < 10 {
                 let index = c3 * 100 + c2 * 10 + c1;
                 let trigram = Trigram::new(
-                    Finger::from_usize(c3),
-                    Finger::from_usize(c2),
-                    Finger::from_usize(c1),
+                    Finger::FINGERS[c3],
+                    Finger::FINGERS[c2],
+                    Finger::FINGERS[c1],
                 );
                 combinations[index] = trigram.get_trigram_pattern();
                 c1 += 1;
@@ -284,8 +215,6 @@ pub const fn get_trigram_combinations() -> [TrigramPattern; 1000] {
     }
     combinations
 }
-
-// pub static TRIGRAM_COMBINATIONS: [TrigramPattern; 1000] = get_trigram_combinations();
 
 #[cfg(test)]
 mod tests {
