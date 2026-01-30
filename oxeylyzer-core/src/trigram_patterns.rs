@@ -23,27 +23,27 @@ pub enum TrigramPattern {
 struct TrigramFinger(Finger);
 
 impl TrigramFinger {
-    pub const fn eq(self, other: Self) -> bool {
+    pub fn eq(self, other: Self) -> bool {
         self.0 as u8 == other.0 as u8
     }
 
-    pub const fn gt(self, other: Self) -> bool {
+    pub fn gt(self, other: Self) -> bool {
         self.0 as u8 > other.0 as u8
     }
 
-    pub const fn lt(self, other: Self) -> bool {
+    pub fn lt(self, other: Self) -> bool {
         (self.0 as u8) < (other.0 as u8)
     }
 
-    const fn hand(&self) -> Hand {
+    fn hand(&self) -> Hand {
         self.0.hand()
     }
 
-    const fn is_bad(&self) -> bool {
+    fn is_bad(&self) -> bool {
         matches!(self.0, LP | LR | LM | RM | RR | RP)
     }
 
-    const fn is_thumb(&self) -> bool {
+    fn is_thumb(&self) -> bool {
         self.0.is_thumb()
     }
 }
@@ -65,7 +65,7 @@ impl std::fmt::Display for Trigram {
 }
 
 impl Trigram {
-    const fn new(f1: Finger, f2: Finger, f3: Finger) -> Self {
+    fn new(f1: Finger, f2: Finger, f3: Finger) -> Self {
         let (f1, f2, f3) = (TrigramFinger(f1), TrigramFinger(f2), TrigramFinger(f3));
 
         Trigram {
@@ -78,22 +78,22 @@ impl Trigram {
         }
     }
 
-    const fn is_thumb(&self) -> bool {
+    fn is_thumb(&self) -> bool {
         self.f1.is_thumb() || self.f2.is_thumb() || self.f3.is_thumb()
     }
 
-    const fn is_alt(&self) -> bool {
+    fn is_alt(&self) -> bool {
         matches!(
             (self.h1, self.h2, self.h3),
             (Left, Right, Left) | (Right, Left, Right)
         )
     }
 
-    const fn is_sfs(&self) -> bool {
+    fn is_sfs(&self) -> bool {
         self.f1.eq(self.f3)
     }
 
-    const fn get_alternate(&self) -> TrigramPattern {
+    fn get_alternate(&self) -> TrigramPattern {
         use TrigramPattern::*;
 
         match self.is_sfs() {
@@ -102,7 +102,7 @@ impl Trigram {
         }
     }
 
-    const fn is_roll(&self) -> bool {
+    fn is_roll(&self) -> bool {
         #[allow(clippy::match_like_matches_macro)]
         match (self.h1, self.h2, self.h3) {
             (Left, Left, Right) => true,
@@ -113,7 +113,7 @@ impl Trigram {
         }
     }
 
-    const fn is_inroll(&self) -> bool {
+    fn is_inroll(&self) -> bool {
         match (self.h1, self.h2, self.h3) {
             (Left, Left, Right) => self.f1.lt(self.f2),
             (Right, Left, Left) => self.f2.lt(self.f3),
@@ -123,7 +123,7 @@ impl Trigram {
         }
     }
 
-    const fn get_roll(&self) -> TrigramPattern {
+    fn get_roll(&self) -> TrigramPattern {
         use TrigramPattern::*;
 
         match self.is_inroll() {
@@ -132,30 +132,30 @@ impl Trigram {
         }
     }
 
-    const fn on_one_hand(&self) -> bool {
+    fn on_one_hand(&self) -> bool {
         matches!(
             (self.h1, self.h2, self.h3),
             (Left, Left, Left) | (Right, Right, Right)
         )
     }
 
-    const fn is_redir(&self) -> bool {
+    fn is_redir(&self) -> bool {
         (self.f1.lt(self.f2) == self.f2.gt(self.f3)) && self.on_one_hand()
     }
 
-    const fn is_bad_redir(&self) -> bool {
+    fn is_bad_redir(&self) -> bool {
         self.is_redir() && self.f1.is_bad() && self.f2.is_bad() && self.f3.is_bad()
     }
 
-    const fn has_sfb(&self) -> bool {
+    fn has_sfb(&self) -> bool {
         self.f1.eq(self.f2) || self.f2.eq(self.f3)
     }
 
-    const fn is_sft(&self) -> bool {
+    fn is_sft(&self) -> bool {
         self.f1.eq(self.f2) && self.f2.eq(self.f3)
     }
 
-    const fn get_one_hand(&self) -> TrigramPattern {
+    fn get_one_hand(&self) -> TrigramPattern {
         use TrigramPattern::*;
 
         if self.is_sft() {
@@ -174,7 +174,7 @@ impl Trigram {
         }
     }
 
-    const fn get_trigram_pattern(&self) -> TrigramPattern {
+    fn get_trigram_pattern(&self) -> TrigramPattern {
         if self.is_thumb() {
             TrigramPattern::Thumb
         } else if self.is_alt() {
@@ -191,7 +191,7 @@ impl Trigram {
     }
 }
 
-pub const fn get_trigram_combinations() -> [TrigramPattern; 1000] {
+pub fn get_trigram_combinations() -> [TrigramPattern; 1000] {
     let mut combinations: [TrigramPattern; 1000] = [TrigramPattern::Other; 1000];
 
     let mut c3 = 0;
