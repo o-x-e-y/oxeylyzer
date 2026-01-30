@@ -5,6 +5,7 @@ use anyhow::Result;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use libdof::prelude::Finger;
+use libdof::Dof;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::language_data::{BigramData, LanguageData, TrigramData};
@@ -303,17 +304,25 @@ impl LayoutGeneration {
         let mut res: IndexMap<String, FastLayout> = IndexMap::new();
         let language_dir_path = base_directory.as_ref().join(language);
 
-        if let Ok(paths) = std::fs::read_dir(&language_dir_path) {
-            let valid = paths.flatten().filter(is_kb_file).collect::<Vec<_>>();
+        if let Ok(read_dir) = std::fs::read_dir(&language_dir_path) {
+            let paths = read_dir
+                .flatten()
+                .filter_map(|d| {
+                    let path = d.path();
+                    path.is_file().then_some(path)
+                })
+                .collect::<Vec<_>>();
+            let kb_paths = paths.iter().filter(is_kb_file).collect::<Vec<_>>();
+            let dof_paths = paths.iter().filter(is_dof_file).collect::<Vec<_>>();
 
             // let stats_dir = base_directory.as_ref().join("stats").join(language);
             // if let Ok(false) = std::fs::try_exists(stats_dir) {
             // 	std::fs::create_dir_all(&stats_dir)?;
             // }
 
-            for entry in valid {
-                if let Some(name) = layout_name(&entry) {
-                    let content = std::fs::read_to_string(entry.path())?;
+            for path in kb_paths {
+                if let Some(name) = layout_name(path) {
+                    let content = std::fs::read_to_string(path)?;
                     let layout_str = format_layout_str(&content);
                     let layout_bytes = self.convert_u8.to(layout_str.chars());
 
@@ -325,6 +334,20 @@ impl LayoutGeneration {
                     } else {
                         println!("layout {} is not formatted correctly", name);
                     }
+                }
+            }
+
+            for path in dof_paths {
+                let s = std::fs::read_to_string(path)?;
+                let dof = serde_json::from_str::<Dof>(&s)?;
+                let name = dof.name().to_string();
+
+                match FastLayout::from_dof(dof, &mut self.convert_u8) {
+                    Ok(mut layout) => {
+                        layout.score = self.score(&layout);
+                        res.insert(name.to_lowercase(), layout);
+                    }
+                    Err(e) => println!(".dof layout {name} formatted incorrectly: {e}"),
                 }
             }
 

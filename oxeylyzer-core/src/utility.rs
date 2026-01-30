@@ -547,17 +547,22 @@ impl ApproxEq for f64 {
     }
 }
 
-pub(crate) fn is_kb_file(entry: &std::fs::DirEntry) -> bool {
-    if let Some(ext_os) = entry.path().extension() {
-        if let Some(ext) = ext_os.to_str() {
-            return ext == "kb";
-        }
+pub(crate) fn is_kb_file(path: &&std::path::PathBuf) -> bool {
+    if let Some(ext) = path.extension() {
+        return ext == "kb";
     }
     false
 }
 
-pub(crate) fn layout_name(entry: &std::fs::DirEntry) -> Option<String> {
-    if let Some(name_os) = entry.path().file_stem() {
+pub(crate) fn is_dof_file(entry: &&std::path::PathBuf) -> bool {
+    if let Some(ext_os) = entry.extension() {
+        return ext_os == "dof";
+    }
+    false
+}
+
+pub(crate) fn layout_name(entry: &std::path::Path) -> Option<String> {
+    if let Some(name_os) = entry.file_stem() {
         if let Some(name_str) = name_os.to_str() {
             return Some(name_str.to_string());
         }

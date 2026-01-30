@@ -1,6 +1,7 @@
-use libdof::prelude::Finger;
+use anyhow::{bail, Result};
+use libdof::{prelude::Finger, Dof, Keyboard};
 
-use crate::utility::*;
+use crate::{utility::*, *};
 
 pub trait Layout<T: Copy + Default> {
     fn new() -> Self;
@@ -86,6 +87,50 @@ impl FastLayout {
         }
 
         res
+    }
+
+    pub fn from_dof(dof: Dof, convert: &mut ConvertU8) -> Result<Self> {
+        use libdof::prelude::{Key, SpecialKey};
+
+        let key_count = dof.main_layer().shape().inner().iter().sum::<usize>();
+        if key_count != 30 {
+            bail!("Invalid key count {key_count}, expected 30")
+        }
+
+        let matrix = dof
+            .main_layer()
+            .keys()
+            .map(|k| match k {
+                Key::Char(c) => *c,
+                Key::Special(s) => match s {
+                    SpecialKey::Repeat => REPEAT_KEY,
+                    SpecialKey::Space => SPACE_CHAR,
+                    SpecialKey::Shift => SHIFT_CHAR,
+                    _ => REPLACEMENT_CHAR,
+                },
+                _ => REPLACEMENT_CHAR,
+            })
+            .map(|c| convert.to_single(c))
+            .collect::<Box<_>>();
+
+        let mut char_to_finger = Box::new([None; 60]);
+        matrix
+            .iter()
+            .enumerate()
+            .for_each(|(i, &c)| char_to_finger[c as usize] = Some(DEFAULT_FINGERMAP[i]));
+
+        // let name = dof.name().to_owned();
+        // let fingers = dof.fingering().keys().copied().collect();
+        // let keyboard = dof.board().keys().cloned().map(Into::into).collect();
+        // let shape = dof.main_layer().shape();
+
+        let layout = Self {
+            matrix,
+            char_to_finger,
+            score: 0.0,
+        };
+
+        Ok(layout)
     }
 }
 
