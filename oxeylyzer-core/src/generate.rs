@@ -431,7 +431,7 @@ impl LayoutGeneration {
     pub fn score(&self, layout: &FastLayout) -> f64 {
         #[cfg(test)]
         ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        
+
         let effort = (0..layout.matrix.len())
             .map(|i| self.char_effort(layout, i))
             .sum::<f64>();
@@ -753,7 +753,7 @@ impl LayoutGeneration {
     ) -> Option<f64> {
         #[cfg(test)]
         ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        
+
         let PosPair(i1, i2) = *swap;
 
         if layout.c(i1) == layout.c(i2)
@@ -982,7 +982,7 @@ impl LayoutGeneration {
         }
         (0..k).for_each(|i| {
             self.col_perms(layout, best, cache, best_score, k - 1);
-            if k % 2 == 0 {
+            if k.is_multiple_of(2) {
                 self.accept_swap(layout, &PosPair(COLS[i], COLS[k - 1]), cache);
             } else {
                 self.accept_swap(layout, &PosPair(COLS[0], COLS[k - 1]), cache);

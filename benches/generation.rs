@@ -5,7 +5,7 @@ use std::hint::black_box;
 use diol::prelude::*;
 use oxeylyzer_core::{
     generate::*,
-    utility::{PosPair, POSSIBLE_SWAPS},
+    utility::{POSSIBLE_SWAPS, PosPair},
 };
 
 fn main() -> std::io::Result<()> {

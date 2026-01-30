@@ -1,5 +1,5 @@
-use anyhow::Result;
 use ahash::AHashMap as HashMap;
+use anyhow::Result;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::Deserialize;
@@ -28,8 +28,7 @@ struct LanguageDataInter {
 }
 
 fn get_char_data(data: HashMap<char, f64>, con: &mut ConvertU8) -> CharacterData {
-    data
-        .into_iter()
+    data.into_iter()
         .map(|(c, f)| {
             con.insert_single(c);
             f
