@@ -4,16 +4,6 @@ use crate::utility::*;
 pub type CharToFinger = Box<[usize]>;
 pub type Matrix<T> = Box<[T]>;
 
-pub(crate) trait LayoutInternal<T: Copy + Default> {
-    fn cu(&self, i: usize) -> T;
-
-    fn swap_xy_no_bounds(&mut self, i1: usize, i2: usize);
-
-    fn swap_no_bounds(&mut self, pair: &PosPair);
-
-    fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize);
-}
-
 pub trait Layout<T: Copy + Default> {
     fn new() -> Self;
 
@@ -21,13 +11,13 @@ pub trait Layout<T: Copy + Default> {
 
     fn random_pins(layout_chars: &mut [u8], pins: &[usize]) -> Self;
 
-    fn c(&self, i: usize) -> T;
-
-    fn char(&self, x: usize, y: usize) -> T;
+    fn char(&self, i: usize) -> Option<T>;
 
     fn swap(&mut self, i1: usize, i2: usize) -> Option<()>;
 
     fn swap_pair(&mut self, pair: &PosPair) -> Option<()>;
+
+    fn swap_cols(&mut self, col1: usize, col2: usize) -> Option<()>;
 
     fn swap_indexes(&mut self);
 
@@ -103,36 +93,6 @@ impl FastLayout {
     }
 }
 
-impl LayoutInternal<u8> for FastLayout {
-    #[inline(always)]
-    fn cu(&self, i: usize) -> u8 {
-        *self.matrix.get(i).unwrap()
-    }
-
-    #[inline(always)]
-    fn swap_xy_no_bounds(&mut self, i1: usize, i2: usize) {
-        let char1 = self.cu(i1);
-        let char2 = self.cu(i2);
-
-        *self.matrix.get_mut(i1).unwrap() = char2;
-        *self.matrix.get_mut(i2).unwrap() = char1;
-
-        *self.char_to_finger.get_mut(char1 as usize).unwrap() = *I_TO_COL.get(i2).unwrap();
-        *self.char_to_finger.get_mut(char2 as usize).unwrap() = *I_TO_COL.get(i1).unwrap();
-    }
-
-    #[inline(always)]
-    fn swap_no_bounds(&mut self, pair: &PosPair) {
-        self.swap_xy_no_bounds(pair.0, pair.1);
-    }
-
-    fn swap_cols_no_bounds(&mut self, col1: usize, col2: usize) {
-        self.swap_xy_no_bounds(col1, col2);
-        self.swap_xy_no_bounds(col1 + 10, col2 + 10);
-        self.swap_xy_no_bounds(col1 + 20, col2 + 20);
-    }
-}
-
 impl Layout<u8> for FastLayout {
     fn new() -> FastLayout {
         FastLayout {
@@ -155,15 +115,31 @@ impl Layout<u8> for FastLayout {
     }
 
     #[inline(always)]
-    fn c(&self, i: usize) -> u8 {
-        self.matrix[i]
+    fn char(&self, i: usize) -> Option<u8> {
+        self.matrix.get(i).copied()
+    }
+
+    fn swap_cols(&mut self, col1: usize, col2: usize) -> Option<()> {
+        if col1 == col2 {
+            return Some(());
+        }
+        if col1 > 9 || col2 > 9 {
+            return None;
+        }
+        // TODO: handle errors properly here
+        self.swap(col1, col2).unwrap();
+        self.swap(col1 + 10, col2 + 10).unwrap();
+        self.swap(col1 + 20, col2 + 20).unwrap();
+
+        Some(())
     }
 
     fn swap_indexes(&mut self) {
-        self.swap_cols_no_bounds(3, 6);
-        self.swap_cols_no_bounds(4, 5);
+        self.swap_cols(3, 6);
+        self.swap_cols(4, 5);
     }
 
+    /// Gets all keys in a certain index column. 0 = left index, 1 = right index.
     fn get_index(&self, index: usize) -> [u8; 6] {
         let mut new_index = [0; 6];
         let start_pos = index * 2 + 3;
@@ -175,27 +151,18 @@ impl Layout<u8> for FastLayout {
         new_index
     }
 
-    #[inline]
-    fn char(&self, x: usize, y: usize) -> u8 {
-        assert!(x < 10 && y < 3);
-        self.matrix[x + 10 * y]
-    }
-
+    #[inline(always)]
     fn swap(&mut self, i1: usize, i2: usize) -> Option<()> {
-        if i1 < 30 && i2 < 30 {
-            let char1 = self.matrix[i1];
-            let char2 = self.matrix[i2];
+        let char1 = self.char(i1)?;
+        let char2 = self.char(i2)?;
 
-            self.matrix[i1] = char2;
-            self.matrix[i2] = char1;
-            self.char_to_finger[char1 as usize] = I_TO_COL[i2];
-            self.char_to_finger[char2 as usize] = I_TO_COL[i1];
+        *self.matrix.get_mut(i1)? = char2;
+        *self.matrix.get_mut(i2)? = char1;
 
-            Some(())
-        } else {
-            println!("Invalid coordinate, swap was cancelled");
-            None
-        }
+        *self.char_to_finger.get_mut(char1 as usize)? = *I_TO_COL.get(i2)?;
+        *self.char_to_finger.get_mut(char2 as usize)? = *I_TO_COL.get(i1)?;
+
+        Some(())
     }
 
     #[inline(always)]
@@ -270,7 +237,7 @@ mod tests {
         let mut qwerty =
             FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
-        qwerty.swap_xy_no_bounds(9, 12);
+        qwerty.swap(9, 12).unwrap();
         assert_eq!(
             qwerty.layout_str(&CON),
             "qwertyuiodaspfghjkl;zxcvbnm,./".to_string()
@@ -283,7 +250,7 @@ mod tests {
         let mut qwerty =
             FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
-        qwerty.swap_cols_no_bounds(1, 9);
+        qwerty.swap_cols(1, 9).unwrap();
         assert_eq!(
             qwerty.layout_str(&CON),
             "qpertyuiowa;dfghjklsz/cvbnm,.x".to_string()
@@ -311,7 +278,7 @@ mod tests {
             FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
         let new_swap = PosPair::new(0, 29);
-        qwerty.swap_no_bounds(&new_swap);
+        qwerty.swap_pair(&new_swap).unwrap();
         assert_eq!(
             qwerty.layout_str(&CON),
             "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string()
@@ -373,9 +340,9 @@ mod tests {
         let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
-        assert_eq!(qwerty.char(4, 1), CON.to_single_lossy('g'));
-        assert_eq!(qwerty.char(9, 2), CON.to_single_lossy('/'));
-        assert_eq!(qwerty.char(8, 1), CON.to_single_lossy('l'));
+        assert_eq!(qwerty.char(4 + (1 * 10)), Some(CON.to_single_lossy('g')));
+        assert_eq!(qwerty.char(9 + (2 * 10)), Some(CON.to_single_lossy('/')));
+        assert_eq!(qwerty.char(8 + (1 * 10)), Some(CON.to_single_lossy('l')));
     }
 
     #[test]
@@ -383,9 +350,9 @@ mod tests {
         let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
-        assert_eq!(qwerty.c(10), CON.to_single_lossy('a'));
-        assert_eq!(qwerty.c(24), CON.to_single_lossy('b'));
-        assert_eq!(qwerty.c(22), CON.to_single_lossy('c'));
+        assert_eq!(qwerty.char(10), Some(CON.to_single_lossy('a')));
+        assert_eq!(qwerty.char(24), Some(CON.to_single_lossy('b')));
+        assert_eq!(qwerty.char(22), Some(CON.to_single_lossy('c')));
     }
 
     // #[test]

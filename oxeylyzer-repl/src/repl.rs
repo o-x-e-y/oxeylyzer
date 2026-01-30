@@ -181,7 +181,10 @@ impl Repl {
         for y in 0..3 {
             for (n, layout) in [l1, l2].into_iter().enumerate() {
                 for x in 0..10 {
-                    print!("{} ", heatmap_heat(&self.gen.data, layout.c(x + 10 * y)));
+                    print!(
+                        "{} ",
+                        heatmap_heat(&self.gen.data, layout.char(x + 10 * y).unwrap())
+                    );
                     if x == 4 {
                         print!(" ");
                     }
