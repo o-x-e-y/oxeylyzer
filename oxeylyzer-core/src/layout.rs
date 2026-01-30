@@ -2,9 +2,6 @@ use libdof::prelude::Finger;
 
 use crate::utility::*;
 
-pub type CharToFinger = Box<[Option<Finger>]>;
-pub type Matrix<T> = Box<[T]>;
-
 pub trait Layout<T: Copy + Default> {
     fn new() -> Self;
 
@@ -27,8 +24,8 @@ pub trait Layout<T: Copy + Default> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FastLayout {
-    pub matrix: Matrix<u8>,
-    pub char_to_finger: CharToFinger,
+    pub matrix: Box<[u8]>,
+    pub char_to_finger: Box<[Option<Finger>]>,
     pub score: f64,
 }
 
