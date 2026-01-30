@@ -32,6 +32,7 @@ pub struct TrigramStats {
     pub sfbs: f64,
     pub bad_sfbs: f64,
     pub sfts: f64,
+    pub thumbs: f64,
     pub other: f64,
     pub invalid: f64,
 }
@@ -115,11 +116,23 @@ impl std::fmt::Debug for TrigramStats {
 }
 
 fn format_fspeed(finger_speed: &[f64]) -> String {
-    let mut finger_speed_str: Vec<String> = Vec::new();
-    for v in finger_speed {
-        finger_speed_str.push(format!("{:.3}", v * 10.0))
+    let f = |v| format!("{:.3}", v * 10.0);
+
+    let mut left_hand = Vec::new();
+    for v in finger_speed.iter().take(5) {
+        left_hand.push(f(v))
     }
-    finger_speed_str.join(", ")
+
+    let mut right_hand = Vec::new();
+    for v in finger_speed.iter().rev().take(5) {
+        right_hand.push(f(v))
+    }
+
+    let legend = "\n  Pinky  Ring   Middle Index  Thumb\n";
+    let left_hand = format!("  {}\n", left_hand.join(", "));
+    let right_hand = format!("  {}\n", right_hand.join(", "));
+
+    format!("{legend}{left_hand}{right_hand}")
 }
 
 #[derive(Clone)]
@@ -133,7 +146,7 @@ pub struct LayoutStats {
     pub pinky_ring: f64,
     pub trigram_stats: TrigramStats,
     pub fspeed: f64,
-    pub finger_speed: [f64; 8],
+    pub finger_speed: [f64; 10],
 }
 
 impl std::fmt::Display for LayoutStats {
@@ -142,7 +155,7 @@ impl std::fmt::Display for LayoutStats {
             f,
             concat!(
                 "Sfb:  {:.3}%\nDsfb: {:.3}%\nFinger Speed: {:.3}\n",
-                "    [{}]\nScissors: {:.3}%\nLsbs: {:.3}%\nPinky Ring Bigrams: {:.3}%\n\n{}"
+                "{}\nScissors: {:.3}%\nLsbs: {:.3}%\nPinky Ring Bigrams: {:.3}%\n\n{}"
             ),
             self.sfb * 100.0,
             self.dsfb * 100.0,
@@ -165,10 +178,10 @@ pub struct LayoutCache {
     lsbs: f64,
     pinky_ring: f64,
 
-    usage: [f64; 8],
+    usage: [f64; 10],
     usage_total: f64,
 
-    fspeed: [f64; 8],
+    fspeed: [f64; 10],
     fspeed_total: f64,
 
     // trigrams: HashMap<(char, Option<char>), f64>,
@@ -420,6 +433,7 @@ impl LayoutGeneration {
                 Sfb => freqs.sfbs += freq,
                 BadSfb => freqs.bad_sfbs += freq,
                 Sft => freqs.sfts += freq,
+                Thumb => freqs.thumbs += freq,
                 Other => freqs.other += freq,
                 Invalid => freqs.invalid += freq,
             }
@@ -435,7 +449,7 @@ impl LayoutGeneration {
             .map(|i| self.char_effort(layout, i))
             .sum::<f64>();
 
-        let fspeed_usage = (0..8)
+        let fspeed_usage = (0..10)
             .map(|col| self.col_usage(layout, col) + self.col_fspeed(layout, col))
             .sum::<f64>();
 
@@ -611,8 +625,14 @@ impl LayoutGeneration {
                     }
                 }
             }
-            3 | 4 => {
-                let col = (col - 3) * 2 + 3;
+            3 | 6 => {
+                let col = if col == 3 {
+                    (col - 3) * 2 + 3
+                } else {
+                    (col - 5) * 2 + 3
+                };
+                // let col = (col - 3) * 2 + 3;
+                // let x = layout.get_index(index)
                 for c in [
                     layout.char(col).unwrap(),
                     layout.char(col + 10).unwrap(),
@@ -626,8 +646,8 @@ impl LayoutGeneration {
                     }
                 }
             }
-            5..=7 => {
-                let col = col + 2;
+            4 | 5 => { /* TODO: fix for thumbs */ }
+            7..=9 => {
                 for c in [
                     layout.char(col).unwrap(),
                     layout.char(col + 10).unwrap(),
@@ -643,10 +663,11 @@ impl LayoutGeneration {
 
         self.weights.max_finger_use.penalty
             * match col {
-                0 | 7 => (res - self.weights.max_finger_use.pinky).max(0.0),
-                1 | 6 => (res - self.weights.max_finger_use.ring).max(0.0),
-                2 | 5 => (res - self.weights.max_finger_use.middle).max(0.0),
-                3 | 4 => (res - self.weights.max_finger_use.index).max(0.0),
+                0 | 9 => (res - self.weights.max_finger_use.pinky).max(0.0),
+                1 | 8 => (res - self.weights.max_finger_use.ring).max(0.0),
+                2 | 7 => (res - self.weights.max_finger_use.middle).max(0.0),
+                3 | 6 => (res - self.weights.max_finger_use.index).max(0.0),
+                4 | 5 => 0.0, // TODO: fix for thumb
                 _ => unreachable!(),
             }
     }
@@ -685,6 +706,8 @@ impl LayoutGeneration {
             (3, 3),
             (6, 3),
             (18, 15),
+            (0, 0), // LT
+            (0, 0), // RT
             (33, 15),
             (9, 3),
             (12, 3),
@@ -728,7 +751,7 @@ impl LayoutGeneration {
         }
         res.effort_total = res.effort.iter().sum();
 
-        for col in 0..8 {
+        for col in 0..res.fspeed.len() {
             res.usage[col] = self.col_usage(layout, col);
             res.fspeed[col] = self.col_fspeed(layout, col)
         }
@@ -770,8 +793,8 @@ impl LayoutGeneration {
 
         layout.swap_pair(swap);
 
-        let col1 = I_TO_COL[i1];
-        let col2 = I_TO_COL[i2];
+        let col1 = DEFAULT_FINGERMAP[i1] as usize;
+        let col2 = DEFAULT_FINGERMAP[i2] as usize;
 
         let fspeed_score = if col1 == col2 {
             let fspeed = self.col_fspeed(layout, col1);
@@ -848,8 +871,8 @@ impl LayoutGeneration {
 
         layout.swap_pair(swap).unwrap();
 
-        let col1 = I_TO_COL[i1];
-        let col2 = I_TO_COL[i2];
+        let col1 = DEFAULT_FINGERMAP[i1] as usize;
+        let col2 = DEFAULT_FINGERMAP[i2] as usize;
 
         cache.fspeed_total = if col1 == col2 {
             let fspeed = self.col_fspeed(layout, col1);

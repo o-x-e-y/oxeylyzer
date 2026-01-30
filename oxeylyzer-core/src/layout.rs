@@ -1,7 +1,9 @@
+use libdof::prelude::Finger;
+
 use crate::trigram_patterns::{TrigramPattern, TRIGRAM_COMBINATIONS};
 use crate::utility::*;
 
-pub type CharToFinger = Box<[usize]>;
+pub type CharToFinger = Box<[Option<Finger>]>;
 pub type Matrix<T> = Box<[T]>;
 
 pub trait Layout<T: Copy + Default> {
@@ -45,7 +47,7 @@ impl From<[u8; 30]> for FastLayout {
 
         for (i, byte) in layout.into_iter().enumerate() {
             new_layout.matrix[i] = byte;
-            new_layout.char_to_finger[byte as usize] = I_TO_COL[i];
+            new_layout.char_to_finger[byte as usize] = Some(DEFAULT_FINGERMAP[i]);
         }
         new_layout
     }
@@ -60,7 +62,7 @@ impl TryFrom<&[u8]> for FastLayout {
 
             for (i, &byte) in layout_bytes.iter().enumerate().take(30) {
                 new_layout.matrix[i] = byte;
-                new_layout.char_to_finger[byte as usize] = I_TO_COL[i];
+                new_layout.char_to_finger[byte as usize] = Some(DEFAULT_FINGERMAP[i]);
             }
             Ok(new_layout)
         } else {
@@ -97,7 +99,7 @@ impl Layout<u8> for FastLayout {
     fn new() -> FastLayout {
         FastLayout {
             matrix: Box::new([u8::MAX; 30]),
-            char_to_finger: Box::new([usize::MAX; 60]),
+            char_to_finger: Box::new([None; 64]),
             score: 0.0,
         }
     }
@@ -159,8 +161,8 @@ impl Layout<u8> for FastLayout {
         *self.matrix.get_mut(i1)? = char2;
         *self.matrix.get_mut(i2)? = char1;
 
-        *self.char_to_finger.get_mut(char1 as usize)? = *I_TO_COL.get(i2)?;
-        *self.char_to_finger.get_mut(char2 as usize)? = *I_TO_COL.get(i1)?;
+        *self.char_to_finger.get_mut(char1 as usize)? = Some(*DEFAULT_FINGERMAP.get(i2)?);
+        *self.char_to_finger.get_mut(char2 as usize)? = Some(*DEFAULT_FINGERMAP.get(i1)?);
 
         Some(())
     }
@@ -173,20 +175,20 @@ impl Layout<u8> for FastLayout {
     #[inline(always)]
     fn get_trigram_pattern(&self, &[t1, t2, t3]: &[u8; 3]) -> TrigramPattern {
         let a = match self.char_to_finger.get(t1 as usize) {
-            Some(&v) if v != usize::MAX => v,
+            Some(&Some(v)) => v as usize,
             _ => return TrigramPattern::Invalid,
         };
         let b = match self.char_to_finger.get(t2 as usize) {
-            Some(&v) if v != usize::MAX => v,
+            Some(&Some(v)) => v as usize,
             _ => return TrigramPattern::Invalid,
         };
         let c = match self.char_to_finger.get(t3 as usize) {
-            Some(&v) if v != usize::MAX => v,
+            Some(&Some(v)) => v as usize,
             _ => return TrigramPattern::Invalid,
         };
 
         // a, b and c are numbers between 0 and 7. This means they fit in exactly 3 bits (7 == 0b111)
-        let combination = (a << 6) | (b << 3) | c;
+        let combination = a * 100 + b * 10 + c;
         TRIGRAM_COMBINATIONS[combination]
     }
 }
@@ -292,46 +294,46 @@ mod tests {
 
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy('a') as usize),
-            Some(&0usize)
+            Some(&Some(Finger::LP))
         );
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy('w') as usize),
-            Some(&1usize)
+            Some(&Some(Finger::LR))
         );
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy('c') as usize),
-            Some(&2usize)
+            Some(&Some(Finger::LM))
         );
 
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy('r') as usize),
-            Some(&3usize)
+            Some(&Some(Finger::LI))
         );
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy('b') as usize),
-            Some(&3usize)
+            Some(&Some(Finger::LI))
         );
 
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy('h') as usize),
-            Some(&4usize)
+            Some(&Some(Finger::RI))
         );
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy('u') as usize),
-            Some(&4usize)
+            Some(&Some(Finger::RI))
         );
 
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy('i') as usize),
-            Some(&5usize)
+            Some(&Some(Finger::RM))
         );
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy('.') as usize),
-            Some(&6usize)
+            Some(&Some(Finger::RR))
         );
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy(';') as usize),
-            Some(&7usize)
+            Some(&Some(Finger::RP))
         );
     }
 

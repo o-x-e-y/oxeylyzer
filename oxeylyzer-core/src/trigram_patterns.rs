@@ -12,6 +12,7 @@ pub enum TrigramPattern {
     Sfb,
     BadSfb,
     Sft,
+    Thumb,
     Other,
     Invalid,
 }
@@ -107,12 +108,12 @@ impl Finger {
             1 => LR,
             2 => LM,
             3 => LI,
-            4 => RI,
-            5 => RM,
-            6 => RR,
-            7 => RP,
-            8 => LT,
-            9 => RT,
+            4 => LT,
+            5 => RT,
+            6 => RI,
+            7 => RM,
+            8 => RR,
+            9 => RP,
             _ => unreachable!(),
         }
     }
@@ -144,6 +145,10 @@ impl Trigram {
             h2: f2.hand(),
             h3: f3.hand(),
         }
+    }
+
+    const fn is_thumb(&self) -> bool {
+        matches!(self.f1, LT | RT) || matches!(self.f2, LT | RT) || matches!(self.f3, LT | RT)
     }
 
     const fn is_alt(&self) -> bool {
@@ -239,7 +244,9 @@ impl Trigram {
     }
 
     const fn get_trigram_pattern(&self) -> TrigramPattern {
-        if self.is_alt() {
+        if self.is_thumb() {
+            TrigramPattern::Thumb
+        } else if self.is_alt() {
             self.get_alternate()
         } else if self.on_one_hand() {
             self.get_one_hand()
@@ -253,16 +260,16 @@ impl Trigram {
     }
 }
 
-const fn get_trigram_combinations() -> [TrigramPattern; 512] {
-    let mut combinations: [TrigramPattern; 512] = [TrigramPattern::Other; 512];
+const fn get_trigram_combinations() -> [TrigramPattern; 1000] {
+    let mut combinations: [TrigramPattern; 1000] = [TrigramPattern::Other; 1000];
 
     let mut c3 = 0;
-    while c3 < 8 {
+    while c3 < 10 {
         let mut c2 = 0;
-        while c2 < 8 {
+        while c2 < 10 {
             let mut c1 = 0;
-            while c1 < 8 {
-                let index = c3 * 64 + c2 * 8 + c1;
+            while c1 < 10 {
+                let index = c3 * 100 + c2 * 10 + c1;
                 let trigram = Trigram::new(
                     Finger::from_usize(c3),
                     Finger::from_usize(c2),
@@ -278,7 +285,7 @@ const fn get_trigram_combinations() -> [TrigramPattern; 512] {
     combinations
 }
 
-pub static TRIGRAM_COMBINATIONS: [TrigramPattern; 512] = get_trigram_combinations();
+pub static TRIGRAM_COMBINATIONS: [TrigramPattern; 1000] = get_trigram_combinations();
 
 #[cfg(test)]
 mod tests {

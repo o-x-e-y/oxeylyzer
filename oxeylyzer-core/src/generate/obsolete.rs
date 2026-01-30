@@ -11,7 +11,7 @@ impl LayoutGeneration {
             .map(|i| self.char_effort(layout, i))
             .sum::<f64>();
 
-        let fspeed_usage = (0..8)
+        let fspeed_usage = (0..10)
             .map(|col| self.col_usage(layout, col) + self.col_fspeed(layout, col))
             .sum::<f64>();
 
@@ -115,11 +115,11 @@ impl LayoutGeneration {
 
     #[allow(dead_code)]
     pub(crate) fn usage_score(&self, layout: &FastLayout) -> f64 {
-        (0..8).map(|i| self.col_usage(layout, i)).sum()
+        (0..10).map(|i| self.col_usage(layout, i)).sum()
     }
 
     #[allow(dead_code)]
     pub(crate) fn fspeed_score(&self, layout: &FastLayout) -> f64 {
-        (0..8).map(|i| self.col_fspeed(layout, i)).sum()
+        (0..10).map(|i| self.col_fspeed(layout, i)).sum()
     }
 }

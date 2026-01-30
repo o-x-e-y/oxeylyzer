@@ -4,6 +4,7 @@ use crate::languages_cfg::read_cfg;
 
 use ahash::AHashMap as HashMap;
 use arrayvec::ArrayVec;
+use libdof::prelude::Finger::{self, *};
 use nanorand::{tls_rng, Rng};
 use serde::Deserialize;
 
@@ -19,10 +20,10 @@ pub fn shuffle_pins<const N: usize, T>(slice: &mut [T], pins: &[usize]) {
 }
 
 #[rustfmt::skip]
-pub static I_TO_COL: [usize; 30] = [
-    0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
-    0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
-    0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
+pub static DEFAULT_FINGERMAP: [Finger; 30] = [
+    LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
+    LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
+    LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
 ];
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
