@@ -991,7 +991,7 @@ impl LayoutGeneration {
     }
 
     pub fn generate(&self) -> FastLayout {
-        let layout = FastLayout::random(self.chars_for_generation);
+        let layout = FastLayout::random(&mut self.chars_for_generation.clone());
         let mut cache = self.initialize_cache(&layout);
 
         let mut layout = self.optimize(layout, &mut cache, &POSSIBLE_SWAPS);
@@ -1041,7 +1041,7 @@ impl LayoutGeneration {
         pins: &[usize],
         possible_swaps: Option<&[PosPair]>,
     ) -> FastLayout {
-        let mut layout = FastLayout::random_pins(based_on.matrix.as_slice().try_into().unwrap(), pins);
+        let mut layout = FastLayout::random_pins(&mut based_on.matrix.clone(), pins);
         let mut cache = self.initialize_cache(&layout);
 
         if let Some(ps) = possible_swaps {
@@ -1206,7 +1206,7 @@ mod tests {
     #[test]
     fn optimize_random_layouts() {
         for _ in 0..5 {
-            let layout = FastLayout::random(GEN.chars_for_generation);
+            let layout = FastLayout::random(&mut GEN.chars_for_generation.clone());
             let mut layout_for_cached = layout.clone();
 
             let optimized_normal = GEN.optimize_normal_no_cols(layout, &POSSIBLE_SWAPS);

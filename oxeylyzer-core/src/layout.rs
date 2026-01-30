@@ -2,7 +2,7 @@ use crate::trigram_patterns::{TrigramPattern, TRIGRAM_COMBINATIONS};
 use crate::utility::*;
 
 pub type CharToFinger = Box<[usize]>;
-pub type Matrix<T> = Box<[T; 30]>;
+pub type Matrix<T> = Box<[T]>;
 
 pub(crate) trait LayoutInternal<T: Copy + Default> {
     unsafe fn cu(&self, i: usize) -> T;
@@ -17,9 +17,9 @@ pub(crate) trait LayoutInternal<T: Copy + Default> {
 pub trait Layout<T: Copy + Default> {
     fn new() -> Self;
 
-    fn random(available_chars: [T; 30]) -> Self;
+    fn random(available_chars: &mut [u8]) -> Self;
 
-    fn random_pins(layout_chars: [T; 30], pins: &[usize]) -> Self;
+    fn random_pins(layout_chars: &mut [u8], pins: &[usize]) -> Self;
 
     fn c(&self, i: usize) -> T;
 
@@ -81,7 +81,7 @@ impl TryFrom<&[u8]> for FastLayout {
 
 impl FastLayout {
     pub fn layout_str(&self, con: &ConvertU8) -> String {
-        con.as_str(self.matrix.as_slice())
+        con.as_str(&self.matrix)
     }
 
     pub fn formatted_string(&self, con: &ConvertU8) -> String {
@@ -142,14 +142,16 @@ impl Layout<u8> for FastLayout {
         }
     }
 
-    fn random(mut with_chars: [u8; 30]) -> FastLayout {
-        shuffle_pins::<30, u8>(&mut with_chars, &[]);
-        FastLayout::from(with_chars)
+    fn random(layout_chars: &mut [u8]) -> FastLayout {
+        shuffle_pins::<30, u8>(layout_chars, &[]);
+        let non_mut: &[u8] = layout_chars;
+        FastLayout::try_from(non_mut).unwrap()
     }
 
-    fn random_pins(mut layout_chars: [u8; 30], pins: &[usize]) -> FastLayout {
-        shuffle_pins::<30, u8>(&mut layout_chars, pins);
-        FastLayout::from(layout_chars)
+    fn random_pins(layout_chars: &mut [u8], pins: &[usize]) -> FastLayout {
+        shuffle_pins::<30, u8>(layout_chars, pins);
+        let non_mut: &[u8] = layout_chars;
+        FastLayout::try_from(non_mut).unwrap()
     }
 
     #[inline(always)]
@@ -238,7 +240,7 @@ mod tests {
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
         assert_eq!(
-            CON.from(qwerty.matrix.into_iter()),
+            CON.from(qwerty.matrix.iter().copied()),
             vec![
                 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h',
                 'j', 'k', 'l', ';', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'
