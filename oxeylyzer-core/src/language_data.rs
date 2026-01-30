@@ -1,7 +1,5 @@
-use anyhow::Result;
-use arrayvec::ArrayVec;
-// use fxhash::FxHashMap;
 use ahash::AHashMap as HashMap;
+use anyhow::Result;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::Deserialize;
@@ -13,7 +11,7 @@ use std::path::Path;
 
 use crate::utility::ConvertU8;
 
-pub type CharacterData = ArrayVec<f64, 60>;
+pub type CharacterData = Box<[f64]>;
 pub type SlowBigramData = HashMap<[u8; 2], f64>;
 pub type BigramData = Vec<f64>;
 pub type TrigramData = Vec<([u8; 3], f64)>;
@@ -30,12 +28,12 @@ struct LanguageDataInter {
 }
 
 fn get_char_data(data: HashMap<char, f64>, con: &mut ConvertU8) -> CharacterData {
-    let mut res = CharacterData::new();
-    for (c, f) in data.into_iter() {
-        con.insert_single(c);
-        res.push(f);
-    }
-    res
+    data.into_iter()
+        .map(|(c, f)| {
+            con.insert_single(c);
+            f
+        })
+        .collect()
 }
 
 fn get_bigram_data(data: HashMap<String, f64>, con: &mut ConvertU8) -> BigramData {

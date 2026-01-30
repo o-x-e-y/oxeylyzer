@@ -429,6 +429,9 @@ impl LayoutGeneration {
     }
 
     pub fn score(&self, layout: &FastLayout) -> f64 {
+        #[cfg(test)]
+        ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         let effort = (0..layout.matrix.len())
             .map(|i| self.char_effort(layout, i))
             .sum::<f64>();
@@ -748,6 +751,9 @@ impl LayoutGeneration {
         swap: &PosPair,
         cache: &LayoutCache,
     ) -> Option<f64> {
+        #[cfg(test)]
+        ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         let PosPair(i1, i2) = *swap;
 
         if layout.c(i1) == layout.c(i2)
@@ -976,7 +982,7 @@ impl LayoutGeneration {
         }
         (0..k).for_each(|i| {
             self.col_perms(layout, best, cache, best_score, k - 1);
-            if k % 2 == 0 {
+            if k.is_multiple_of(2) {
                 self.accept_swap(layout, &PosPair(COLS[i], COLS[k - 1]), cache);
             } else {
                 self.accept_swap(layout, &PosPair(COLS[0], COLS[k - 1]), cache);
@@ -985,7 +991,7 @@ impl LayoutGeneration {
     }
 
     pub fn generate(&self) -> FastLayout {
-        let layout = FastLayout::random(self.chars_for_generation);
+        let layout = FastLayout::random(&mut self.chars_for_generation.clone());
         let mut cache = self.initialize_cache(&layout);
 
         let mut layout = self.optimize(layout, &mut cache, &POSSIBLE_SWAPS);
@@ -1035,7 +1041,7 @@ impl LayoutGeneration {
         pins: &[usize],
         possible_swaps: Option<&[PosPair]>,
     ) -> FastLayout {
-        let mut layout = FastLayout::random_pins(based_on.matrix, pins);
+        let mut layout = FastLayout::random_pins(&mut based_on.matrix.clone(), pins);
         let mut cache = self.initialize_cache(&layout);
 
         if let Some(ps) = possible_swaps {
@@ -1066,8 +1072,6 @@ mod tests {
 
     #[test]
     fn generate() {
-        GEN.generate_n_iter(2).collect::<Vec<_>>();
-
         time_this::time!(GEN.generate_n_iter(250).collect::<Vec<_>>());
 
         println!("{}", ANALYZED_COUNT.load(Ordering::Relaxed));
@@ -1202,7 +1206,7 @@ mod tests {
     #[test]
     fn optimize_random_layouts() {
         for _ in 0..5 {
-            let layout = FastLayout::random(GEN.chars_for_generation);
+            let layout = FastLayout::random(&mut GEN.chars_for_generation.clone());
             let mut layout_for_cached = layout.clone();
 
             let optimized_normal = GEN.optimize_normal_no_cols(layout, &POSSIBLE_SWAPS);

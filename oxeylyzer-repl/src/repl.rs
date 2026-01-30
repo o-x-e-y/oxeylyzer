@@ -101,9 +101,10 @@ impl Repl {
         for i in 1..1000usize {
             let new_name_bytes = layout
                 .matrix
-                .into_iter()
+                .iter()
                 .skip(10)
                 .take(4)
+                .copied()
                 .collect::<Vec<_>>();
 
             let mut new_name = self
