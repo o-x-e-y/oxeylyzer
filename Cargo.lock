@@ -693,6 +693,7 @@ dependencies = [
  "indexmap 2.2.6",
  "indicatif",
  "itertools 0.12.1",
+ "libdof",
  "oxeylyzer-core",
  "serde",
  "serde_json",

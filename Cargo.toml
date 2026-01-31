@@ -17,6 +17,9 @@ members = [
     "oxeylyzer-repl"
 ]
 
+[workspace.dependencies]
+libdof = "0.22.0"
+
 [dependencies]
 oxeylyzer-core = { path = "./oxeylyzer-core" }
 oxeylyzer-repl = { path = "./oxeylyzer-repl" }
