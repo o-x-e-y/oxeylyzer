@@ -1,3 +1,12 @@
-z y l m k  q b o u j 
-s c r t d  f n a e i 
-x w ' g v  p h . ; , 
+{
+    "name": "scrt",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "z y l m k  q b o u j",
+            "s c r t d  f n a e i",
+            "x w ' g v  p h . ; ,"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,3 +1,12 @@
-p f d l m  g w o u . 
-n s t r h  y c a e i
-~ ~ ~ ~ ~  ~ ~ ~ ~ ~
+{
+    "name": "test",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "p f d l m  g w o u .",
+            "n s t r h  y c a e i",
+            "~ ~ ~ ~ ~  ~ ~ ~ ~ ~"
+        ]
+    },
+    "fingering": "traditional"
+}

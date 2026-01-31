@@ -1,3 +1,12 @@
-w l y p k z f o u '
-c r s t b x n e i a
-q j v d g m h / , .
+{
+    "name": "canary",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "w l y p k z f o u '",
+            "c r s t b x n e i a",
+            "q j v d g m h / , ."
+        ]
+    },
+    "fingering": "traditional"
+}

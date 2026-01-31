@@ -1,3 +1,12 @@
-f d l v b  x c o u , 
-s t r n k  y m a e i 
-z q j h p  w g ' ; . 
+{
+    "name": "stronk_huh",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "f d l v b  x c o u ,",
+            "s t r n k  y m a e i",
+            "z q j h p  w g ' ; ."
+        ]
+    },
+    "fingering": "traditional"
+}

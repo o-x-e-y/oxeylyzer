@@ -1,3 +1,12 @@
-' l v g w  k f o y ; 
-r n t d b  , u a e i 
-z x m c p  . h q / j 
+{
+    "name": "rntd1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "' l v g w  k f o y ;",
+            "r n t d b  , u a e i",
+            "z x m c p  . h q / j"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,3 +1,12 @@
-z p d f w  x h u o . 
-s n t c y  ' r e a i 
-v b k g m  j l ; q , 
+{
+    "name": "_test",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "z p d f w  x h u o .",
+            "s n t c y  ' r e a i",
+            "v b k g m  j l ; q ,"
+        ]
+    },
+    "fingering": "traditional"
+}

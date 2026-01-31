@@ -1,3 +1,12 @@
-' , . p b f v d g h
-r i a o k j e n t l
-z ŝ s c ĉ m u ĵ ŭ ĝ
+{
+    "name": "goofy2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "' , . p b f v d g h",
+            "r i a o k j e n t l",
+            "z ŝ s c ĉ m u ĵ ŭ ĝ"
+        ]
+    },
+    "fingering": "traditional"
+}

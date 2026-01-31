@@ -1,3 +1,12 @@
-q w f p b  j l u o y
-c r s t g  m n e a i 
-' x v d k  z h / , . 
+{
+    "name": "crustmak",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "q w f p b  j l u o y",
+            "c r s t g  m n e a i",
+            "' x v d k  z h / , ."
+        ]
+    },
+    "fingering": "traditional"
+}

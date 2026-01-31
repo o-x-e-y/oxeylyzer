@@ -1,3 +1,12 @@
-x b l h z  y , o u ä
-s t n d k  j r e i a
-f v w g p  m c ü . ö
+{
+    "name": "good",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "x b l h z  y , o u ä",
+            "s t n d k  j r e i a",
+            "f v w g p  m c ü . ö"
+        ]
+    },
+    "fingering": "traditional"
+}

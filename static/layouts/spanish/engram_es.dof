@@ -1,3 +1,12 @@
-z h o x .  ' m d b j
-p i e a ,  * t s n r
-f y q u w  k c l v g
+{
+    "name": "engram_es",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "z h o x .  ' m d b j",
+            "p i e a ,  * t s n r",
+            "f y q u w  k c l v g"
+        ]
+    },
+    "fingering": "traditional"
+}

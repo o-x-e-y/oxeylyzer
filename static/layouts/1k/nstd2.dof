@@ -1,3 +1,12 @@
-b f l c p  z k o u ,
-n s t d y  j r a e i
-q v m g w  x h ' ; .
+{
+    "name": "nstd2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "b f l c p  z k o u ,",
+            "n s t d y  j r a e i",
+            "q v m g w  x h ' ; ."
+        ]
+    },
+    "fingering": "traditional"
+}

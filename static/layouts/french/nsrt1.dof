@@ -1,3 +1,12 @@
-x c l d v  z . o é * 
-n s r t f  j i e a u 
-b g h m q  ' p à , y 
+{
+    "name": "nsrt1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "x c l d v  z . o é *",
+            "n s r t f  j i e a u",
+            "b g h m q  ' p à , y"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,3 +1,12 @@
-, é o f g j d c p '
-a i e u h q t s n r
-. y k * z m l v b x
+{
+    "name": "french1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            ", é o f g j d c p '",
+            "a i e u h q t s n r",
+            ". y k * z m l v b x"
+        ]
+    },
+    "fingering": "traditional"
+}

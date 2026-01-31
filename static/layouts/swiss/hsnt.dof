@@ -1,3 +1,12 @@
-z m l b p  ' , o u ü 
-h s n t g  . r e i a 
-k f w d v  j c ä y ö 
+{
+    "name": "hsnt",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "z m l b p  ' , o u ü",
+            "h s n t g  . r e i a",
+            "k f w d v  j c ä y ö"
+        ]
+    },
+    "fingering": "traditional"
+}

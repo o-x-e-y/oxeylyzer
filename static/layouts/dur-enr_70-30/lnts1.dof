@@ -1,3 +1,12 @@
-h r d k v  , c u o y 
-l n t s g  p @ e a i 
-z x b m f  j w ' . q 
+{
+    "name": "lnts1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "h r d k v  , c u o y",
+            "l n t s g  p @ e a i",
+            "z x b m f  j w ' . q"
+        ]
+    },
+    "fingering": "traditional"
+}

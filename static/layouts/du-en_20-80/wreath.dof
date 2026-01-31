@@ -1,3 +1,12 @@
-j  g  d  f  b  q  l  u  o  y
-n  s  t  h  k  w  r  e  a  i 
-x  c  m  p  v  z  ,  .  '  /
+{
+    "name": "wreath",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "j  g  d  f  b  q  l  u  o  y",
+            "n  s  t  h  k  w  r  e  a  i",
+            "x  c  m  p  v  z  ,  .  '  /"
+        ]
+    },
+    "fingering": "traditional"
+}

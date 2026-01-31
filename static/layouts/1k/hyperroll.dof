@@ -1,3 +1,12 @@
-p c l m v x u o y f
-n s r t d . a e i h
-b g ' w z / , q j k
+{
+    "name": "hyperroll",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "p c l m v x u o y f",
+            "n s r t d . a e i h",
+            "b g ' w z / , q j k"
+        ]
+    },
+    "fingering": "traditional"
+}

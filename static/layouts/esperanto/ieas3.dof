@@ -1,3 +1,12 @@
-ĵ u o b h  ĝ g l m , 
-i e a s f  p d n t r 
-ŭ ' ŝ j ĉ  c k z v . 
+{
+    "name": "ieas3",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "ĵ u o b h  ĝ g l m ,",
+            "i e a s f  p d n t r",
+            "ŭ ' ŝ j ĉ  c k z v ."
+        ]
+    },
+    "fingering": "traditional"
+}

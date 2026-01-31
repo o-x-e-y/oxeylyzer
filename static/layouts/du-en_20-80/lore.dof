@@ -1,3 +1,12 @@
-b c g u .  j m o p q
-n d s i y  l r e t a
-z w f x ,  v h ; k '
+{
+    "name": "lore",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "b c g u .  j m o p q",
+            "n d s i y  l r e t a",
+            "z w f x ,  v h ; k '"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,3 +1,12 @@
-. u o h f q y r p w
-e i a m v c t n s k
-, ' ; g x b d l j z
+{
+    "name": "indonesian3",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            ". u o h f q y r p w",
+            "e i a m v c t n s k",
+            ", ' ; g x b d l j z"
+        ]
+    },
+    "fingering": "traditional"
+}
