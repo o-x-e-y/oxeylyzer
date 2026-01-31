@@ -5,7 +5,7 @@ use oxeylyzer_core::language_data::LanguageData;
 use oxeylyzer_core::layout::*;
 use oxeylyzer_core::rayon::iter::ParallelIterator;
 
-use ansi_rgb::{rgb, Colorable};
+use ansi_rgb::{Colorable, rgb};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 
 pub fn readline() -> std::io::Result<String> {
@@ -42,7 +42,7 @@ pub fn heatmap_string(data: &LanguageData, layout: &FastLayout) -> String {
 }
 
 pub fn generate_n_with_pins(
-    gen: &LayoutGeneration,
+    layout_gen: &LayoutGeneration,
     amount: usize,
     based_on: FastLayout,
     pins: &[usize],
@@ -59,7 +59,7 @@ pub fn generate_n_with_pins(
         .expect("Couldn't initialize the progress bar template")
         .progress_chars("=>-"));
 
-    let mut layouts = gen
+    let mut layouts = layout_gen
         .generate_n_with_pins_iter(amount, based_on, pins)
         .progress_with(pb)
         .collect::<Vec<_>>();
@@ -73,14 +73,14 @@ pub fn generate_n_with_pins(
     layouts.sort_by(|l1, l2| l2.score.partial_cmp(&l1.score).unwrap());
 
     for (i, layout) in layouts.iter().enumerate().take(10) {
-        let printable = heatmap_string(&gen.data, layout);
+        let printable = heatmap_string(&layout_gen.data, layout);
         println!("#{}, score: {:.5}\n{}", i, layout.score, printable);
     }
 
     layouts
 }
 
-pub fn generate_n(gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
+pub fn generate_n(layout_gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
     if amount == 0 {
         return Vec::new();
     }
@@ -93,7 +93,7 @@ pub fn generate_n(gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
         .expect("couldn't initialize the progress bar template")
         .progress_chars("=>-"));
 
-    let mut layouts = gen
+    let mut layouts = layout_gen
         .generate_n_iter(amount)
         .progress_with(pb)
         .collect::<Vec<_>>();
@@ -107,7 +107,7 @@ pub fn generate_n(gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
     layouts.sort_by(|l1, l2| l2.score.partial_cmp(&l1.score).unwrap());
 
     for (i, layout) in layouts.iter().enumerate().take(10) {
-        let printable = heatmap_string(&gen.data, layout);
+        let printable = heatmap_string(&layout_gen.data, layout);
         println!("#{}, score: {:.5}\n{}", i, layout.score, printable);
     }
 

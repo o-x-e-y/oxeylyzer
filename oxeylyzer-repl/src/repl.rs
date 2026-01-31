@@ -10,7 +10,7 @@ use crate::tui::*;
 
 pub struct Repl {
     language: String,
-    gen: LayoutGeneration,
+    layout_gen: LayoutGeneration,
     saved: IndexMap<String, FastLayout>,
     temp_generated: Vec<FastLayout>,
     pins: Vec<usize>,
@@ -31,7 +31,7 @@ impl Repl {
             .build()
             .unwrap();
 
-        let mut gen = LayoutGeneration::new(
+        let mut layout_gen = LayoutGeneration::new(
             config.defaults.language.clone().as_str(),
             generator_base_path.as_ref(),
             Some(config),
@@ -39,14 +39,14 @@ impl Repl {
         .unwrap_or_else(|_| panic!("Could not read language data for {}", language));
 
         Ok(Self {
-            saved: gen
+            saved: layout_gen
                 .load_layouts(
                     generator_base_path.as_ref().join("layouts"),
                     language.as_str(),
                 )
                 .map_err(|e| e.to_string())?,
             language,
-            gen,
+            layout_gen,
             temp_generated: Vec::new(),
             pins,
             thread_pool,
@@ -108,7 +108,7 @@ impl Repl {
                 .collect::<Vec<_>>();
 
             let mut new_name = self
-                .gen
+                .layout_gen
                 .data
                 .convert_u8
                 .as_str(new_name_bytes.as_slice())
@@ -137,11 +137,11 @@ impl Repl {
             .open(format!("static/layouts/{}/{}.kb", self.language, new_name))
             .map_err(|e| e.to_string())?;
 
-        let layout_formatted = layout.formatted_string(&self.gen.data.convert_u8);
+        let layout_formatted = layout.formatted_string(&self.layout_gen.data.convert_u8);
         println!("saved {}\n{}", new_name, layout_formatted);
         f.write_all(layout_formatted.as_bytes()).unwrap();
 
-        layout.score = self.gen.score(&layout);
+        layout.score = self.layout_gen.score(&layout);
         self.saved.insert(new_name, layout);
         self.saved
             .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
@@ -150,14 +150,14 @@ impl Repl {
     }
 
     pub fn analyze(&self, layout: &FastLayout) {
-        let stats = self.gen.get_layout_stats(layout);
+        let stats = self.layout_gen.get_layout_stats(layout);
         let score = if layout.score == 0.000 {
-            self.gen.score(layout)
+            self.layout_gen.score(layout)
         } else {
             layout.score
         };
 
-        let layout_str = heatmap_string(&self.gen.data, layout);
+        let layout_str = heatmap_string(&self.layout_gen.data, layout);
 
         println!("{}\n{}\nScore: {:.3}", layout_str, stats, score);
     }
@@ -183,7 +183,7 @@ impl Repl {
                 for x in 0..10 {
                     print!(
                         "{} ",
-                        heatmap_heat(&self.gen.data, layout.char(x + 10 * y).unwrap())
+                        heatmap_heat(&self.layout_gen.data, layout.char(x + 10 * y).unwrap())
                     );
                     if x == 4 {
                         print!(" ");
@@ -195,8 +195,8 @@ impl Repl {
             }
             println!();
         }
-        let s1 = self.gen.get_layout_stats(l1);
-        let s2 = self.gen.get_layout_stats(l2);
+        let s1 = self.layout_gen.get_layout_stats(l1);
+        let s2 = self.layout_gen.get_layout_stats(l2);
         let ts1 = s1.trigram_stats;
         let ts2 = s2.trigram_stats;
         println!(
@@ -277,13 +277,19 @@ impl Repl {
     }
 
     pub fn sfr_freq(&self) -> f64 {
-        let len = self.gen.data.characters.len();
+        let len = self.layout_gen.data.characters.len();
         let chars = 0..len;
         chars
             .clone()
             .cartesian_product(chars)
             .filter(|(i1, i2)| i1 == i2)
-            .map(|(c1, c2)| self.gen.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0))
+            .map(|(c1, c2)| {
+                self.layout_gen
+                    .data
+                    .bigrams
+                    .get(c1 * len + c2)
+                    .unwrap_or(&0.0)
+            })
             .sum()
     }
 
@@ -291,7 +297,7 @@ impl Repl {
         if let Some(layout) = self.layout_by_name(name) {
             println!("top {} sfbs for {name}:", top_n.min(48));
 
-            for (bigram, freq) in self.gen.sfbs(layout, top_n) {
+            for (bigram, freq) in self.layout_gen.sfbs(layout, top_n) {
                 println!("{bigram}: {:.3}%", freq * 100.0)
             }
         } else {
@@ -319,7 +325,7 @@ impl Repl {
                             "Index '{}' provided is out of bounds for {} generated layouts",
                             a.name_or_nr,
                             self.temp_generated.len()
-                        ))
+                        ));
                     }
                 },
                 Err(_) => self.analyze_name(&a.name_or_nr),
@@ -329,12 +335,13 @@ impl Repl {
             Generate(g) => {
                 println!("generating {} layouts...", g.count);
                 self.thread_pool.install(|| {
-                    self.temp_generated = generate_n(&self.gen, g.count);
+                    self.temp_generated = generate_n(&self.layout_gen, g.count);
                 });
             }
             Improve(i) => match self.layout_by_name(&i.name).cloned() {
                 Some(l) => self.thread_pool.install(|| {
-                    self.temp_generated = generate_n_with_pins(&self.gen, i.count, l, &self.pins)
+                    self.temp_generated =
+                        generate_n_with_pins(&self.layout_gen, i.count, l, &self.pins)
                 }),
                 None => return Err(format!("'{}' does not exist!", i.name)),
             },
@@ -345,7 +352,7 @@ impl Repl {
                         "Index '{}' provided is out of bounds for {} generated layouts",
                         s.n,
                         self.temp_generated.len()
-                    ))
+                    ));
                 }
             },
             Sfbs(s) => match s.count {
@@ -362,9 +369,9 @@ impl Repl {
                     println!("{language:?}");
 
                     if let Ok(generator) = LayoutGeneration::new(language, "static", Some(config)) {
-                        self.gen = generator;
+                        self.layout_gen = generator;
                         self.saved = self
-                            .gen
+                            .layout_gen
                             .load_layouts("static/layouts", language)
                             .expect("couldn't load layouts lol");
                         self.language = language.to_string();
@@ -381,7 +388,7 @@ impl Repl {
                 None => println!("Current language: {}", self.language),
             },
             Include(l) => {
-                self.gen
+                self.layout_gen
                     .load_layouts("static/layouts", &l.language)
                     .map_err(|e| e.to_string())?
                     .into_iter()
@@ -408,7 +415,7 @@ impl Repl {
             }
             Load(l) => match (l.all, l.raw) {
                 (true, true) => {
-                    return Err("You can't currently generate all corpora as raw".into())
+                    return Err("You can't currently generate all corpora as raw".into());
                 }
                 (true, _) => {
                     for (language, config) in CorpusConfig::all() {
@@ -439,9 +446,9 @@ impl Repl {
                         match LayoutGeneration::new(language, "static", Some(config)) {
                             Ok(generator) => {
                                 self.language = language.into();
-                                self.gen = generator;
+                                self.layout_gen = generator;
                                 self.saved = self
-                                    .gen
+                                    .layout_gen
                                     .load_layouts("static/layouts", language)
                                     .map_err(|e| e.to_string())?;
 
@@ -456,16 +463,16 @@ impl Repl {
                     }
                 }
             },
-            Ngram(n) => println!("{}", get_ngram_info(&mut self.gen.data, &n.ngram)),
+            Ngram(n) => println!("{}", get_ngram_info(&mut self.layout_gen.data, &n.ngram)),
             Reload(_) => {
                 let config = Config::with_loaded_weights();
                 self.pins.clone_from(&config.pins);
 
                 match LayoutGeneration::new(&self.language, "static", Some(config)) {
                     Ok(generator) => {
-                        self.gen = generator;
+                        self.layout_gen = generator;
                         self.saved = self
-                            .gen
+                            .layout_gen
                             .load_layouts("static/layouts", &self.language)
                             .map_err(|e| e.to_string())?;
                     }
