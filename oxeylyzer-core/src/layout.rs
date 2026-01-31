@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use itertools::Itertools;
-use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey};
+use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
 
 use crate::{utility::*, *};
 
@@ -33,6 +33,7 @@ pub struct FastLayout {
     pub matrix_fingers: Box<[Finger]>,
     pub matrix_physical: Box<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
+    pub shape: Shape,
     pub score: f64,
 }
 
@@ -128,7 +129,8 @@ impl FastLayout {
             .enumerate()
             .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
 
-        let sfb_indices = FSpeedIndices::new(&matrix_fingers, &matrix_physical);
+        let fspeed_indices = FSpeedIndices::new(&matrix_fingers, &matrix_physical);
+        let shape = dof.shape();
 
         // let name = dof.name().to_owned();
         // let keyboard = dof.board().keys().cloned().map(Into::into).collect();
@@ -139,7 +141,8 @@ impl FastLayout {
             matrix_fingers,
             matrix_physical,
             char_to_finger,
-            fspeed_indices: sfb_indices,
+            fspeed_indices,
+            shape,
             score: 0.0,
         };
 
@@ -153,7 +156,8 @@ impl Layout<u8> for FastLayout {
         let matrix_fingers = Box::new(DEFAULT_FINGERMAP);
         let matrix_physical = default_physical_map();
         let char_to_finger = Box::new([None; 64]);
-        let sfb_indices = FSpeedIndices::new(matrix_fingers.as_slice(), &matrix_physical);
+        let fspeed_indices = FSpeedIndices::new(matrix_fingers.as_slice(), &matrix_physical);
+        let shape = Shape::from(vec![10, 10, 10]);
         let score = 0.0;
 
         FastLayout {
@@ -161,7 +165,8 @@ impl Layout<u8> for FastLayout {
             matrix_fingers,
             matrix_physical,
             char_to_finger,
-            fspeed_indices: sfb_indices,
+            fspeed_indices,
+            shape,
             score,
         }
     }
