@@ -8,7 +8,7 @@ use libdof::prelude::{
     Finger::{self, *},
     PhysicalKey,
 };
-use nanorand::{tls_rng, Rng};
+use nanorand::{Rng, tls_rng};
 use serde::Deserialize;
 
 #[inline]

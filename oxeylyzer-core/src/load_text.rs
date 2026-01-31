@@ -1,6 +1,6 @@
 use crate::translation::Translator;
 
-use std::fs::{read_dir, File};
+use std::fs::{File, read_dir};
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::time::Instant;

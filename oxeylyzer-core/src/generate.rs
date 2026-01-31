@@ -4,13 +4,13 @@ use ahash::AHashMap as HashMap;
 use anyhow::Result;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use libdof::prelude::Finger;
 use libdof::Dof;
+use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::language_data::{BigramData, LanguageData, TrigramData};
 use crate::layout::*;
-use crate::trigram_patterns::{get_trigram_combinations, TrigramPattern};
+use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::utility::*;
 use crate::weights::{Config, Weights};
 
@@ -1187,13 +1187,17 @@ mod tests {
             GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
             assert!(cache.scissors.approx_eq_dbg(GEN.scissor_score(&qwerty), 7));
-            assert!(cache
-                .effort_total
-                .approx_eq_dbg(GEN.effort_score(&qwerty), 7));
+            assert!(
+                cache
+                    .effort_total
+                    .approx_eq_dbg(GEN.effort_score(&qwerty), 7)
+            );
             assert!(cache.usage_total.approx_eq_dbg(GEN.usage_score(&qwerty), 7));
-            assert!(cache
-                .fspeed_total
-                .approx_eq_dbg(GEN.fspeed_score(&qwerty), 7));
+            assert!(
+                cache
+                    .fspeed_total
+                    .approx_eq_dbg(GEN.fspeed_score(&qwerty), 7)
+            );
             assert!(cache.trigrams_total.approx_eq_dbg(
                 GEN.trigram_score_iter(
                     &qwerty,
@@ -1202,12 +1206,16 @@ mod tests {
                 7
             ));
             assert!(cache.lsbs.approx_eq_dbg(GEN.lsb_score(&qwerty), 7));
-            assert!(cache
-                .pinky_ring
-                .approx_eq_dbg(GEN.pinky_ring_score(&qwerty), 7));
-            assert!(cache
-                .total_score
-                .approx_eq_dbg(GEN.score_with_precision(&qwerty, GEN.trigram_precision), 7));
+            assert!(
+                cache
+                    .pinky_ring
+                    .approx_eq_dbg(GEN.pinky_ring_score(&qwerty), 7)
+            );
+            assert!(
+                cache
+                    .total_score
+                    .approx_eq_dbg(GEN.score_with_precision(&qwerty, GEN.trigram_precision), 7)
+            );
         }
     }
 
