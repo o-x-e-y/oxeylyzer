@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use ahash::AHashMap as HashMap;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use libdof::Dof;
@@ -339,7 +339,8 @@ impl LayoutGeneration {
 
             for path in dof_paths {
                 let s = std::fs::read_to_string(path)?;
-                let dof = serde_json::from_str::<Dof>(&s)?;
+                let dof =
+                    serde_json::from_str::<Dof>(&s).with_context(|| path.display().to_string())?;
                 let name = dof.name().to_string();
 
                 match FastLayout::from_dof(dof, &mut self.convert_u8) {
