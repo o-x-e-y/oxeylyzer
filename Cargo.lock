@@ -525,15 +525,6 @@ checksum = "f8478577c03552c21db0e2724ffb8986a5ce7af88107e6be5d2ee6e158c12800"
 
 [[package]]
 name = "itertools"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
@@ -672,7 +663,7 @@ dependencies = [
  "arrayvec",
  "file-chunker",
  "indexmap 2.2.6",
- "itertools 0.13.0",
+ "itertools",
  "libdof",
  "nanorand",
  "once_cell",
@@ -692,7 +683,7 @@ dependencies = [
  "glob",
  "indexmap 2.2.6",
  "indicatif",
- "itertools 0.12.1",
+ "itertools",
  "libdof",
  "oxeylyzer-core",
  "serde",
