@@ -543,7 +543,7 @@ mod tests {
 
     #[test]
     fn get_generator() {
-        let a = generate::LayoutGeneration::new("test", "static", None);
+        let a = generate::LayoutGeneration::new("english", "static", None);
         assert!(a.is_ok());
     }
 }
