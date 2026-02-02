@@ -3,12 +3,12 @@ use std::collections::hash_map::Entry;
 use ahash::AHashMap as HashMap;
 
 #[derive(Clone, Debug, Default)]
-pub struct ConvertU8 {
+pub struct CharMapping {
     from: Vec<char>,
     to: HashMap<char, u8>,
 }
 
-impl ConvertU8 {
+impl CharMapping {
     pub fn new() -> Self {
         Self::default()
     }

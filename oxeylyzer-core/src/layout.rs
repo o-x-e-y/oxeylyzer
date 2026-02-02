@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 use itertools::Itertools;
 use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
 
-use crate::{char_mapping::ConvertU8, utility::*, *};
+use crate::{char_mapping::CharMapping, utility::*, *};
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
@@ -74,11 +74,11 @@ impl TryFrom<&[u8]> for FastLayout {
 }
 
 impl FastLayout {
-    pub fn layout_str(&self, con: &ConvertU8) -> String {
+    pub fn layout_str(&self, con: &CharMapping) -> String {
         con.as_str(&self.matrix)
     }
 
-    pub fn formatted_string(&self, con: &ConvertU8) -> String {
+    pub fn formatted_string(&self, con: &CharMapping) -> String {
         let mut res = String::new();
 
         for (i, u) in self.matrix.iter().enumerate() {
@@ -96,7 +96,7 @@ impl FastLayout {
         res
     }
 
-    pub fn from_dof(dof: Dof, convert: &mut ConvertU8) -> Result<Self> {
+    pub fn from_dof(dof: Dof, convert: &mut CharMapping) -> Result<Self> {
         use libdof::prelude::{Key, SpecialKey};
 
         let key_count = dof.main_layer().shape().inner().iter().sum::<usize>();
@@ -341,8 +341,8 @@ impl FSpeedIndices {
 mod tests {
     use super::*;
     use once_cell::sync::Lazy;
-    static CON: Lazy<ConvertU8> =
-        Lazy::new(|| ConvertU8::with_chars("abcdefghijklmnopqrstuvwxyz'.,;/"));
+    static CON: Lazy<CharMapping> =
+        Lazy::new(|| CharMapping::with_chars("abcdefghijklmnopqrstuvwxyz'.,;/"));
 
     #[test]
     fn layout_str() {

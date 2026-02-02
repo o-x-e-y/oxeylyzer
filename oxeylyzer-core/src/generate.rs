@@ -8,7 +8,7 @@ use libdof::Dof;
 use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::char_mapping::ConvertU8;
+use crate::char_mapping::CharMapping;
 use crate::language_data::{BigramData, LanguageData, TrigramData};
 use crate::layout::*;
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
@@ -227,7 +227,7 @@ pub(crate) fn pinned_swaps(pins: &[usize]) -> Vec<PosPair> {
 pub struct LayoutGeneration {
     pub language: String,
     pub data: LanguageData,
-    pub convert_u8: ConvertU8,
+    pub convert_u8: CharMapping,
     pub repeat_key: usize,
     pub chars_for_generation: [u8; 30],
     pub trigram_precision: usize,

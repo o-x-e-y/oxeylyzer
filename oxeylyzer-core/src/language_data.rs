@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 
-use crate::char_mapping::ConvertU8;
+use crate::char_mapping::CharMapping;
 
 pub type CharacterData = Box<[f64]>;
 pub type SlowBigramData = HashMap<[u8; 2], f64>;
@@ -27,7 +27,7 @@ struct LanguageDataInter {
     pub trigrams: IndexMap<String, f64>,
 }
 
-fn get_char_data(data: HashMap<char, f64>, con: &mut ConvertU8) -> CharacterData {
+fn get_char_data(data: HashMap<char, f64>, con: &mut CharMapping) -> CharacterData {
     data.into_iter()
         .map(|(c, f)| {
             con.insert_single(c);
@@ -36,7 +36,7 @@ fn get_char_data(data: HashMap<char, f64>, con: &mut ConvertU8) -> CharacterData
         .collect()
 }
 
-fn get_bigram_data(data: HashMap<String, f64>, con: &mut ConvertU8) -> BigramData {
+fn get_bigram_data(data: HashMap<String, f64>, con: &mut CharMapping) -> BigramData {
     (0..con.len())
         .cartesian_product(0..con.len())
         .map(|(c1, c2)| con.as_str(&[c1, c2]))
@@ -44,7 +44,7 @@ fn get_bigram_data(data: HashMap<String, f64>, con: &mut ConvertU8) -> BigramDat
         .collect::<BigramData>()
 }
 
-fn get_trigram_data(data: IndexMap<String, f64>, con: &mut ConvertU8) -> TrigramData {
+fn get_trigram_data(data: IndexMap<String, f64>, con: &mut CharMapping) -> TrigramData {
     let mut res = TrigramData::new();
     for (trigram, freq) in data {
         let tv = trigram.chars().collect::<Vec<char>>();
@@ -66,12 +66,12 @@ pub struct LanguageData {
     pub weighted_bigrams: BigramData,
     pub trigrams: TrigramData,
     pub language: String,
-    pub convert_u8: ConvertU8,
+    pub convert_u8: CharMapping,
 }
 
 impl From<LanguageDataInter> for LanguageData {
     fn from(mut inter: LanguageDataInter) -> Self {
-        let mut convert_u8 = ConvertU8::new();
+        let mut convert_u8 = CharMapping::new();
 
         for c in ['\'', ',', '.', ';', '/', '~'] {
             inter.characters.entry(c).or_insert(0.0);
