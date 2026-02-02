@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 
-use crate::convert_u8::ConvertU8;
+use crate::char_mapping::ConvertU8;
 
 pub type CharacterData = Box<[f64]>;
 pub type SlowBigramData = HashMap<[u8; 2], f64>;

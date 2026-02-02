@@ -8,7 +8,7 @@ use libdof::Dof;
 use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::convert_u8::ConvertU8;
+use crate::char_mapping::ConvertU8;
 use crate::language_data::{BigramData, LanguageData, TrigramData};
 use crate::layout::*;
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};

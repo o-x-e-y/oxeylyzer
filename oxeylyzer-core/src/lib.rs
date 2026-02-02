@@ -1,4 +1,4 @@
-pub mod convert_u8;
+pub mod char_mapping;
 pub mod generate;
 pub mod language_data;
 pub mod languages_cfg;

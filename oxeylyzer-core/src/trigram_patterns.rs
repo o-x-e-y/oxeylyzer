@@ -207,7 +207,7 @@ pub fn get_trigram_combinations() -> Box<[TrigramPattern]> {
 #[cfg(test)]
 mod tests {
     use super::{TrigramPattern::*, *};
-    use crate::{convert_u8::ConvertU8, generate::LayoutGeneration, layout::FastLayout};
+    use crate::{char_mapping::ConvertU8, generate::LayoutGeneration, layout::FastLayout};
     use once_cell::sync::Lazy;
 
     static CON: Lazy<ConvertU8> =

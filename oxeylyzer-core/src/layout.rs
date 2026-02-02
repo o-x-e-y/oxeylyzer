@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 use itertools::Itertools;
 use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
 
-use crate::{convert_u8::ConvertU8, utility::*, *};
+use crate::{char_mapping::ConvertU8, utility::*, *};
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
