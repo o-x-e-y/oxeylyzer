@@ -1296,7 +1296,7 @@ mod tests {
 
     #[test]
     fn optimize_random_layouts() {
-        for _ in 0..5 {
+        for i in 0..5 {
             let layout = FastLayout::random(&mut GEN.chars_for_generation.clone());
             let mut layout_for_cached = layout.clone();
 
@@ -1307,11 +1307,12 @@ mod tests {
             let best_cached_score =
                 GEN.optimize_cached(&mut layout_for_cached, &mut cache, &POSSIBLE_SWAPS);
 
-            assert!(normal_score.approx_eq_dbg(best_cached_score, 7));
             assert_eq!(
                 layout_for_cached.layout_str(&GEN.convert_u8),
-                optimized_normal.layout_str(&GEN.convert_u8)
+                optimized_normal.layout_str(&GEN.convert_u8),
+                "i: {i}"
             );
+            assert!(normal_score.approx_eq_dbg(best_cached_score, 7), "i: {i}");
         }
     }
 }
