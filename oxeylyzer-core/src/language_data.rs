@@ -80,27 +80,27 @@ pub struct LanguageData {
     pub weighted_bigrams: BigramData,
     pub trigrams: TrigramData,
     pub language: String,
-    pub convert_u8: CharMapping,
+    pub char_mapping: CharMapping,
 }
 
 impl From<LanguageDataInter> for LanguageData {
     fn from(mut inter: LanguageDataInter) -> Self {
-        let mut convert_u8 = CharMapping::new();
+        let mut char_mapping = CharMapping::new();
 
         for c in ['\'', ',', '.', ';', '/', '~'] {
             inter.characters.entry(c).or_insert(0.0);
         }
 
-        let characters = get_char_data(inter.characters, &mut convert_u8);
+        let characters = get_char_data(inter.characters, &mut char_mapping);
 
-        let bigrams = get_bigram_data(inter.bigrams, &mut convert_u8);
-        let skipgrams = get_bigram_data(inter.skipgrams, &mut convert_u8);
-        let skipgrams2 = get_bigram_data(inter.skipgrams2, &mut convert_u8);
-        let skipgrams3 = get_bigram_data(inter.skipgrams3, &mut convert_u8);
+        let bigrams = get_bigram_data(inter.bigrams, &mut char_mapping);
+        let skipgrams = get_bigram_data(inter.skipgrams, &mut char_mapping);
+        let skipgrams2 = get_bigram_data(inter.skipgrams2, &mut char_mapping);
+        let skipgrams3 = get_bigram_data(inter.skipgrams3, &mut char_mapping);
 
         let weighted_bigrams = Box::new([]);
 
-        let trigrams = get_trigram_data(inter.trigrams, &mut convert_u8);
+        let trigrams = get_trigram_data(inter.trigrams, &mut char_mapping);
 
         Self {
             characters,
@@ -111,7 +111,7 @@ impl From<LanguageDataInter> for LanguageData {
             trigrams,
             weighted_bigrams,
             language: inter.language,
-            convert_u8,
+            char_mapping,
         }
     }
 }

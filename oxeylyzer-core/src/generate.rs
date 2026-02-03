@@ -227,7 +227,7 @@ pub(crate) fn pinned_swaps(pins: &[usize]) -> Vec<PosPair> {
 pub struct LayoutGeneration {
     pub language: String,
     pub data: LanguageData,
-    pub convert_u8: CharMapping,
+    pub char_mapping: CharMapping,
     pub repeat_key: usize,
     pub chars_for_generation: [u8; 30],
     pub trigram_precision: usize,
@@ -256,7 +256,7 @@ impl LayoutGeneration {
         if let Ok(mut data) =
             LanguageData::from_file(base_path.as_ref().join("language_data"), language)
         {
-            let chars_fg = data.convert_u8.to(chars_for_generation(language));
+            let chars_fg = data.char_mapping.to(chars_for_generation(language));
             let mut chars_for_generation: [u8; 30] = chars_fg.try_into().unwrap();
             chars_for_generation.sort_by(|&a, &b| {
                 let a = data.characters.get(a as usize).unwrap_or(&0.0);
@@ -273,8 +273,8 @@ impl LayoutGeneration {
                     data.characters.len() as u8,
                     config.trigram_precision(),
                 ),
-                convert_u8: data.convert_u8.clone(),
-                repeat_key: data.convert_u8.to_single('@') as usize,
+                char_mapping: data.char_mapping.clone(),
+                repeat_key: data.char_mapping.to_single('@') as usize,
                 trigram_precision: config.trigram_precision(),
                 trigram_patterns: get_trigram_combinations(),
                 data,
@@ -325,7 +325,7 @@ impl LayoutGeneration {
                 if let Some(name) = layout_name(path) {
                     let content = std::fs::read_to_string(path)?;
                     let layout_str = format_layout_str(&content);
-                    let layout_bytes = self.convert_u8.to(layout_str.chars());
+                    let layout_bytes = self.char_mapping.to(layout_str.chars());
 
                     if let Ok(mut layout) = FastLayout::try_from(layout_bytes.as_slice()) {
                         layout.score = self.score(&layout);
@@ -344,7 +344,7 @@ impl LayoutGeneration {
                     serde_json::from_str::<Dof>(&s).with_context(|| path.display().to_string())?;
                 let name = dof.name().to_string();
 
-                match FastLayout::from_dof(dof, &mut self.convert_u8) {
+                match FastLayout::from_dof(dof, &mut self.char_mapping) {
                     Ok(mut layout) => {
                         layout.score = self.score(&layout);
                         res.insert(name.to_lowercase(), layout);
@@ -421,8 +421,8 @@ impl LayoutGeneration {
                 let u1 = layout.char(p.0).unwrap();
                 let u2 = layout.char(p.1).unwrap();
 
-                let bigram = self.convert_u8.as_str(&[u1, u2]);
-                let bigram2 = self.convert_u8.as_str(&[u2, u1]);
+                let bigram = self.char_mapping.as_str(&[u1, u2]);
+                let bigram2 = self.char_mapping.as_str(&[u2, u1]);
 
                 let i = (u1 as usize) * self.data.characters.len() + (u2 as usize);
                 let i2 = (u2 as usize) * self.data.characters.len() + (u1 as usize);
@@ -1158,7 +1158,7 @@ mod tests {
     #[allow(dead_code)]
     fn fspeed_per_pair() {
         let qwerty_bytes = GEN
-            .convert_u8
+            .char_mapping
             .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
 
@@ -1176,7 +1176,7 @@ mod tests {
     #[test]
     fn cached_totals() {
         let qwerty_bytes = GEN
-            .convert_u8
+            .char_mapping
             .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
         let mut cache = GEN.initialize_cache(&qwerty);
@@ -1224,7 +1224,7 @@ mod tests {
     #[test]
     fn best_found_swap() {
         let qwerty_bytes = GEN
-            .convert_u8
+            .char_mapping
             .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
         let cache = GEN.initialize_cache(&qwerty);
@@ -1247,7 +1247,7 @@ mod tests {
     #[test]
     fn score_swaps_no_accept() {
         let qwerty_bytes = GEN
-            .convert_u8
+            .char_mapping
             .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let base = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
         let mut qwerty = base.clone();
@@ -1273,7 +1273,7 @@ mod tests {
     #[test]
     fn optimize_qwerty() {
         let qwerty_bytes = GEN
-            .convert_u8
+            .char_mapping
             .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
 
@@ -1288,8 +1288,8 @@ mod tests {
 
         assert!(normal_score.approx_eq_dbg(best_cached_score, 7));
         assert_eq!(
-            qwerty_for_cached.layout_str(&GEN.convert_u8),
-            optimized_normal.layout_str(&GEN.convert_u8)
+            qwerty_for_cached.layout_str(&GEN.char_mapping),
+            optimized_normal.layout_str(&GEN.char_mapping)
         );
         // println!("{qwerty_for_cached}");
     }
@@ -1308,8 +1308,8 @@ mod tests {
                 GEN.optimize_cached(&mut layout_for_cached, &mut cache, &POSSIBLE_SWAPS);
 
             assert_eq!(
-                layout_for_cached.layout_str(&GEN.convert_u8),
-                optimized_normal.layout_str(&GEN.convert_u8),
+                layout_for_cached.layout_str(&GEN.char_mapping),
+                optimized_normal.layout_str(&GEN.char_mapping),
                 "i: {i}"
             );
             assert!(normal_score.approx_eq_dbg(best_cached_score, 7), "i: {i}");

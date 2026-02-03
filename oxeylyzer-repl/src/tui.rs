@@ -20,7 +20,7 @@ pub fn heatmap_heat(data: &LanguageData, c: u8) -> String {
     let complement = 215.0 - *data.characters.get(c as usize).unwrap_or(&0.0) * 1720.0;
     let complement = complement.max(0.0) as u8;
     let heat = rgb(215, complement, complement);
-    let c = data.convert_u8.from_single(c);
+    let c = data.char_mapping.from_single(c);
     format!("{}", c.to_string().fg(heat))
 }
 
@@ -118,14 +118,14 @@ pub fn get_ngram_info(data: &mut LanguageData, ngram: &str) -> String {
     match ngram.chars().count() {
         1 => {
             let c = ngram.chars().next().unwrap();
-            let u = data.convert_u8.to_single(c);
+            let u = data.char_mapping.to_single(c);
             let occ = data.characters.get(u as usize).unwrap_or(&0.0) * 100.0;
             format!("{ngram}: {occ:.3}%")
         }
         2 => {
             let bigram: [char; 2] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
-            let c1 = data.convert_u8.to_single(bigram[0]) as usize;
-            let c2 = data.convert_u8.to_single(bigram[1]) as usize;
+            let c1 = data.char_mapping.to_single(bigram[0]) as usize;
+            let c2 = data.char_mapping.to_single(bigram[1]) as usize;
 
             let b1 = c1 * data.characters.len() + c2;
             let b2 = c2 * data.characters.len() + c1;
@@ -147,9 +147,9 @@ pub fn get_ngram_info(data: &mut LanguageData, ngram: &str) -> String {
         3 => {
             let trigram: [char; 3] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
             let t = [
-                data.convert_u8.to_single(trigram[0]),
-                data.convert_u8.to_single(trigram[1]),
-                data.convert_u8.to_single(trigram[2]),
+                data.char_mapping.to_single(trigram[0]),
+                data.char_mapping.to_single(trigram[1]),
+                data.char_mapping.to_single(trigram[2]),
             ];
             let &(_, occ) = data
                 .trigrams

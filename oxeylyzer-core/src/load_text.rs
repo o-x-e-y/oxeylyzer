@@ -477,12 +477,12 @@ mod tests {
 
         assert_eq!(
             data.characters
-                .get(data.convert_u8.to_single_lossy('e') as usize),
+                .get(data.char_mapping.to_single_lossy('e') as usize),
             Some(&(2.0 / total_c))
         );
         assert_eq!(
             data.characters
-                .get(data.convert_u8.to_single_lossy('\'') as usize),
+                .get(data.char_mapping.to_single_lossy('\'') as usize),
             Some(&(1.0 / total_c))
         );
 
@@ -498,12 +498,12 @@ mod tests {
 
         assert_eq!(
             data.bigrams
-                .get(data.convert_u8.to_bigram_lossy(['\'', '*'], len)),
+                .get(data.char_mapping.to_bigram_lossy(['\'', '*'], len)),
             Some(&(1.0 / total_b))
         );
         assert_eq!(
             data.bigrams
-                .get(data.convert_u8.to_bigram_lossy(['1', ':'], len)),
+                .get(data.char_mapping.to_bigram_lossy(['1', ':'], len)),
             None
         );
 
@@ -518,22 +518,22 @@ mod tests {
 
         assert_eq!(
             data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy([';', 'd'], len)),
+                .get(data.char_mapping.to_bigram_lossy([';', 'd'], len)),
             Some(&(1.0 / total_s))
         );
         assert_eq!(
             data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy(['*', 'e'], len)),
+                .get(data.char_mapping.to_bigram_lossy(['*', 'e'], len)),
             Some(&(1.0 / total_s))
         );
         assert_eq!(
             data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy(['t', 'e'], len)),
+                .get(data.char_mapping.to_bigram_lossy(['t', 'e'], len)),
             Some(&(1.0 / total_s))
         );
         assert_eq!(
             data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy(['\'', 't'], len)),
+                .get(data.char_mapping.to_bigram_lossy(['\'', 't'], len)),
             Some(&0.0)
         );
     }

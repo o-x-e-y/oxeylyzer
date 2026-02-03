@@ -110,7 +110,7 @@ impl Repl {
             let mut new_name = self
                 .layout_gen
                 .data
-                .convert_u8
+                .char_mapping
                 .as_str(new_name_bytes.as_slice())
                 .replace('*', "");
 
@@ -137,7 +137,7 @@ impl Repl {
             .open(format!("static/layouts/{}/{}.kb", self.language, new_name))
             .map_err(|e| e.to_string())?;
 
-        let layout_formatted = layout.formatted_string(&self.layout_gen.data.convert_u8);
+        let layout_formatted = layout.formatted_string(&self.layout_gen.data.char_mapping);
         println!("saved {}\n{}", new_name, layout_formatted);
         f.write_all(layout_formatted.as_bytes()).unwrap();
 
