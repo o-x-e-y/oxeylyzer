@@ -7,7 +7,11 @@ pub struct CharMapping(IndexMap<char, u8>);
 
 impl Default for CharMapping {
     fn default() -> Self {
-        Self(Default::default())
+        let mut map = IndexMap::default();
+
+        // map.insert(REPLACEMENT_CHAR, 0);
+
+        Self(map)
     }
 }
 
@@ -85,7 +89,7 @@ impl CharMapping {
         input.into_iter().map(|c| self.to_single_lossy(c)).collect()
     }
 
-    pub fn insert_single(&mut self, c: char) {
+    pub fn push(&mut self, c: char) {
         let new = self.len();
         if !self.0.contains_key(&c) {
             self.0.insert(c, new);
@@ -96,7 +100,7 @@ impl CharMapping {
     where
         T: IntoIterator<Item = char>,
     {
-        input.into_iter().for_each(|c| self.insert_single(c));
+        input.into_iter().for_each(|c| self.push(c));
     }
 
     pub fn as_str(&self, input: &[u8]) -> String {
@@ -149,7 +153,7 @@ impl FromIterator<char> for CharMapping {
         let mut res = Self::new();
 
         for c in iter {
-            res.insert_single(c)
+            res.push(c)
         }
 
         res

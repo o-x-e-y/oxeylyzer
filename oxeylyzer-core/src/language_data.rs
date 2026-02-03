@@ -30,7 +30,7 @@ struct LanguageDataInter {
 fn get_char_data(data: HashMap<char, f64>, con: &mut CharMapping) -> CharacterData {
     data.into_iter()
         .map(|(c, f)| {
-            con.insert_single(c);
+            con.push(c);
             f
         })
         .collect()
