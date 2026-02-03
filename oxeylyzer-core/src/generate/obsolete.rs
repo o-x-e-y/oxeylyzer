@@ -9,9 +9,9 @@ impl LayoutGeneration {
         layout: &FastLayout,
         trigram_precision: usize,
     ) -> f64 {
-        let effort = (0..layout.matrix.len())
-            .map(|i| self.char_effort(layout, i))
-            .sum::<f64>();
+        // let effort = (0..layout.matrix.len())
+        //     .map(|i| self.char_effort(layout, i))
+        //     .sum::<f64>();
 
         let fspeed_usage = Finger::FINGERS
             .into_iter()
@@ -25,7 +25,7 @@ impl LayoutGeneration {
         let trigram_iter = self.data.trigrams.iter().take(trigram_precision);
         let trigram_score = self.trigram_score_iter(layout, trigram_iter);
 
-        trigram_score - effort - fspeed_usage - scissors - lsbs - pinky_ring
+        trigram_score /* - effort */ - fspeed_usage - scissors - lsbs - pinky_ring
     }
 
     #[allow(dead_code)]
@@ -110,12 +110,12 @@ impl LayoutGeneration {
         layout
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn effort_score(&self, layout: &FastLayout) -> f64 {
-        (0..layout.matrix.len())
-            .map(|i| self.char_effort(layout, i))
-            .sum()
-    }
+    // #[allow(dead_code)]
+    // pub(crate) fn effort_score(&self, layout: &FastLayout) -> f64 {
+    //     (0..layout.matrix.len())
+    //         .map(|i| self.char_effort(layout, i))
+    //         .sum()
+    // }
 
     #[allow(dead_code)]
     pub(crate) fn usage_score(&self, layout: &FastLayout) -> f64 {

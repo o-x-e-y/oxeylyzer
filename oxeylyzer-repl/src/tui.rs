@@ -25,20 +25,28 @@ pub fn heatmap_heat(data: &LanguageData, u: u8) -> String {
 }
 
 pub fn heatmap_string(data: &LanguageData, layout: &FastLayout) -> String {
-    let mut print_str = String::new();
+    let mut res = String::new();
 
-    for (i, c) in layout.matrix.iter().enumerate() {
-        if i % 10 == 0 && i > 0 {
-            print_str.push('\n');
+    let mut iter = layout.matrix.iter();
+
+    for &l in layout.shape.inner().iter() {
+        let mut i = 0;
+        for u in iter.by_ref() {
+            res.push_str(heatmap_heat(data, *u).as_str());
+            res.push(' ');
+            
+            i += 1;
+
+            if l == i {
+                break;
+            } else if i == 5 {
+                res.push(' ');
+            }
         }
-        if (i + 5) % 10 == 0 {
-            print_str.push(' ');
-        }
-        print_str.push_str(heatmap_heat(data, *c).as_str());
-        print_str.push(' ');
+        res.push('\n');
     }
-
-    print_str
+    
+    res
 }
 
 pub fn generate_n_with_pins(

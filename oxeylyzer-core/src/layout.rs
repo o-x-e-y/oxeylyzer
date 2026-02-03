@@ -81,28 +81,35 @@ impl FastLayout {
     pub fn formatted_string(&self, con: &CharMapping) -> String {
         let mut res = String::new();
 
-        for (i, u) in self.matrix.iter().enumerate() {
-            let c = con.from_single(*u);
-            if i % 10 == 0 && i > 0 {
-                res.push('\n');
-            }
-            if (i + 5) % 10 == 0 {
-                res.push(' ');
-            }
-            res.push(c);
-            res.push(' ');
-        }
+        let mut iter = self.matrix.iter();
 
+        for &l in self.shape.inner().iter() {
+            let mut i = 0;
+            for u in iter.by_ref() {
+                let c = con.from_single(*u);
+                res.push_str(&format!("{c} "));
+                
+                i += 1;
+
+                if l == i {
+                    break;
+                } else if i == 5 {
+                    res.push(' ');
+                }
+            }
+            res.push('\n');
+        }
+        
         res
     }
 
     pub fn from_dof(dof: Dof, convert: &mut CharMapping) -> Result<Self> {
         use libdof::prelude::{Key, SpecialKey};
 
-        let key_count = dof.main_layer().shape().inner().iter().sum::<usize>();
-        if key_count != 30 {
-            bail!("Invalid key count {key_count}, expected 30")
-        }
+        // let key_count = dof.main_layer().shape().inner().iter().sum::<usize>();
+        // if key_count != 30 {
+        //     bail!("Invalid key count {key_count}, expected 30")
+        // }
 
         let matrix = dof
             .main_layer()
@@ -121,7 +128,7 @@ impl FastLayout {
             .collect::<Box<_>>();
 
         let matrix_fingers = dof.fingering().keys().copied().collect::<Box<_>>();
-        let matrix_physical = default_physical_map();
+        let matrix_physical = dof.board().keys().cloned().collect::<Box<_>>();
 
         let mut char_to_finger = Box::new([None; 60]);
         matrix

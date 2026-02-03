@@ -131,9 +131,9 @@ fn format_fspeed(finger_speed: &[f64]) -> String {
         right_hand.push(f(v))
     }
 
-    let legend = "\n  Pinky  Ring   Middle Index  Thumb\n";
-    let left_hand = format!("  {}\n", left_hand.join(", "));
-    let right_hand = format!("  {}\n", right_hand.join(", "));
+    let legend = "   Pinky  Ring   Middle Index  Thumb\n";
+    let left_hand = format!("L: {}\n", left_hand.join(", "));
+    let right_hand = format!("R: {}\n", right_hand.join(", "));
 
     format!("{legend}{left_hand}{right_hand}")
 }
@@ -157,7 +157,7 @@ impl std::fmt::Display for LayoutStats {
         write!(
             f,
             concat!(
-                "Sfb:  {:.3}%\nDsfb: {:.3}%\nFinger Speed: {:.3}\n",
+                "Sfb:  {:.3}%\nDsfb: {:.3}%\n\nFinger Speed: {:.3}\n",
                 "{}\nScissors: {:.3}%\nLsbs: {:.3}%\nPinky Ring Bigrams: {:.3}%\n\n{}"
             ),
             self.sfb * 100.0,
@@ -174,8 +174,8 @@ impl std::fmt::Display for LayoutStats {
 
 #[derive(Default, Debug)]
 pub struct LayoutCache {
-    effort: [f64; 30],
-    effort_total: f64,
+    // effort: [f64; 30],
+    // effort_total: f64,
 
     scissors: f64,
     lsbs: f64,
@@ -199,7 +199,7 @@ impl LayoutCache {
             - self.scissors
             - self.lsbs
             - self.pinky_ring
-            - self.effort_total
+            // - self.effort_total
             - self.usage_total
             - self.fspeed_total
     }
@@ -235,7 +235,7 @@ pub struct LayoutGeneration {
     pub trigram_patterns: Box<[TrigramPattern]>,
 
     fspeed_vals: [(PosPair, f64); 48],
-    effort_map: [f64; 30],
+    // effort_map: [f64; 30],
     scissor_indices: [PosPair; 17],
     lsb_indices: [PosPair; 16],
     pinky_ring_indices: [PosPair; 18],
@@ -282,7 +282,7 @@ impl LayoutGeneration {
                 data,
 
                 fspeed_vals: get_fspeed(config.weights.lateral_penalty),
-                effort_map: get_effort_map(config.weights.heatmap, config.defaults.keyboard_type),
+                // effort_map: get_effort_map(config.weights.heatmap, config.defaults.keyboard_type),
 
                 scissor_indices: get_scissor_indices(),
                 lsb_indices: get_lsb_indices(),
@@ -492,9 +492,9 @@ impl LayoutGeneration {
         #[cfg(test)]
         ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        let effort = (0..layout.matrix.len())
-            .map(|i| self.char_effort(layout, i))
-            .sum::<f64>();
+        // let effort = (0..layout.matrix.len())
+        //     .map(|i| self.char_effort(layout, i))
+        //     .sum::<f64>();
 
         let fspeed_usage = Finger::FINGERS
             .into_iter()
@@ -506,7 +506,7 @@ impl LayoutGeneration {
         let pinky_ring = self.pinky_ring_score(layout);
         let trigram_score = self.trigram_score_iter(layout, &self.data.trigrams);
 
-        trigram_score - effort - fspeed_usage - scissors - lsbs - pinky_ring
+        trigram_score /* - effort */ - fspeed_usage - scissors - lsbs - pinky_ring
     }
 
     fn weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
@@ -775,14 +775,14 @@ impl LayoutGeneration {
     }
 
     #[inline]
-    fn char_effort(&self, layout: &FastLayout, i: usize) -> f64 {
-        let c = layout.char(i).unwrap();
+    // fn char_effort(&self, layout: &FastLayout, i: usize) -> f64 {
+    //     let c = layout.char(i).unwrap();
 
-        match self.data.characters.get(c as usize) {
-            Some(&v) => v * self.effort_map.get(i).unwrap(),
-            None => 0.0,
-        }
-    }
+    //     match self.data.characters.get(c as usize) {
+    //         Some(&v) => v * self.effort_map.get(i).unwrap(),
+    //         None => 0.0,
+    //     }
+    // }
 
     pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
         #[cfg(test)]
@@ -790,10 +790,10 @@ impl LayoutGeneration {
 
         let mut res = LayoutCache::default();
 
-        for i in 0..layout.matrix.len() {
-            res.effort[i] = self.char_effort(layout, i);
-        }
-        res.effort_total = res.effort.iter().sum();
+        // for i in 0..layout.matrix.len() {
+        //     res.effort[i] = self.char_effort(layout, i);
+        // }
+        // res.effort_total = res.effort.iter().sum();
 
         for finger in Finger::FINGERS {
             res.usage[finger as usize] = self.finger_usage(layout, finger);
@@ -864,10 +864,10 @@ impl LayoutGeneration {
                 + usage2
         };
 
-        let effort1 = self.char_effort(layout, i1);
-        let effort2 = self.char_effort(layout, i2);
-        let effort_score =
-            cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
+        // let effort1 = self.char_effort(layout, i1);
+        // let effort2 = self.char_effort(layout, i2);
+        // let effort_score =
+        //     cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
 
         let scissors_score = if swap.affects_scissor() {
             self.scissor_score(layout)
@@ -900,7 +900,7 @@ impl LayoutGeneration {
                 - scissors_score
                 - lsbs_score
                 - pinky_ring_score
-                - effort_score
+                // - effort_score
                 - usage_score
                 - fspeed_score,
         )
@@ -962,13 +962,13 @@ impl LayoutGeneration {
             total
         };
 
-        let effort1 = self.char_effort(layout, i1);
-        let effort2 = self.char_effort(layout, i2);
-        cache.effort_total =
-            cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
+        // let effort1 = self.char_effort(layout, i1);
+        // let effort2 = self.char_effort(layout, i2);
+        // cache.effort_total =
+        //     cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
 
-        cache.effort[i1] = effort1;
-        cache.effort[i2] = effort2;
+        // cache.effort[i1] = effort1;
+        // cache.effort[i2] = effort2;
 
         let trigrams_end = self.trigram_char_score(layout, swap);
         cache.trigrams_total = cache.trigrams_total - trigrams_start + trigrams_end;
@@ -1191,11 +1191,11 @@ mod tests {
             GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
             assert!(cache.scissors.approx_eq_dbg(GEN.scissor_score(&qwerty), 7));
-            assert!(
-                cache
-                    .effort_total
-                    .approx_eq_dbg(GEN.effort_score(&qwerty), 7)
-            );
+            // assert!(
+            //     cache
+            //         .effort_total
+            //         .approx_eq_dbg(GEN.effort_score(&qwerty), 7)
+            // );
             assert!(cache.usage_total.approx_eq_dbg(GEN.usage_score(&qwerty), 7));
             assert!(
                 cache

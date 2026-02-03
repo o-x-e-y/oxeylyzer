@@ -1,10 +1,10 @@
 {
     "name": "stronk",
-    "board": "ortho",
+    "board": "ansi",
     "layers": {
         "main": [
             "f d l b v  j g o u ,",
-            "s t r / k  y m a e i",
+            "s t r / k  y m a e i -",
             "z q x h p  w c ' ; ."
         ]
     },
