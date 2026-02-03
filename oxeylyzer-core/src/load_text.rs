@@ -536,6 +536,9 @@ mod tests {
                 .get(data.char_mapping.to_bigram_lossy(['\'', 't'], len)),
             Some(&0.0)
         );
+
+        std::fs::remove_file("./static/language_data/test.json")
+            .expect("Couldn't remove test.json");
     }
 
     #[test]

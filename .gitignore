@@ -6,4 +6,3 @@ static/language_data/reddit.json
 .direnv
 result
 tarpaulin-report.*
-oxeylyzer-core/static/language_data/test.json
