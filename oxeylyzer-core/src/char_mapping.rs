@@ -1,11 +1,14 @@
-use std::collections::hash_map::Entry;
+use indexmap::IndexMap;
 
-use ahash::AHashMap as HashMap;
+use crate::REPLACEMENT_CHAR;
 
-#[derive(Clone, Debug, Default)]
-pub struct CharMapping {
-    from: Vec<char>,
-    to: HashMap<char, u8>,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CharMapping(IndexMap<char, u8>);
+
+impl Default for CharMapping {
+    fn default() -> Self {
+        Self(Default::default())
+    }
 }
 
 impl CharMapping {
@@ -13,24 +16,27 @@ impl CharMapping {
         Self::default()
     }
 
-    pub fn from_single(&self, c: u8) -> char {
-        *self.from.get(c as usize).unwrap_or(&' ')
+    pub fn from_single(&self, u: u8) -> char {
+        // *self.0.get(c as usize).unwrap_or(&' ')
+        match self.0.get_index(u as usize) {
+            Some((c, _)) => *c,
+            None => REPLACEMENT_CHAR,
+        }
     }
 
-    pub fn from<T>(&self, input: T) -> Vec<char>
-    where
-        T: IntoIterator<Item = u8>,
-    {
-        input.into_iter().map(|c| self.from_single(c)).collect()
-    }
+    // pub fn from<T>(&self, input: T) -> Vec<char>
+    // where
+    //     T: IntoIterator<Item = u8>,
+    // {
+    //     input.into_iter().map(|c| self.from_single(c)).collect()
+    // }
 
     pub fn to_single(&mut self, c: char) -> u8 {
-        if let Some(u) = self.to.get(&c) {
+        if let Some(u) = self.0.get(&c) {
             *u
         } else {
             let new = self.len();
-            self.from.push(c);
-            self.to.insert(c, new);
+            self.0.insert(c, new);
             new
         }
     }
@@ -55,7 +61,7 @@ impl CharMapping {
     }
 
     pub fn to_single_lossy(&self, c: char) -> u8 {
-        if let Some(u) = self.to.get(&c) {
+        if let Some(u) = self.0.get(&c) {
             *u
         } else {
             self.len()
@@ -88,10 +94,14 @@ impl CharMapping {
     }
 
     pub fn insert_single(&mut self, c: char) {
+        // let new = self.len();
+        // if let Entry::Vacant(e) = self.to.entry(c) {
+        //     self.from.push(c);
+        //     e.insert(new);
+        // }
         let new = self.len();
-        if let Entry::Vacant(e) = self.to.entry(c) {
-            self.from.push(c);
-            e.insert(new);
+        if !self.0.contains_key(&c) {
+            self.0.insert(c, new);
         }
     }
 
@@ -102,26 +112,85 @@ impl CharMapping {
         input.into_iter().for_each(|c| self.insert_single(c));
     }
 
-    pub fn with_chars(s: &str) -> Self {
-        let mut res = Self::default();
-        res.insert(s.chars());
-        res
+    pub fn as_str(&self, input: &[u8]) -> String {
+        input.iter().map(|&u| self.from_single(u)).collect()
     }
 
-    pub fn as_str(&self, input: &[u8]) -> String {
-        input
-            .iter()
-            .map(|&c| self.from.get(c as usize).unwrap_or(&' '))
-            .collect()
+    pub fn map_cs<'a>(&'a mut self, s: &'a str) -> impl Iterator<Item = u8> + 'a {
+        s.chars().map(|c| self.to_single(c))
+    }
+
+    pub fn map_us<'a>(&'a self, u: &'a [u8]) -> impl Iterator<Item = char> + 'a {
+        u.iter().map(|u| self.from_single(*u))
     }
 
     pub fn len(&self) -> u8 {
-        debug_assert_eq!(self.to.len(), self.from.len());
-
-        self.to.len() as u8
+        self.0.len() as u8
     }
 
     pub fn is_empty(&self) -> bool {
-        self.to.len() == 0
+        self.len() == 0
+    }
+}
+
+impl From<&str> for CharMapping {
+    fn from(value: &str) -> Self {
+        Self::from_iter(value.chars())
+    }
+}
+
+impl From<String> for CharMapping {
+    fn from(value: String) -> Self {
+        Self::from_iter(value.chars())
+    }
+}
+
+impl<const N: usize> From<[char; N]> for CharMapping {
+    fn from(arr: [char; N]) -> Self {
+        arr.into_iter().collect()
+    }
+}
+
+impl From<&[char]> for CharMapping {
+    fn from(slice: &[char]) -> Self {
+        slice.iter().collect()
+    }
+}
+
+impl FromIterator<char> for CharMapping {
+    fn from_iter<T: IntoIterator<Item = char>>(iter: T) -> Self {
+        let mut res = Self::new();
+
+        for c in iter {
+            res.insert_single(c)
+        }
+
+        res
+    }
+}
+
+impl<'a> FromIterator<&'a char> for CharMapping {
+    fn from_iter<T: IntoIterator<Item = &'a char>>(iter: T) -> Self {
+        iter.into_iter().copied().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_from() {
+        let mapping_s = "abcdefhgijklmnopqrstuvwxyz ";
+        let mut mapping = mapping_s.chars().collect::<CharMapping>();
+
+        assert_eq!(mapping.len() as usize, mapping_s.len());
+
+        let s = "this is epic-";
+        let u = mapping.map_cs(s).collect::<Vec<_>>();
+        let c = mapping.map_us(&u).collect::<String>();
+
+        // assert_eq!(c, "this is epic�")
+        assert_eq!(c, "this is epic-")
     }
 }

@@ -342,7 +342,7 @@ mod tests {
     use super::*;
     use once_cell::sync::Lazy;
     static CON: Lazy<CharMapping> =
-        Lazy::new(|| CharMapping::with_chars("abcdefghijklmnopqrstuvwxyz'.,;/"));
+        Lazy::new(|| CharMapping::from("abcdefghijklmnopqrstuvwxyz'.,;/"));
 
     #[test]
     fn layout_str() {
@@ -351,7 +351,7 @@ mod tests {
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
         assert_eq!(
-            CON.from(qwerty.matrix.iter().copied()),
+            CON.map_us(&qwerty.matrix).collect::<Vec<_>>(),
             vec![
                 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h',
                 'j', 'k', 'l', ';', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'

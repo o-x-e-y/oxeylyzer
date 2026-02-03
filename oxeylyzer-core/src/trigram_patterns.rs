@@ -211,7 +211,7 @@ mod tests {
     use once_cell::sync::Lazy;
 
     static CON: Lazy<CharMapping> =
-        Lazy::new(|| CharMapping::with_chars("abcdefghijklmnopqrstuvwxyz',.;"));
+        Lazy::new(|| CharMapping::from("abcdefghijklmnopqrstuvwxyz',.;"));
 
     static GEN: Lazy<LayoutGeneration> =
         Lazy::new(|| LayoutGeneration::new("english", "./static", None).unwrap());
