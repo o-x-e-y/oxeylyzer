@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 
-use crate::{REPLACEMENT_CHAR, SHIFT_CHAR, SPACE_CHAR};
+use crate::REPLACEMENT_CHAR;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CharMapping(IndexMap<char, u8>);

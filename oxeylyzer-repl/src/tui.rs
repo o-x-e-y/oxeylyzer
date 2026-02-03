@@ -34,7 +34,7 @@ pub fn heatmap_string(data: &LanguageData, layout: &FastLayout) -> String {
         for u in iter.by_ref() {
             res.push_str(heatmap_heat(data, *u).as_str());
             res.push(' ');
-            
+
             i += 1;
 
             if l == i {
@@ -45,7 +45,7 @@ pub fn heatmap_string(data: &LanguageData, layout: &FastLayout) -> String {
         }
         res.push('\n');
     }
-    
+
     res
 }
 

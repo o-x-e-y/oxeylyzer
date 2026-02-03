@@ -176,7 +176,6 @@ impl std::fmt::Display for LayoutStats {
 pub struct LayoutCache {
     // effort: [f64; 30],
     // effort_total: f64,
-
     scissors: f64,
     lsbs: f64,
     pinky_ring: f64,
@@ -283,7 +282,6 @@ impl LayoutGeneration {
 
                 fspeed_vals: get_fspeed(config.weights.lateral_penalty),
                 // effort_map: get_effort_map(config.weights.heatmap, config.defaults.keyboard_type),
-
                 scissor_indices: get_scissor_indices(),
                 lsb_indices: get_lsb_indices(),
                 pinky_ring_indices: get_pinky_ring_indices(),
@@ -774,7 +772,7 @@ impl LayoutGeneration {
         res
     }
 
-    #[inline]
+    // #[inline]
     // fn char_effort(&self, layout: &FastLayout, i: usize) -> f64 {
     //     let c = layout.char(i).unwrap();
 

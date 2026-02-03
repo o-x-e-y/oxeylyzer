@@ -9,7 +9,6 @@ use std::io::prelude::*;
 use std::path::Path;
 
 use crate::char_mapping::CharMapping;
-use crate::{REPLACEMENT_CHAR, SHIFT_CHAR, SPACE_CHAR};
 
 pub type CharacterData = Box<[f64]>;
 pub type SlowBigramData = HashMap<[u8; 2], f64>;

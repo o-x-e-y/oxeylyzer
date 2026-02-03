@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use itertools::Itertools;
 use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
 
@@ -88,7 +88,7 @@ impl FastLayout {
             for u in iter.by_ref() {
                 let c = con.from_single(*u);
                 res.push_str(&format!("{c} "));
-                
+
                 i += 1;
 
                 if l == i {
@@ -99,7 +99,7 @@ impl FastLayout {
             }
             res.push('\n');
         }
-        
+
         res
     }
 
