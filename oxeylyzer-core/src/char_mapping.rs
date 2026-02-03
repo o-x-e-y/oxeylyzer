@@ -17,19 +17,11 @@ impl CharMapping {
     }
 
     pub fn from_single(&self, u: u8) -> char {
-        // *self.0.get(c as usize).unwrap_or(&' ')
         match self.0.get_index(u as usize) {
             Some((c, _)) => *c,
             None => REPLACEMENT_CHAR,
         }
     }
-
-    // pub fn from<T>(&self, input: T) -> Vec<char>
-    // where
-    //     T: IntoIterator<Item = u8>,
-    // {
-    //     input.into_iter().map(|c| self.from_single(c)).collect()
-    // }
 
     pub fn to_single(&mut self, c: char) -> u8 {
         if let Some(u) = self.0.get(&c) {
@@ -94,11 +86,6 @@ impl CharMapping {
     }
 
     pub fn insert_single(&mut self, c: char) {
-        // let new = self.len();
-        // if let Entry::Vacant(e) = self.to.entry(c) {
-        //     self.from.push(c);
-        //     e.insert(new);
-        // }
         let new = self.len();
         if !self.0.contains_key(&c) {
             self.0.insert(c, new);
