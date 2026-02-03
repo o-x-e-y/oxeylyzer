@@ -61,9 +61,9 @@ fn get_bigram_data(data: HashMap<String, f64>, con: &mut CharMapping) -> BigramD
 fn get_trigram_data(data: IndexMap<String, f64>, con: &mut CharMapping) -> TrigramData {
     let mut res = TrigramData::new();
     for (trigram, freq) in data {
-        let tv = trigram.chars().collect::<Vec<char>>();
-        let tv_u8 = con.to(tv);
+        let tv_u8 = con.map_cs(&trigram).collect::<Vec<_>>();
 
+        // TODO: consider re-adding sfr, which this filters.
         if tv_u8[0] != tv_u8[1] && tv_u8[1] != tv_u8[2] {
             let new_trigram = [tv_u8[0], tv_u8[1], tv_u8[2]];
             res.push((new_trigram, freq));

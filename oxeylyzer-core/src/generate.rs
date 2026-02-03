@@ -8,6 +8,7 @@ use libdof::Dof;
 use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use crate::REPEAT_KEY;
 use crate::char_mapping::CharMapping;
 use crate::language_data::{BigramData, LanguageData, TrigramData};
 use crate::layout::*;
@@ -258,6 +259,7 @@ impl LayoutGeneration {
         {
             let chars_fg = data.char_mapping.to(chars_for_generation(language));
             let mut chars_for_generation: [u8; 30] = chars_fg.try_into().unwrap();
+
             chars_for_generation.sort_by(|&a, &b| {
                 let a = data.characters.get(a as usize).unwrap_or(&0.0);
                 let b = data.characters.get(b as usize).unwrap_or(&0.0);
@@ -274,7 +276,7 @@ impl LayoutGeneration {
                     config.trigram_precision(),
                 ),
                 char_mapping: data.char_mapping.clone(),
-                repeat_key: data.char_mapping.to_single('@') as usize,
+                repeat_key: data.char_mapping.to_single(REPEAT_KEY) as usize,
                 trigram_precision: config.trigram_precision(),
                 trigram_patterns: get_trigram_combinations(),
                 data,
@@ -1307,6 +1309,15 @@ mod tests {
             let best_cached_score =
                 GEN.optimize_cached(&mut layout_for_cached, &mut cache, &POSSIBLE_SWAPS);
 
+            if !normal_score.approx_eq_dbg(best_cached_score, 7) {
+                println!(
+                    "{}\n\n{}",
+                    optimized_normal.formatted_string(&GEN.data.char_mapping),
+                    layout_for_cached.formatted_string(&GEN.data.char_mapping)
+                );
+            }
+
+            assert!(normal_score.approx_eq_dbg(best_cached_score, 7), "{i}: i");
             assert_eq!(
                 layout_for_cached.layout_str(&GEN.char_mapping),
                 optimized_normal.layout_str(&GEN.char_mapping),

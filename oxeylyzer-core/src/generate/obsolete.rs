@@ -43,6 +43,7 @@ impl LayoutGeneration {
             let c1 = layout.char(i1).unwrap() as usize;
             let c2 = layout.char(i2).unwrap() as usize;
 
+            let len = self.data.characters.len();
             let (pair, rev) = (c1 * len + c2, c2 * len + c1);
 
             res += self.data.bigrams.get(pair).unwrap_or(&0.0) * dist;

@@ -16,11 +16,11 @@ pub fn readline() -> std::io::Result<String> {
     Ok(buf)
 }
 
-pub fn heatmap_heat(data: &LanguageData, c: u8) -> String {
-    let complement = 215.0 - *data.characters.get(c as usize).unwrap_or(&0.0) * 1720.0;
+pub fn heatmap_heat(data: &LanguageData, u: u8) -> String {
+    let complement = 215.0 - *data.characters.get(u as usize).unwrap_or(&0.0) * 1720.0;
     let complement = complement.max(0.0) as u8;
     let heat = rgb(215, complement, complement);
-    let c = data.char_mapping.from_single(c);
+    let c = data.char_mapping.from_single(u);
     format!("{}", c.to_string().fg(heat))
 }
 
