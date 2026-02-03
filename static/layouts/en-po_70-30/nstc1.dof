@@ -1,0 +1,12 @@
+{
+    "name": "nstc1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "v d l b g  . h u o y",
+            "n s t c m  , r e a i",
+            "p f z k w  j * ' x q"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,6 +1,6 @@
 use crate::translation::Translator;
 
-use std::fs::{read_dir, File};
+use std::fs::{File, read_dir};
 use std::iter::FromIterator;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -82,7 +82,7 @@ pub fn load_data(language: &str, translator: Translator) -> Result<()> {
                 .rev()
                 .take(5)
                 .enumerate()
-                .for_each(|(i, c)| unsafe { *inter.get_unchecked_mut(4 - i) = c });
+                .for_each(|(i, c)| *inter.get_mut(4 - i).unwrap() = c);
 
             inter.into_iter().for_each(|c| last_chars.push(c));
             last_chars.push_str("     ");
@@ -212,39 +212,36 @@ impl From<(TextNgrams<'_, 5>, &str, Translator)> for TextData {
         let mut res = TextData::new(language);
 
         for (ngram, freq) in ngrams.ngrams.into_iter() {
-            let first = unsafe { ngram.chars().next().unwrap_unchecked() };
-            if first != ' ' {
-                if let Some(first_t) = translator.table.get(&first) {
-                    if first_t != " " {
-                        let mut trans = translator.translate(ngram);
-                        match trans.chars().count() {
-                            5.. => {
-                                trans.push(' ');
+            let first = ngram.chars().next().unwrap();
+            if first != ' '
+                && let Some(first_t) = translator.table.get(&first)
+                && first_t != " "
+            {
+                let mut trans = translator.translate(ngram);
+                match trans.chars().count() {
+                    5.. => {
+                        trans.push(' ');
 
-                                let first_t_len = first_t.chars().count().max(1);
-                                let it1 = trans.char_indices().map(|(i, _)| i).take(first_t_len);
-                                let it2 = trans
-                                    .char_indices()
-                                    .map(|(i, _)| i)
-                                    .skip(5)
-                                    .take(first_t_len);
+                        let first_t_len = first_t.chars().count().max(1);
+                        let it1 = trans.char_indices().map(|(i, _)| i).take(first_t_len);
+                        let it2 = trans
+                            .char_indices()
+                            .map(|(i, _)| i)
+                            .skip(5)
+                            .take(first_t_len);
 
-                                it1.zip(it2)
-                                    .map(|(i1, i2)| &trans[i1..i2])
-                                    .for_each(|ngram| {
-                                        res.add_n_subsequent::<5>(ngram, freq as f64)
-                                    });
-                            }
-                            4 => {
-                                println!("4 long ngram: '{}'", &trans);
-                                res.add_n_subsequent::<4>(&trans, freq as f64)
-                            }
-                            3 => res.add_n_subsequent::<3>(&trans, freq as f64),
-                            2 => res.add_n_subsequent::<2>(&trans, freq as f64),
-                            1 => res.add_n_subsequent::<1>(&trans, freq as f64),
-                            _ => {}
-                        }
+                        it1.zip(it2)
+                            .map(|(i1, i2)| &trans[i1..i2])
+                            .for_each(|ngram| res.add_n_subsequent::<5>(ngram, freq as f64));
                     }
+                    4 => {
+                        println!("4 long ngram: '{}'", &trans);
+                        res.add_n_subsequent::<4>(&trans, freq as f64)
+                    }
+                    3 => res.add_n_subsequent::<3>(&trans, freq as f64),
+                    2 => res.add_n_subsequent::<2>(&trans, freq as f64),
+                    1 => res.add_n_subsequent::<1>(&trans, freq as f64),
+                    _ => {}
                 }
             }
         }
@@ -480,12 +477,12 @@ mod tests {
 
         assert_eq!(
             data.characters
-                .get(data.convert_u8.to_single_lossy('e') as usize),
+                .get(data.char_mapping.to_single_lossy('e') as usize),
             Some(&(2.0 / total_c))
         );
         assert_eq!(
             data.characters
-                .get(data.convert_u8.to_single_lossy('\'') as usize),
+                .get(data.char_mapping.to_single_lossy('\'') as usize),
             Some(&(1.0 / total_c))
         );
 
@@ -501,12 +498,12 @@ mod tests {
 
         assert_eq!(
             data.bigrams
-                .get(data.convert_u8.to_bigram_lossy(['\'', '*'], len)),
+                .get(data.char_mapping.to_bigram_lossy(['\'', '*'], len)),
             Some(&(1.0 / total_b))
         );
         assert_eq!(
             data.bigrams
-                .get(data.convert_u8.to_bigram_lossy(['1', ':'], len)),
+                .get(data.char_mapping.to_bigram_lossy(['1', ':'], len)),
             None
         );
 
@@ -521,29 +518,32 @@ mod tests {
 
         assert_eq!(
             data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy([';', 'd'], len)),
+                .get(data.char_mapping.to_bigram_lossy([';', 'd'], len)),
             Some(&(1.0 / total_s))
         );
         assert_eq!(
             data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy(['*', 'e'], len)),
+                .get(data.char_mapping.to_bigram_lossy(['*', 'e'], len)),
             Some(&(1.0 / total_s))
         );
         assert_eq!(
             data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy(['t', 'e'], len)),
+                .get(data.char_mapping.to_bigram_lossy(['t', 'e'], len)),
             Some(&(1.0 / total_s))
         );
         assert_eq!(
             data.skipgrams
-                .get(data.convert_u8.to_bigram_lossy(['\'', 't'], len)),
+                .get(data.char_mapping.to_bigram_lossy(['\'', 't'], len)),
             Some(&0.0)
         );
+
+        std::fs::remove_file("./static/language_data/test.json")
+            .expect("Couldn't remove test.json");
     }
 
     #[test]
     fn get_generator() {
-        let a = generate::LayoutGeneration::new("test", "static", None);
+        let a = generate::LayoutGeneration::new("english", "static", None);
         assert!(a.is_ok());
     }
 }

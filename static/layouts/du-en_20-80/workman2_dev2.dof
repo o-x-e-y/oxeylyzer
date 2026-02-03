@@ -1,0 +1,12 @@
+{
+    "name": "workman2_dev2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "q l c m k j f u y ;",
+            "a r s t g b n e o i",
+            "z x w d v p h , . /"
+        ]
+    },
+    "fingering": "traditional"
+}

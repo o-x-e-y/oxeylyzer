@@ -1,0 +1,12 @@
+{
+    "name": "sthy2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "v d l w f  x j u a .",
+            "s t h y p  q n e o i",
+            "b k m c g  z r ; ' ,"
+        ]
+    },
+    "fingering": "traditional"
+}

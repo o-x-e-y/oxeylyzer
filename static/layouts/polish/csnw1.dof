@@ -1,0 +1,12 @@
+{
+    "name": "csnw1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "ż d r g b  f . e u '",
+            "c s n w k  , l a o i",
+            "t m ł p j  * z ę y h"
+        ]
+    },
+    "fingering": "traditional"
+}

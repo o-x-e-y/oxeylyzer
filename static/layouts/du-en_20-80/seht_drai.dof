@@ -1,0 +1,12 @@
+{
+    "name": "seht_drai",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "f u l v b  q g n o j",
+            "s e h t k  ' d r a i",
+            "z ; m p w  y c x / ,"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "indo_yum",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "f y u z x v d b p l",
+            "k i e a ; c t n s r",
+            ", ' . o q g m h j w"
+        ]
+    },
+    "fingering": "traditional"
+}

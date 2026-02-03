@@ -1,0 +1,12 @@
+{
+    "name": "nsw1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "h r d g b  j z o u q",
+            "* n s w c  . t a e i",
+            "f , m p k  v l x ' y"
+        ]
+    },
+    "fingering": "traditional"
+}

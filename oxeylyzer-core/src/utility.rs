@@ -1,10 +1,11 @@
-use std::collections::hash_map::Entry;
-
 use crate::languages_cfg::read_cfg;
 
-use ahash::AHashMap as HashMap;
 use arrayvec::ArrayVec;
-use nanorand::{tls_rng, Rng};
+use libdof::prelude::{
+    Finger::{self, *},
+    PhysicalKey,
+};
+use nanorand::{Rng, tls_rng};
 use serde::Deserialize;
 
 #[inline]
@@ -18,11 +19,23 @@ pub fn shuffle_pins<const N: usize, T>(slice: &mut [T], pins: &[usize]) {
     }
 }
 
+pub fn default_physical_map() -> Box<[PhysicalKey]> {
+    let mut res = Vec::new();
+
+    for y in 0..3 {
+        for x in 0..10 {
+            res.push(PhysicalKey::xy(x as f64, y as f64))
+        }
+    }
+
+    res.into()
+}
+
 #[rustfmt::skip]
-pub static I_TO_COL: [usize; 30] = [
-    0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
-    0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
-    0, 1, 2, 3, 3,  4, 4, 5, 6, 7,
+pub static DEFAULT_FINGERMAP: [Finger; 30] = [
+    LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
+    LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
+    LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
 ];
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
@@ -60,19 +73,17 @@ impl PosPair {
 
     #[inline]
     pub fn affects_scissor(&self) -> bool {
-        unsafe { *AFFECTS_SCISSOR.get_unchecked(self.0) || *AFFECTS_SCISSOR.get_unchecked(self.1) }
+        *AFFECTS_SCISSOR.get(self.0).unwrap() || *AFFECTS_SCISSOR.get(self.1).unwrap()
     }
 
     #[inline]
     pub fn affects_lsb(&self) -> bool {
-        unsafe { *AFFECTS_LSB.get_unchecked(self.0) || *AFFECTS_LSB.get_unchecked(self.1) }
+        *AFFECTS_LSB.get(self.0).unwrap() || *AFFECTS_LSB.get(self.1).unwrap()
     }
 
     #[inline]
     pub fn affects_pinky_ring(&self) -> bool {
-        unsafe {
-            *AFFECTS_PINKY_RING.get_unchecked(self.0) || *AFFECTS_PINKY_RING.get_unchecked(self.1)
-        }
+        *AFFECTS_PINKY_RING.get(self.0).unwrap() || *AFFECTS_PINKY_RING.get(self.1).unwrap()
     }
 }
 
@@ -99,130 +110,6 @@ const fn get_possible_swaps() -> [PosPair; 435] {
         pos1 += 1;
     }
     res
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct ConvertU8 {
-    from: Vec<char>,
-    to: HashMap<char, u8>,
-}
-
-impl ConvertU8 {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn from_single(&self, c: u8) -> char {
-        *self.from.get(c as usize).unwrap_or(&' ')
-    }
-
-    pub fn from<T>(&self, input: T) -> Vec<char>
-    where
-        T: IntoIterator<Item = u8>,
-    {
-        input.into_iter().map(|c| self.from_single(c)).collect()
-    }
-
-    pub fn to_single(&mut self, c: char) -> u8 {
-        if let Some(u) = self.to.get(&c) {
-            *u
-        } else {
-            let new = self.len();
-            self.from.push(c);
-            self.to.insert(c, new);
-            new
-        }
-    }
-
-    pub fn to_bigram(&mut self, from: [char; 2]) -> [u8; 2] {
-        [self.to_single(from[0]), self.to_single(from[1])]
-    }
-
-    pub fn to_trigram(&mut self, from: [char; 3]) -> [u8; 3] {
-        [
-            self.to_single(from[0]),
-            self.to_single(from[1]),
-            self.to_single(from[2]),
-        ]
-    }
-
-    pub fn to<T>(&mut self, input: T) -> Vec<u8>
-    where
-        T: IntoIterator<Item = char>,
-    {
-        input.into_iter().map(|c| self.to_single(c)).collect()
-    }
-
-    pub fn to_single_lossy(&self, c: char) -> u8 {
-        if let Some(u) = self.to.get(&c) {
-            *u
-        } else {
-            self.len()
-        }
-    }
-
-    pub fn to_bigram_lossy(&self, from: [char; 2], char_count: usize) -> usize {
-        let c1 = self.to_single_lossy(from[0]) as usize;
-        let c2 = self.to_single_lossy(from[1]) as usize;
-        if c1 < char_count && c2 < char_count {
-            c1 * char_count + c2
-        } else {
-            u8::MAX as usize
-        }
-    }
-
-    pub fn to_trigram_lossy(&self, from: [char; 3]) -> [u8; 3] {
-        [
-            self.to_single_lossy(from[0]),
-            self.to_single_lossy(from[1]),
-            self.to_single_lossy(from[2]),
-        ]
-    }
-
-    pub fn to_lossy<T>(&self, input: T) -> Vec<u8>
-    where
-        T: IntoIterator<Item = char>,
-    {
-        input.into_iter().map(|c| self.to_single_lossy(c)).collect()
-    }
-
-    pub fn insert_single(&mut self, c: char) {
-        let new = self.len();
-        if let Entry::Vacant(e) = self.to.entry(c) {
-            self.from.push(c);
-            e.insert(new);
-        }
-    }
-
-    pub fn insert<T>(&mut self, input: T)
-    where
-        T: IntoIterator<Item = char>,
-    {
-        input.into_iter().for_each(|c| self.insert_single(c));
-    }
-
-    pub fn with_chars(s: &str) -> Self {
-        let mut res = Self::default();
-        res.insert(s.chars());
-        res
-    }
-
-    pub fn as_str(&self, input: &[u8]) -> String {
-        input
-            .iter()
-            .map(|&c| self.from.get(c as usize).unwrap_or(&' '))
-            .collect()
-    }
-
-    pub fn len(&self) -> u8 {
-        debug_assert_eq!(self.to.len(), self.from.len());
-
-        self.to.len() as u8
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.to.len() == 0
-    }
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -548,20 +435,25 @@ impl ApproxEq for f64 {
     }
 }
 
-pub(crate) fn is_kb_file(entry: &std::fs::DirEntry) -> bool {
-    if let Some(ext_os) = entry.path().extension() {
-        if let Some(ext) = ext_os.to_str() {
-            return ext == "kb";
-        }
+pub(crate) fn is_kb_file(path: &&std::path::PathBuf) -> bool {
+    if let Some(ext) = path.extension() {
+        return ext == "kb";
     }
     false
 }
 
-pub(crate) fn layout_name(entry: &std::fs::DirEntry) -> Option<String> {
-    if let Some(name_os) = entry.path().file_stem() {
-        if let Some(name_str) = name_os.to_str() {
-            return Some(name_str.to_string());
-        }
+pub(crate) fn is_dof_file(entry: &&std::path::PathBuf) -> bool {
+    if let Some(ext_os) = entry.extension() {
+        return ext_os == "dof";
+    }
+    false
+}
+
+pub(crate) fn layout_name(entry: &std::path::Path) -> Option<String> {
+    if let Some(name_os) = entry.file_stem()
+        && let Some(name_str) = name_os.to_str()
+    {
+        return Some(name_str.to_string());
     }
     None
 }

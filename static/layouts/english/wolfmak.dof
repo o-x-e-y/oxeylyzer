@@ -1,0 +1,12 @@
+{
+    "name": "wolfmak",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "w l f d b  v h u o y",
+            "c r s t g  m n e a i",
+            "' j x k q  z p ; , ."
+        ]
+    },
+    "fingering": "traditional"
+}

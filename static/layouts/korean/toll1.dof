@@ -1,0 +1,12 @@
+{
+    "name": "toll1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "ㅠ ㅑ ㅡ ㅕ ㅛ  ㅍ ㅌ ㅅ . ;",
+            "ㅗ ㅁ ㅏ ㅣ ㅐ  ㅊ ㄷ ㄹ ㅇ ㄴ",
+            "' ㅂ ㅜ ㅓ ㅔ  ㅈ ㅎ , ㅋ ㄱ"
+        ]
+    },
+    "fingering": "traditional"
+}

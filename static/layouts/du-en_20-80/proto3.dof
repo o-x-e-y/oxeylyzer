@@ -1,0 +1,12 @@
+{
+    "name": "proto3",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "v l h f q  j w u o .",
+            "s r n t m  y g e a i",
+            "z x b d k  p c ' ; ,"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "dvardy_kdc",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "v r d k p  j f o u .",
+            "s n t c y  x l a e i",
+            "z q b g w  m h ' ; ,"
+        ]
+    },
+    "fingering": "traditional"
+}

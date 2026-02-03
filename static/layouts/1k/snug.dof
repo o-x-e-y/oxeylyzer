@@ -1,0 +1,12 @@
+{
+    "name": "snug",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "x l d m b y w o u q",
+            "s r t n f p c e i a",
+            "z j k h v ' g / , ."
+        ]
+    },
+    "fingering": "traditional"
+}

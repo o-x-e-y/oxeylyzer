@@ -2,17 +2,18 @@
 name = "oxeylyzer-repl"
 version = "0.1.0"
 authors = ["O_X_E_Y <lucoerlemans37@gmail.com>"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 oxeylyzer-core = { path = "../oxeylyzer-core" }
-shlex = "1.1.0"
-indicatif = { version = "0.17.1", features = ["rayon"] }
+shlex = "1.3"
+indicatif = { version = "0.18", features = ["rayon"] }
 ansi_rgb = { git = "https://github.com/O-X-E-Y/ansi_rgb" }
-indexmap = "2.2.6"
-serde = {version = "1.0.136", features = ["derive"]}
-serde_json = "1.0.79"
-glob = "0.3.0"
-toml = "0.8.12"
-itertools = "0.12.1"
+indexmap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+glob = "0.3"
+toml = { workspace = true }
+itertools = { workspace = true }
 xflags = { git = "https://github.com/O-X-E-Y/xflags/" }
+libdof = { workspace = true }

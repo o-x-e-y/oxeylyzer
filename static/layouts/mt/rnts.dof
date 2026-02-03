@@ -1,0 +1,12 @@
+{
+    "name": "rnts",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "w p d g v  z q o u j",
+            "r n t s y  ' h a e i",
+            "x b k c f  m l . / ,"
+        ]
+    },
+    "fingering": "traditional"
+}

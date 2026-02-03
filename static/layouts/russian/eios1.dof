@@ -1,0 +1,12 @@
+{
+    "name": "eios1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "ю у а з ш  ц д л к г",
+            "е и о с .  х т р н в",
+            "я ы ь , ж  б м й п ч"
+        ]
+    },
+    "fingering": "traditional"
+}

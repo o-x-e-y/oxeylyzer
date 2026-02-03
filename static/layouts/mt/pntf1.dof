@@ -1,0 +1,12 @@
+{
+    "name": "pntf1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "s r a m b  q j / u v",
+            "p n t f d  , h ' e l",
+            "z x k i w  - o . ; ["
+        ]
+    },
+    "fingering": "traditional"
+}

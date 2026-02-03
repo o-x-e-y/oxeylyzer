@@ -1,16 +1,18 @@
-use std::hint::unreachable_unchecked;
 use std::path::Path;
 
-use anyhow::Result;
-// use fxhash::FxHashMap;
 use ahash::AHashMap as HashMap;
+use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
+use libdof::Dof;
+use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use crate::REPEAT_KEY;
+use crate::char_mapping::CharMapping;
 use crate::language_data::{BigramData, LanguageData, TrigramData};
 use crate::layout::*;
-use crate::trigram_patterns::TrigramPattern;
+use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::utility::*;
 use crate::weights::{Config, Weights};
 
@@ -33,6 +35,7 @@ pub struct TrigramStats {
     pub sfbs: f64,
     pub bad_sfbs: f64,
     pub sfts: f64,
+    pub thumbs: f64,
     pub other: f64,
     pub invalid: f64,
 }
@@ -116,11 +119,23 @@ impl std::fmt::Debug for TrigramStats {
 }
 
 fn format_fspeed(finger_speed: &[f64]) -> String {
-    let mut finger_speed_str: Vec<String> = Vec::new();
-    for v in finger_speed {
-        finger_speed_str.push(format!("{:.3}", v * 10.0))
+    let f = |v| format!("{:.3}", v * 10.0);
+
+    let mut left_hand = Vec::new();
+    for v in finger_speed.iter().take(5) {
+        left_hand.push(f(v))
     }
-    finger_speed_str.join(", ")
+
+    let mut right_hand = Vec::new();
+    for v in finger_speed.iter().rev().take(5) {
+        right_hand.push(f(v))
+    }
+
+    let legend = "   Pinky  Ring   Middle Index  Thumb\n";
+    let left_hand = format!("L: {}\n", left_hand.join(", "));
+    let right_hand = format!("R: {}\n", right_hand.join(", "));
+
+    format!("{legend}{left_hand}{right_hand}")
 }
 
 #[derive(Clone)]
@@ -134,7 +149,7 @@ pub struct LayoutStats {
     pub pinky_ring: f64,
     pub trigram_stats: TrigramStats,
     pub fspeed: f64,
-    pub finger_speed: [f64; 8],
+    pub finger_speed: [f64; 10],
 }
 
 impl std::fmt::Display for LayoutStats {
@@ -142,8 +157,8 @@ impl std::fmt::Display for LayoutStats {
         write!(
             f,
             concat!(
-                "Sfb:  {:.3}%\nDsfb: {:.3}%\nFinger Speed: {:.3}\n",
-                "    [{}]\nScissors: {:.3}%\nLsbs: {:.3}%\nPinky Ring Bigrams: {:.3}%\n\n{}"
+                "Sfb:  {:.3}%\nDsfb: {:.3}%\n\nFinger Speed: {:.3}\n",
+                "{}\nScissors: {:.3}%\nLsbs: {:.3}%\nPinky Ring Bigrams: {:.3}%\n\n{}"
             ),
             self.sfb * 100.0,
             self.dsfb * 100.0,
@@ -159,17 +174,16 @@ impl std::fmt::Display for LayoutStats {
 
 #[derive(Default, Debug)]
 pub struct LayoutCache {
-    effort: [f64; 30],
-    effort_total: f64,
-
+    // effort: [f64; 30],
+    // effort_total: f64,
     scissors: f64,
     lsbs: f64,
     pinky_ring: f64,
 
-    usage: [f64; 8],
+    usage: [f64; 10],
     usage_total: f64,
 
-    fspeed: [f64; 8],
+    fspeed: [f64; 10],
     fspeed_total: f64,
 
     // trigrams: HashMap<(char, Option<char>), f64>,
@@ -184,7 +198,7 @@ impl LayoutCache {
             - self.scissors
             - self.lsbs
             - self.pinky_ring
-            - self.effort_total
+            // - self.effort_total
             - self.usage_total
             - self.fspeed_total
     }
@@ -213,13 +227,14 @@ pub(crate) fn pinned_swaps(pins: &[usize]) -> Vec<PosPair> {
 pub struct LayoutGeneration {
     pub language: String,
     pub data: LanguageData,
-    pub convert_u8: ConvertU8,
+    pub char_mapping: CharMapping,
     pub repeat_key: usize,
     pub chars_for_generation: [u8; 30],
     pub trigram_precision: usize,
+    pub trigram_patterns: Box<[TrigramPattern]>,
 
     fspeed_vals: [(PosPair, f64); 48],
-    effort_map: [f64; 30],
+    // effort_map: [f64; 30],
     scissor_indices: [PosPair; 17],
     lsb_indices: [PosPair; 16],
     pinky_ring_indices: [PosPair; 18],
@@ -241,8 +256,9 @@ impl LayoutGeneration {
         if let Ok(mut data) =
             LanguageData::from_file(base_path.as_ref().join("language_data"), language)
         {
-            let chars_fg = data.convert_u8.to(chars_for_generation(language));
+            let chars_fg = data.char_mapping.to(chars_for_generation(language));
             let mut chars_for_generation: [u8; 30] = chars_fg.try_into().unwrap();
+
             chars_for_generation.sort_by(|&a, &b| {
                 let a = data.characters.get(a as usize).unwrap_or(&0.0);
                 let b = data.characters.get(b as usize).unwrap_or(&0.0);
@@ -258,14 +274,14 @@ impl LayoutGeneration {
                     data.characters.len() as u8,
                     config.trigram_precision(),
                 ),
-                convert_u8: data.convert_u8.clone(),
-                repeat_key: data.convert_u8.to_single('@') as usize,
+                char_mapping: data.char_mapping.clone(),
+                repeat_key: data.char_mapping.to_single(REPEAT_KEY) as usize,
                 trigram_precision: config.trigram_precision(),
+                trigram_patterns: get_trigram_combinations(),
                 data,
 
                 fspeed_vals: get_fspeed(config.weights.lateral_penalty),
-                effort_map: get_effort_map(config.weights.heatmap, config.defaults.keyboard_type),
-
+                // effort_map: get_effort_map(config.weights.heatmap, config.defaults.keyboard_type),
                 scissor_indices: get_scissor_indices(),
                 lsb_indices: get_lsb_indices(),
                 pinky_ring_indices: get_pinky_ring_indices(),
@@ -289,19 +305,27 @@ impl LayoutGeneration {
         let mut res: IndexMap<String, FastLayout> = IndexMap::new();
         let language_dir_path = base_directory.as_ref().join(language);
 
-        if let Ok(paths) = std::fs::read_dir(&language_dir_path) {
-            let valid = paths.flatten().filter(is_kb_file).collect::<Vec<_>>();
+        if let Ok(read_dir) = std::fs::read_dir(&language_dir_path) {
+            let paths = read_dir
+                .flatten()
+                .filter_map(|d| {
+                    let path = d.path();
+                    path.is_file().then_some(path)
+                })
+                .collect::<Vec<_>>();
+            let kb_paths = paths.iter().filter(is_kb_file).collect::<Vec<_>>();
+            let dof_paths = paths.iter().filter(is_dof_file).collect::<Vec<_>>();
 
             // let stats_dir = base_directory.as_ref().join("stats").join(language);
             // if let Ok(false) = std::fs::try_exists(stats_dir) {
             // 	std::fs::create_dir_all(&stats_dir)?;
             // }
 
-            for entry in valid {
-                if let Some(name) = layout_name(&entry) {
-                    let content = std::fs::read_to_string(entry.path())?;
+            for path in kb_paths {
+                if let Some(name) = layout_name(path) {
+                    let content = std::fs::read_to_string(path)?;
                     let layout_str = format_layout_str(&content);
-                    let layout_bytes = self.convert_u8.to(layout_str.chars());
+                    let layout_bytes = self.char_mapping.to(layout_str.chars());
 
                     if let Ok(mut layout) = FastLayout::try_from(layout_bytes.as_slice()) {
                         layout.score = self.score(&layout);
@@ -314,6 +338,21 @@ impl LayoutGeneration {
                 }
             }
 
+            for path in dof_paths {
+                let s = std::fs::read_to_string(path)?;
+                let dof =
+                    serde_json::from_str::<Dof>(&s).with_context(|| path.display().to_string())?;
+                let name = dof.name().to_string();
+
+                match FastLayout::from_dof(dof, &mut self.char_mapping) {
+                    Ok(mut layout) => {
+                        layout.score = self.score(&layout);
+                        res.insert(name.to_lowercase(), layout);
+                    }
+                    Err(e) => println!(".dof layout {name} formatted incorrectly: {e}"),
+                }
+            }
+
             res.sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
         } else {
             std::fs::create_dir(language_dir_path)?;
@@ -323,13 +362,15 @@ impl LayoutGeneration {
     }
 
     pub fn get_layout_stats(&self, layout: &FastLayout) -> LayoutStats {
-        let sfb = self.bigram_percent(layout, "sfbs");
-        let dsfb = self.bigram_percent(layout, "skipgrams");
-        let dsfb2 = self.bigram_percent(layout, "skipgrams2");
-        let dsfb3 = self.bigram_percent(layout, "skipgrams3");
+        let sfb = self.bigram_percent(layout, &self.data.bigrams);
+        let dsfb = self.bigram_percent(layout, &self.data.skipgrams);
+        let dsfb2 = self.bigram_percent(layout, &self.data.skipgrams2);
+        let dsfb3 = self.bigram_percent(layout, &self.data.skipgrams3);
+
         let cache = self.initialize_cache(layout);
         let fspeed = cache.fspeed_total;
         let finger_speed = cache.fspeed;
+
         let scissors = self.scissor_score(layout) / self.weights.scissors;
         let lsbs = self.lsb_score(layout) / self.weights.lsbs;
         let pinky_ring = self.pinky_ring_score(layout) / self.weights.pinky_ring_bigrams;
@@ -349,21 +390,13 @@ impl LayoutGeneration {
         }
     }
 
-    pub fn bigram_percent(&self, layout: &FastLayout, bigram_type: &str) -> f64 {
-        let data = match bigram_type {
-            "bigram" | "bigrams" | "sfb" | "sfbs" => &self.data.bigrams,
-            "skipgram" | "skipgrams" | "dsfb" | "dsfbs" => &self.data.skipgrams,
-            "skipgram2" | "skipgrams2" | "dsfb2" | "dsfbs2" => &self.data.skipgrams2,
-            "skipgram3" | "skipgrams3" | "dsfb3" | "dsfbs3" => &self.data.skipgrams3,
-            _ => panic!("bigram type {bigram_type} does not exist!"),
-        };
-
+    pub fn bigram_percent(&self, layout: &FastLayout, data: &BigramData) -> f64 {
         let mut res = 0.0;
         let len = self.data.characters.len();
 
-        for (PosPair(i1, i2), _) in self.fspeed_vals {
-            let c1 = unsafe { layout.cu(i1) } as usize;
-            let c2 = unsafe { layout.cu(i2) } as usize;
+        for BigramPair { pair, .. } in &layout.fspeed_indices.all {
+            let c1 = layout.char(pair.0).unwrap() as usize;
+            let c2 = layout.char(pair.1).unwrap() as usize;
 
             // if c1 != self.repeat_key && c2 != self.repeat_key {
             // 	res += data.get(c1 * len + c2).unwrap_or(&0.0);
@@ -380,14 +413,16 @@ impl LayoutGeneration {
     }
 
     pub fn sfbs(&self, layout: &FastLayout, top_n: usize) -> Vec<(String, f64)> {
-        self.fspeed_vals
+        layout
+            .fspeed_indices
+            .all
             .iter()
-            .flat_map(|(p, _)| {
-                let u1 = layout.c(p.0);
-                let u2 = layout.c(p.1);
+            .flat_map(|BigramPair { pair: p, .. }| {
+                let u1 = layout.char(p.0).unwrap();
+                let u2 = layout.char(p.1).unwrap();
 
-                let bigram = self.convert_u8.as_str(&[u1, u2]);
-                let bigram2 = self.convert_u8.as_str(&[u2, u1]);
+                let bigram = self.char_mapping.as_str(&[u1, u2]);
+                let bigram2 = self.char_mapping.as_str(&[u2, u1]);
 
                 let i = (u1 as usize) * self.data.characters.len() + (u2 as usize);
                 let i2 = (u2 as usize) * self.data.characters.len() + (u1 as usize);
@@ -402,13 +437,35 @@ impl LayoutGeneration {
             .collect::<Vec<_>>()
     }
 
+    pub fn get_trigram_pattern(
+        &self,
+        layout: &FastLayout,
+        &[t1, t2, t3]: &[u8; 3],
+    ) -> TrigramPattern {
+        let a = match layout.char_to_finger.get(t1 as usize) {
+            Some(&Some(v)) => v as usize,
+            _ => return TrigramPattern::Invalid,
+        };
+        let b = match layout.char_to_finger.get(t2 as usize) {
+            Some(&Some(v)) => v as usize,
+            _ => return TrigramPattern::Invalid,
+        };
+        let c = match layout.char_to_finger.get(t3 as usize) {
+            Some(&Some(v)) => v as usize,
+            _ => return TrigramPattern::Invalid,
+        };
+
+        let index = a * 100 + b * 10 + c;
+        self.trigram_patterns[index] // TODO: handle out of bounds
+    }
+
     pub fn trigram_stats(&self, layout: &FastLayout, trigram_precision: usize) -> TrigramStats {
         use TrigramPattern::*;
 
         let mut freqs = TrigramStats::default();
 
         for (trigram, freq) in self.data.trigrams.iter().take(trigram_precision) {
-            match layout.get_trigram_pattern(trigram) {
+            match self.get_trigram_pattern(layout, trigram) {
                 Alternate => freqs.alternates += freq,
                 AlternateSfs => freqs.alternates_sfs += freq,
                 Inroll => freqs.inrolls += freq,
@@ -421,6 +478,7 @@ impl LayoutGeneration {
                 Sfb => freqs.sfbs += freq,
                 BadSfb => freqs.bad_sfbs += freq,
                 Sft => freqs.sfts += freq,
+                Thumb => freqs.thumbs += freq,
                 Other => freqs.other += freq,
                 Invalid => freqs.invalid += freq,
             }
@@ -432,12 +490,13 @@ impl LayoutGeneration {
         #[cfg(test)]
         ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        let effort = (0..layout.matrix.len())
-            .map(|i| self.char_effort(layout, i))
-            .sum::<f64>();
+        // let effort = (0..layout.matrix.len())
+        //     .map(|i| self.char_effort(layout, i))
+        //     .sum::<f64>();
 
-        let fspeed_usage = (0..8)
-            .map(|col| self.col_usage(layout, col) + self.col_fspeed(layout, col))
+        let fspeed_usage = Finger::FINGERS
+            .into_iter()
+            .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
             .sum::<f64>();
 
         let scissors = self.scissor_score(layout);
@@ -445,7 +504,7 @@ impl LayoutGeneration {
         let pinky_ring = self.pinky_ring_score(layout);
         let trigram_score = self.trigram_score_iter(layout, &self.data.trigrams);
 
-        trigram_score - effort - fspeed_usage - scissors - lsbs - pinky_ring
+        trigram_score /* - effort */ - fspeed_usage - scissors - lsbs - pinky_ring
     }
 
     fn weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
@@ -516,7 +575,7 @@ impl LayoutGeneration {
         let mut freqs = TrigramStats::default();
 
         for (trigram, freq) in trigrams {
-            match layout.get_trigram_pattern(trigram) {
+            match self.get_trigram_pattern(layout, trigram) {
                 Alternate => freqs.alternates += freq,
                 AlternateSfs => freqs.alternates_sfs += freq,
                 Inroll => freqs.inrolls += freq,
@@ -544,8 +603,8 @@ impl LayoutGeneration {
     }
 
     fn trigram_char_score(&self, layout: &FastLayout, pos: &PosPair) -> f64 {
-        let c1 = unsafe { layout.cu(pos.0) };
-        let c2 = unsafe { layout.cu(pos.1) };
+        let c1 = layout.char(pos.0).unwrap();
+        let c2 = layout.char(pos.1).unwrap();
 
         if let Some(t_vec) = self.per_char_trigrams.get(&[c1, c2]) {
             self.trigram_score_iter(layout, t_vec)
@@ -560,8 +619,8 @@ impl LayoutGeneration {
         let len = self.data.characters.len();
 
         for PosPair(i1, i2) in self.scissor_indices {
-            let c1 = unsafe { layout.cu(i1) } as usize;
-            let c2 = unsafe { layout.cu(i2) } as usize;
+            let c1 = layout.char(i1).unwrap() as usize;
+            let c2 = layout.char(i2).unwrap() as usize;
             res += self.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0);
             res += self.data.bigrams.get(c2 * len + c1).unwrap_or(&0.0);
         }
@@ -575,8 +634,8 @@ impl LayoutGeneration {
         let len = self.data.characters.len();
 
         for PosPair(i1, i2) in self.lsb_indices {
-            let c1 = unsafe { layout.cu(i1) } as usize;
-            let c2 = unsafe { layout.cu(i2) } as usize;
+            let c1 = layout.char(i1).unwrap() as usize;
+            let c2 = layout.char(i2).unwrap() as usize;
             res += self.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0);
             res += self.data.bigrams.get(c2 * len + c1).unwrap_or(&0.0);
         }
@@ -589,8 +648,8 @@ impl LayoutGeneration {
         let len = self.data.characters.len();
 
         for PosPair(i1, i2) in self.pinky_ring_indices {
-            let c1 = unsafe { layout.cu(i1) } as usize;
-            let c2 = unsafe { layout.cu(i2) } as usize;
+            let c1 = layout.char(i1).unwrap() as usize;
+            let c2 = layout.char(i2).unwrap() as usize;
             res += self.data.bigrams.get(c1 * len + c2).unwrap_or(&0.0);
             res += self.data.bigrams.get(c2 * len + c1).unwrap_or(&0.0);
         }
@@ -598,58 +657,70 @@ impl LayoutGeneration {
         res * self.weights.pinky_ring_bigrams
     }
 
-    fn col_usage(&self, layout: &FastLayout, col: usize) -> f64 {
+    fn finger_usage(&self, layout: &FastLayout, finger: Finger) -> f64 {
         let mut res = 0.0;
-        match col {
-            0..=2 => {
-                for c in unsafe { [layout.cu(col), layout.cu(col + 10), layout.cu(col + 20)] } {
+        match finger {
+            Finger::LP | Finger::LR | Finger::LM => {
+                let col = finger as usize;
+                for c in [
+                    layout.char(col).unwrap(),
+                    layout.char(col + 10).unwrap(),
+                    layout.char(col + 20).unwrap(),
+                ] {
                     if let Some(v) = self.data.characters.get(c as usize) {
                         res += v;
                     }
                 }
             }
-            3 | 4 => {
-                let col = (col - 3) * 2 + 3;
-                for c in unsafe {
-                    [
-                        layout.cu(col),
-                        layout.cu(col + 10),
-                        layout.cu(col + 20),
-                        layout.cu(col + 1),
-                        layout.cu(col + 11),
-                        layout.cu(col + 21),
-                    ]
-                } {
+            Finger::LI | Finger::RI => {
+                let col = if finger == Finger::LI {
+                    (finger as usize - 3) * 2 + 3
+                } else {
+                    (finger as usize - 5) * 2 + 3
+                };
+                // let x = layout.get_index(index)
+                for c in [
+                    layout.char(col).unwrap(),
+                    layout.char(col + 10).unwrap(),
+                    layout.char(col + 20).unwrap(),
+                    layout.char(col + 1).unwrap(),
+                    layout.char(col + 11).unwrap(),
+                    layout.char(col + 21).unwrap(),
+                ] {
                     if let Some(v) = self.data.characters.get(c as usize) {
                         res += v;
                     }
                 }
             }
-            5..=7 => {
-                let col = col + 2;
-                for c in unsafe { [layout.cu(col), layout.cu(col + 10), layout.cu(col + 20)] } {
+            Finger::LT | Finger::RT => { /* TODO: fix for thumbs */ }
+            Finger::RM | Finger::RR | Finger::RP => {
+                let col = finger as usize;
+                for c in [
+                    layout.char(col).unwrap(),
+                    layout.char(col + 10).unwrap(),
+                    layout.char(col + 20).unwrap(),
+                ] {
                     if let Some(v) = self.data.characters.get(c as usize) {
                         res += v;
                     }
                 }
             }
-            _ => unsafe { unreachable_unchecked() },
         };
 
         self.weights.max_finger_use.penalty
-            * match col {
-                0 | 7 => (res - self.weights.max_finger_use.pinky).max(0.0),
-                1 | 6 => (res - self.weights.max_finger_use.ring).max(0.0),
-                2 | 5 => (res - self.weights.max_finger_use.middle).max(0.0),
-                3 | 4 => (res - self.weights.max_finger_use.index).max(0.0),
-                _ => unsafe { unreachable_unchecked() },
+            * match finger {
+                Finger::LP | Finger::RP => (res - self.weights.max_finger_use.pinky).max(0.0),
+                Finger::LR | Finger::RR => (res - self.weights.max_finger_use.ring).max(0.0),
+                Finger::LM | Finger::RM => (res - self.weights.max_finger_use.middle).max(0.0),
+                Finger::LI | Finger::RI => (res - self.weights.max_finger_use.index).max(0.0),
+                Finger::LT | Finger::RT => 0.0, // TODO: fix for thumb
             }
     }
 
     #[inline]
     fn pair_fspeed(&self, layout: &FastLayout, pair: &PosPair, dist: f64) -> f64 {
-        let c1 = unsafe { layout.cu(pair.0) } as usize;
-        let c2 = unsafe { layout.cu(pair.1) } as usize;
+        let c1 = layout.char(pair.0).unwrap() as usize;
+        let c2 = layout.char(pair.1).unwrap() as usize;
         // if c1 != self.repeat_key && c1 != self.repeat_key {
         // 	let mut res = 0.0;
 
@@ -674,42 +745,42 @@ impl LayoutGeneration {
     }
 
     #[inline(always)]
-    unsafe fn col_to_start_len(col: usize) -> (usize, usize) {
-        *[
-            (0, 3),
-            (3, 3),
-            (6, 3),
-            (18, 15),
-            (33, 15),
-            (9, 3),
-            (12, 3),
-            (15, 3),
-        ]
-        .get_unchecked(col)
+    fn col_to_start_len(finger: Finger) -> (usize, usize) {
+        match finger {
+            Finger::LP => (0, 3),
+            Finger::LR => (3, 3),
+            Finger::LM => (6, 3),
+            Finger::LI => (18, 15),
+            Finger::LT => (0, 0), // LT
+            Finger::RT => (0, 0), // RT
+            Finger::RI => (33, 15),
+            Finger::RM => (9, 3),
+            Finger::RR => (12, 3),
+            Finger::RP => (15, 3),
+        }
     }
 
     #[inline]
-    fn col_fspeed(&self, layout: &FastLayout, col: usize) -> f64 {
-        let (start, len) = unsafe { Self::col_to_start_len(col) };
+    fn finger_fspeed(&self, layout: &FastLayout, finger: Finger) -> f64 {
         let mut res = 0.0;
 
-        for i in start..(start + len) {
-            let (pair, dist) = unsafe { self.fspeed_vals.get_unchecked(i) };
-
+        // TODO: make helper function
+        for BigramPair { pair, dist } in layout.fspeed_indices.fingers.get(finger as usize).unwrap()
+        {
             res += self.pair_fspeed(layout, pair, *dist);
         }
         res
     }
 
-    #[inline]
-    fn char_effort(&self, layout: &FastLayout, i: usize) -> f64 {
-        let c = unsafe { layout.cu(i) };
+    // #[inline]
+    // fn char_effort(&self, layout: &FastLayout, i: usize) -> f64 {
+    //     let c = layout.char(i).unwrap();
 
-        match self.data.characters.get(c as usize) {
-            Some(&v) => v * unsafe { self.effort_map.get_unchecked(i) },
-            None => 0.0,
-        }
-    }
+    //     match self.data.characters.get(c as usize) {
+    //         Some(&v) => v * self.effort_map.get(i).unwrap(),
+    //         None => 0.0,
+    //     }
+    // }
 
     pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
         #[cfg(test)]
@@ -717,14 +788,14 @@ impl LayoutGeneration {
 
         let mut res = LayoutCache::default();
 
-        for i in 0..layout.matrix.len() {
-            res.effort[i] = self.char_effort(layout, i);
-        }
-        res.effort_total = res.effort.iter().sum();
+        // for i in 0..layout.matrix.len() {
+        //     res.effort[i] = self.char_effort(layout, i);
+        // }
+        // res.effort_total = res.effort.iter().sum();
 
-        for col in 0..8 {
-            res.usage[col] = self.col_usage(layout, col);
-            res.fspeed[col] = self.col_fspeed(layout, col)
+        for finger in Finger::FINGERS {
+            res.usage[finger as usize] = self.finger_usage(layout, finger);
+            res.fspeed[finger as usize] = self.finger_fspeed(layout, finger)
         }
         res.usage_total = res.usage.iter().sum();
         res.fspeed_total = res.fspeed.iter().sum();
@@ -756,41 +827,45 @@ impl LayoutGeneration {
 
         let PosPair(i1, i2) = *swap;
 
-        if layout.c(i1) == layout.c(i2)
+        if layout.char(i1).unwrap() == layout.char(i2).unwrap()
             || (self.data.characters[i1] == 0.0 && self.data.characters[i2] == 0.0)
         {
             return None;
         }
 
-        unsafe { layout.swap_no_bounds(swap) };
+        layout.swap_pair(swap);
 
-        let col1 = I_TO_COL[i1];
-        let col2 = I_TO_COL[i2];
+        let f1 = layout.matrix_fingers[i1];
+        let f2 = layout.matrix_fingers[i2];
 
-        let fspeed_score = if col1 == col2 {
-            let fspeed = self.col_fspeed(layout, col1);
+        let fspeed_score = if f1 == f2 {
+            let fspeed = self.finger_fspeed(layout, f1);
 
-            cache.fspeed_total - cache.fspeed[col1] + fspeed
+            cache.fspeed_total - cache.fspeed[f1 as usize] + fspeed
         } else {
-            let fspeed1 = self.col_fspeed(layout, col1);
-            let fspeed2 = self.col_fspeed(layout, col2);
+            let fspeed1 = self.finger_fspeed(layout, f1);
+            let fspeed2 = self.finger_fspeed(layout, f2);
 
-            cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + fspeed1 + fspeed2
+            cache.fspeed_total - cache.fspeed[f1 as usize] - cache.fspeed[f2 as usize]
+                + fspeed1
+                + fspeed2
         };
 
-        let usage_score = if col1 == col2 {
-            let usage = self.col_usage(layout, col1);
-            cache.usage_total - cache.usage[col1] + usage
+        let usage_score = if f1 == f2 {
+            let usage = self.finger_usage(layout, f1);
+            cache.usage_total - cache.usage[f1 as usize] + usage
         } else {
-            let usage1 = self.col_usage(layout, col1);
-            let usage2 = self.col_usage(layout, col2);
-            cache.usage_total - cache.usage[col1] - cache.usage[col2] + usage1 + usage2
+            let usage1 = self.finger_usage(layout, f1);
+            let usage2 = self.finger_usage(layout, f2);
+            cache.usage_total - cache.usage[f1 as usize] - cache.usage[f2 as usize]
+                + usage1
+                + usage2
         };
 
-        let effort1 = self.char_effort(layout, i1);
-        let effort2 = self.char_effort(layout, i2);
-        let effort_score =
-            cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
+        // let effort1 = self.char_effort(layout, i1);
+        // let effort2 = self.char_effort(layout, i2);
+        // let effort_score =
+        //     cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
 
         let scissors_score = if swap.affects_scissor() {
             self.scissor_score(layout)
@@ -812,7 +887,7 @@ impl LayoutGeneration {
 
         let trigrams_score = {
             let trigrams_end = self.trigram_char_score(layout, swap);
-            unsafe { layout.swap_no_bounds(swap) };
+            layout.swap_pair(swap);
             let trigrams_start = self.trigram_char_score(layout, swap);
 
             cache.trigrams_total - trigrams_start + trigrams_end
@@ -823,7 +898,7 @@ impl LayoutGeneration {
                 - scissors_score
                 - lsbs_score
                 - pinky_ring_score
-                - effort_score
+                // - effort_score
                 - usage_score
                 - fspeed_score,
         )
@@ -832,7 +907,7 @@ impl LayoutGeneration {
     pub fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
         let PosPair(i1, i2) = *swap;
 
-        if layout.c(i1) == layout.c(i2)
+        if layout.char(i1).unwrap() == layout.char(i2).unwrap()
             || (self.data.characters[i1] == 0.0 && self.data.characters[i2] == 0.0)
         {
             return;
@@ -840,55 +915,58 @@ impl LayoutGeneration {
 
         let trigrams_start = self.trigram_char_score(layout, swap);
 
-        unsafe { layout.swap_no_bounds(swap) };
+        layout.swap_pair(swap).unwrap();
 
-        let col1 = I_TO_COL[i1];
-        let col2 = I_TO_COL[i2];
+        let f1 = layout.matrix_fingers[i1];
+        let f2 = layout.matrix_fingers[i2];
 
-        cache.fspeed_total = if col1 == col2 {
-            let fspeed = self.col_fspeed(layout, col1);
-            let total = cache.fspeed_total - cache.fspeed[col1] + fspeed;
+        cache.fspeed_total = if f1 == f2 {
+            let fspeed = self.finger_fspeed(layout, f1);
+            let total = cache.fspeed_total - cache.fspeed[f1 as usize] + fspeed;
 
-            cache.fspeed[col1] = fspeed;
+            cache.fspeed[f1 as usize] = fspeed;
 
             total
         } else {
-            let fspeed1 = self.col_fspeed(layout, col1);
-            let fspeed2 = self.col_fspeed(layout, col2);
-            let total =
-                cache.fspeed_total - cache.fspeed[col1] - cache.fspeed[col2] + fspeed1 + fspeed2;
+            let fspeed1 = self.finger_fspeed(layout, f1);
+            let fspeed2 = self.finger_fspeed(layout, f2);
+            let total = cache.fspeed_total - cache.fspeed[f1 as usize] - cache.fspeed[f2 as usize]
+                + fspeed1
+                + fspeed2;
 
-            cache.fspeed[col1] = fspeed1;
-            cache.fspeed[col2] = fspeed2;
+            cache.fspeed[f1 as usize] = fspeed1;
+            cache.fspeed[f2 as usize] = fspeed2;
 
             total
         };
 
-        cache.usage_total = if col1 == col2 {
-            let usage = self.col_usage(layout, col1);
-            let total = cache.usage_total - cache.usage[col1] + usage;
+        cache.usage_total = if f1 == f2 {
+            let usage = self.finger_usage(layout, f1);
+            let total = cache.usage_total - cache.usage[f1 as usize] + usage;
 
-            cache.usage[col1] = usage;
+            cache.usage[f1 as usize] = usage;
 
             total
         } else {
-            let usage1 = self.col_usage(layout, col1);
-            let usage2 = self.col_usage(layout, col2);
-            let total = cache.usage_total - cache.usage[col1] - cache.usage[col2] + usage1 + usage2;
+            let usage1 = self.finger_usage(layout, f1);
+            let usage2 = self.finger_usage(layout, f2);
+            let total = cache.usage_total - cache.usage[f1 as usize] - cache.usage[f2 as usize]
+                + usage1
+                + usage2;
 
-            cache.usage[col1] = usage1;
-            cache.usage[col2] = usage2;
+            cache.usage[f1 as usize] = usage1;
+            cache.usage[f2 as usize] = usage2;
 
             total
         };
 
-        let effort1 = self.char_effort(layout, i1);
-        let effort2 = self.char_effort(layout, i2);
-        cache.effort_total =
-            cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
+        // let effort1 = self.char_effort(layout, i1);
+        // let effort2 = self.char_effort(layout, i2);
+        // cache.effort_total =
+        //     cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
 
-        cache.effort[i1] = effort1;
-        cache.effort[i2] = effort2;
+        // cache.effort[i1] = effort1;
+        // cache.effort[i2] = effort2;
 
         let trigrams_end = self.trigram_char_score(layout, swap);
         cache.trigrams_total = cache.trigrams_total - trigrams_start + trigrams_end;
@@ -919,11 +997,11 @@ impl LayoutGeneration {
         let mut best_swap: Option<PosPair> = None;
 
         for swap in possible_swaps {
-            if let Some(score) = self.score_swap_cached(layout, swap, cache) {
-                if score > best_score {
-                    best_score = score;
-                    best_swap = Some(*swap);
-                }
+            if let Some(score) = self.score_swap_cached(layout, swap, cache)
+                && score > best_score
+            {
+                best_score = score;
+                best_swap = Some(*swap);
             }
         }
 
@@ -1079,7 +1157,12 @@ mod tests {
 
     #[allow(dead_code)]
     fn fspeed_per_pair() {
-        for (pair, dist) in GEN.fspeed_vals {
+        let qwerty_bytes = GEN
+            .char_mapping
+            .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
+
+        for BigramPair { pair, dist } in qwerty.fspeed_indices.all {
             println!(
                 "({}, {}) <-> ({}, {}): {dist}",
                 pair.0 % 10,
@@ -1093,7 +1176,7 @@ mod tests {
     #[test]
     fn cached_totals() {
         let qwerty_bytes = GEN
-            .convert_u8
+            .char_mapping
             .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
         let mut cache = GEN.initialize_cache(&qwerty);
@@ -1106,13 +1189,17 @@ mod tests {
             GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
             assert!(cache.scissors.approx_eq_dbg(GEN.scissor_score(&qwerty), 7));
-            assert!(cache
-                .effort_total
-                .approx_eq_dbg(GEN.effort_score(&qwerty), 7));
+            // assert!(
+            //     cache
+            //         .effort_total
+            //         .approx_eq_dbg(GEN.effort_score(&qwerty), 7)
+            // );
             assert!(cache.usage_total.approx_eq_dbg(GEN.usage_score(&qwerty), 7));
-            assert!(cache
-                .fspeed_total
-                .approx_eq_dbg(GEN.fspeed_score(&qwerty), 7));
+            assert!(
+                cache
+                    .fspeed_total
+                    .approx_eq_dbg(GEN.fspeed_score(&qwerty), 7)
+            );
             assert!(cache.trigrams_total.approx_eq_dbg(
                 GEN.trigram_score_iter(
                     &qwerty,
@@ -1121,19 +1208,23 @@ mod tests {
                 7
             ));
             assert!(cache.lsbs.approx_eq_dbg(GEN.lsb_score(&qwerty), 7));
-            assert!(cache
-                .pinky_ring
-                .approx_eq_dbg(GEN.pinky_ring_score(&qwerty), 7));
-            assert!(cache
-                .total_score
-                .approx_eq_dbg(GEN.score_with_precision(&qwerty, GEN.trigram_precision), 7));
+            assert!(
+                cache
+                    .pinky_ring
+                    .approx_eq_dbg(GEN.pinky_ring_score(&qwerty), 7)
+            );
+            assert!(
+                cache
+                    .total_score
+                    .approx_eq_dbg(GEN.score_with_precision(&qwerty, GEN.trigram_precision), 7)
+            );
         }
     }
 
     #[test]
     fn best_found_swap() {
         let qwerty_bytes = GEN
-            .convert_u8
+            .char_mapping
             .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
         let cache = GEN.initialize_cache(&qwerty);
@@ -1156,7 +1247,7 @@ mod tests {
     #[test]
     fn score_swaps_no_accept() {
         let qwerty_bytes = GEN
-            .convert_u8
+            .char_mapping
             .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let base = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
         let mut qwerty = base.clone();
@@ -1182,7 +1273,7 @@ mod tests {
     #[test]
     fn optimize_qwerty() {
         let qwerty_bytes = GEN
-            .convert_u8
+            .char_mapping
             .to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
 
@@ -1197,15 +1288,15 @@ mod tests {
 
         assert!(normal_score.approx_eq_dbg(best_cached_score, 7));
         assert_eq!(
-            qwerty_for_cached.layout_str(&GEN.convert_u8),
-            optimized_normal.layout_str(&GEN.convert_u8)
+            qwerty_for_cached.layout_str(&GEN.char_mapping),
+            optimized_normal.layout_str(&GEN.char_mapping)
         );
         // println!("{qwerty_for_cached}");
     }
 
     #[test]
     fn optimize_random_layouts() {
-        for _ in 0..5 {
+        for i in 0..5 {
             let layout = FastLayout::random(&mut GEN.chars_for_generation.clone());
             let mut layout_for_cached = layout.clone();
 
@@ -1216,11 +1307,21 @@ mod tests {
             let best_cached_score =
                 GEN.optimize_cached(&mut layout_for_cached, &mut cache, &POSSIBLE_SWAPS);
 
-            assert!(normal_score.approx_eq_dbg(best_cached_score, 7));
+            if !normal_score.approx_eq_dbg(best_cached_score, 7) {
+                println!(
+                    "{}\n\n{}",
+                    optimized_normal.formatted_string(&GEN.data.char_mapping),
+                    layout_for_cached.formatted_string(&GEN.data.char_mapping)
+                );
+            }
+
+            assert!(normal_score.approx_eq_dbg(best_cached_score, 7), "{i}: i");
             assert_eq!(
-                layout_for_cached.layout_str(&GEN.convert_u8),
-                optimized_normal.layout_str(&GEN.convert_u8)
+                layout_for_cached.layout_str(&GEN.char_mapping),
+                optimized_normal.layout_str(&GEN.char_mapping),
+                "i: {i}"
             );
+            assert!(normal_score.approx_eq_dbg(best_cached_score, 7), "i: {i}");
         }
     }
 }

@@ -1,0 +1,12 @@
+{
+    "name": "knrt1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "p l , c ĝ  ŝ b e u ĵ",
+            "k n r t v  f s a o i",
+            "g z . m d  ĉ j ' ŭ h"
+        ]
+    },
+    "fingering": "traditional"
+}

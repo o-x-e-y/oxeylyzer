@@ -1,0 +1,12 @@
+{
+    "name": "compound_vfk",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "' u o g j  k d l r v",
+            "a i e c y  f h t n s",
+            ", . ; w p  b m q x z"
+        ]
+    },
+    "fingering": "traditional"
+}

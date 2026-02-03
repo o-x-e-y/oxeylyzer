@@ -1,0 +1,12 @@
+{
+    "name": "wtf",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "צ ץ , כ ג  ם ד ב ר ך",
+            "ש י ו א ע  נ ת מ ל ה",
+            "ס ; . ח ק  ט ז פ ן ף"
+        ]
+    },
+    "fingering": "traditional"
+}

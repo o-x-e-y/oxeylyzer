@@ -1,0 +1,12 @@
+{
+    "name": "rcnw2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "ł t s g b  f . e u '",
+            "r c n w k  l z a o i",
+            "j d h p m  , * ę y ż"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "pog",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            ". o u v w  c p l r '",
+            "i a e s m  k d t n @",
+            ", q y h f  b g z x j"
+        ]
+    },
+    "fingering": "traditional"
+}

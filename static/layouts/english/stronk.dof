@@ -1,0 +1,12 @@
+{
+    "name": "stronk",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "f d l b v  j g o u ,",
+            "s t r n k  y m a e i",
+            "z q x h p  w c ' ; ."
+        ]
+    },
+    "fingering": "traditional"
+}

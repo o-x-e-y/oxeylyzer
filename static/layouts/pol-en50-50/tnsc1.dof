@@ -1,0 +1,12 @@
+{
+    "name": "tnsc1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "v h d f g  x j u o y",
+            "t n s c k  . r e a i",
+            "z b m p w  , l ; ' q"
+        ]
+    },
+    "fingering": "traditional"
+}

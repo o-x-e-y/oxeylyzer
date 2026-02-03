@@ -1,0 +1,12 @@
+{
+    "name": "waddahell",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "x l d b w  q j o u ~",
+            "s r t c g  y h a i e",
+            "z ~ k p v  f m ~ ~ ~"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "sent_eu",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "z p d g w  q j o u ,",
+            "s n t m y  l r a e i",
+            "v b k c f  x h ' ; ."
+        ]
+    },
+    "fingering": "traditional"
+}

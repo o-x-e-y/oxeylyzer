@@ -1,0 +1,12 @@
+{
+    "name": "nrts2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "p l d g w  k f o ' y",
+            "n r t s b  . u a e i",
+            "q j m c v  , h x z *"
+        ]
+    },
+    "fingering": "traditional"
+}

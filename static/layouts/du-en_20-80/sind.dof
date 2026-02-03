@@ -1,0 +1,12 @@
+{
+    "name": "sind",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "y , h w f q k o u x",
+            "s i n d c v t a e r",
+            "j . l p b g m ; / z"
+        ]
+    },
+    "fingering": "traditional"
+}

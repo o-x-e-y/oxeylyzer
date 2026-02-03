@@ -1,0 +1,12 @@
+{
+    "name": "alt_thing",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "j , a g z  v w l k p",
+            "e i o t d  y s r u n",
+            "; . ' x q  f c m h b"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "ioaz1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "' u e . f  g b s t ł",
+            "i o a z l  m w n c r",
+            "ż y ę * ,  p k h d j"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -5,7 +5,7 @@ use oxeylyzer_core::language_data::LanguageData;
 use oxeylyzer_core::layout::*;
 use oxeylyzer_core::rayon::iter::ParallelIterator;
 
-use ansi_rgb::{rgb, Colorable};
+use ansi_rgb::{Colorable, rgb};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 
 pub fn readline() -> std::io::Result<String> {
@@ -16,33 +16,41 @@ pub fn readline() -> std::io::Result<String> {
     Ok(buf)
 }
 
-pub fn heatmap_heat(data: &LanguageData, c: u8) -> String {
-    let complement = 215.0 - *data.characters.get(c as usize).unwrap_or(&0.0) * 1720.0;
+pub fn heatmap_heat(data: &LanguageData, u: u8) -> String {
+    let complement = 215.0 - *data.characters.get(u as usize).unwrap_or(&0.0) * 1720.0;
     let complement = complement.max(0.0) as u8;
     let heat = rgb(215, complement, complement);
-    let c = data.convert_u8.from_single(c);
+    let c = data.char_mapping.from_single(u);
     format!("{}", c.to_string().fg(heat))
 }
 
 pub fn heatmap_string(data: &LanguageData, layout: &FastLayout) -> String {
-    let mut print_str = String::new();
+    let mut res = String::new();
 
-    for (i, c) in layout.matrix.iter().enumerate() {
-        if i % 10 == 0 && i > 0 {
-            print_str.push('\n');
+    let mut iter = layout.matrix.iter();
+
+    for &l in layout.shape.inner().iter() {
+        let mut i = 0;
+        for u in iter.by_ref() {
+            res.push_str(heatmap_heat(data, *u).as_str());
+            res.push(' ');
+
+            i += 1;
+
+            if l == i {
+                break;
+            } else if i == 5 {
+                res.push(' ');
+            }
         }
-        if (i + 5) % 10 == 0 {
-            print_str.push(' ');
-        }
-        print_str.push_str(heatmap_heat(data, *c).as_str());
-        print_str.push(' ');
+        res.push('\n');
     }
 
-    print_str
+    res
 }
 
 pub fn generate_n_with_pins(
-    gen: &LayoutGeneration,
+    layout_gen: &LayoutGeneration,
     amount: usize,
     based_on: FastLayout,
     pins: &[usize],
@@ -59,7 +67,7 @@ pub fn generate_n_with_pins(
         .expect("Couldn't initialize the progress bar template")
         .progress_chars("=>-"));
 
-    let mut layouts = gen
+    let mut layouts = layout_gen
         .generate_n_with_pins_iter(amount, based_on, pins)
         .progress_with(pb)
         .collect::<Vec<_>>();
@@ -73,14 +81,14 @@ pub fn generate_n_with_pins(
     layouts.sort_by(|l1, l2| l2.score.partial_cmp(&l1.score).unwrap());
 
     for (i, layout) in layouts.iter().enumerate().take(10) {
-        let printable = heatmap_string(&gen.data, layout);
+        let printable = heatmap_string(&layout_gen.data, layout);
         println!("#{}, score: {:.5}\n{}", i, layout.score, printable);
     }
 
     layouts
 }
 
-pub fn generate_n(gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
+pub fn generate_n(layout_gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
     if amount == 0 {
         return Vec::new();
     }
@@ -93,7 +101,7 @@ pub fn generate_n(gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
         .expect("couldn't initialize the progress bar template")
         .progress_chars("=>-"));
 
-    let mut layouts = gen
+    let mut layouts = layout_gen
         .generate_n_iter(amount)
         .progress_with(pb)
         .collect::<Vec<_>>();
@@ -107,7 +115,7 @@ pub fn generate_n(gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
     layouts.sort_by(|l1, l2| l2.score.partial_cmp(&l1.score).unwrap());
 
     for (i, layout) in layouts.iter().enumerate().take(10) {
-        let printable = heatmap_string(&gen.data, layout);
+        let printable = heatmap_string(&layout_gen.data, layout);
         println!("#{}, score: {:.5}\n{}", i, layout.score, printable);
     }
 
@@ -118,14 +126,14 @@ pub fn get_ngram_info(data: &mut LanguageData, ngram: &str) -> String {
     match ngram.chars().count() {
         1 => {
             let c = ngram.chars().next().unwrap();
-            let u = data.convert_u8.to_single(c);
+            let u = data.char_mapping.to_single(c);
             let occ = data.characters.get(u as usize).unwrap_or(&0.0) * 100.0;
             format!("{ngram}: {occ:.3}%")
         }
         2 => {
             let bigram: [char; 2] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
-            let c1 = data.convert_u8.to_single(bigram[0]) as usize;
-            let c2 = data.convert_u8.to_single(bigram[1]) as usize;
+            let c1 = data.char_mapping.to_single(bigram[0]) as usize;
+            let c2 = data.char_mapping.to_single(bigram[1]) as usize;
 
             let b1 = c1 * data.characters.len() + c2;
             let b2 = c2 * data.characters.len() + c1;
@@ -147,9 +155,9 @@ pub fn get_ngram_info(data: &mut LanguageData, ngram: &str) -> String {
         3 => {
             let trigram: [char; 3] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
             let t = [
-                data.convert_u8.to_single(trigram[0]),
-                data.convert_u8.to_single(trigram[1]),
-                data.convert_u8.to_single(trigram[2]),
+                data.char_mapping.to_single(trigram[0]),
+                data.char_mapping.to_single(trigram[1]),
+                data.char_mapping.to_single(trigram[2]),
             ];
             let &(_, occ) = data
                 .trigrams

@@ -1,0 +1,12 @@
+{
+    "name": "atsk2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "* z d v b  . l e o '",
+            "ā t s k m  j n a u i",
+            "f š c p g  , r ē ī ;"
+        ]
+    },
+    "fingering": "traditional"
+}

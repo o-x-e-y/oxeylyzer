@@ -1,0 +1,12 @@
+{
+    "name": "hands_right",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "v l c d k z ' u o y",
+            "n r s t g p h e a i",
+            "q x w m j b f , . ;"
+        ]
+    },
+    "fingering": "traditional"
+}

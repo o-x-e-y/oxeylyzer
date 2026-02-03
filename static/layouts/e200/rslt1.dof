@@ -1,0 +1,12 @@
+{
+    "name": "rslt1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "q w c d k  , x i a j",
+            "r s l t v  ; n e o h",
+            "z p g m y  b f u ' ."
+        ]
+    },
+    "fingering": "traditional"
+}

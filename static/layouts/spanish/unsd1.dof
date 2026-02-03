@@ -1,0 +1,12 @@
+{
+    "name": "unsd1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            ". p c f q  x j o * y",
+            "u n s d g  h r a e i",
+            ", b v t m  z l w k '"
+        ]
+    },
+    "fingering": "traditional"
+}

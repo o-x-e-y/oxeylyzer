@@ -1,0 +1,12 @@
+{
+    "name": "celeste",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "b f d r q  j g o u ,",
+            "c s t n l  y p a e i",
+            "z v m h x  k w ' ; ."
+        ]
+    },
+    "fingering": "traditional"
+}
