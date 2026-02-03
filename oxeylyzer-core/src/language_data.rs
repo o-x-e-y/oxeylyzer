@@ -13,7 +13,7 @@ use crate::char_mapping::CharMapping;
 
 pub type CharacterData = Box<[f64]>;
 pub type SlowBigramData = HashMap<[u8; 2], f64>;
-pub type BigramData = Vec<f64>;
+pub type BigramData = Box<[f64]>;
 pub type TrigramData = Vec<([u8; 3], f64)>;
 
 #[derive(Deserialize)]
@@ -84,7 +84,7 @@ impl From<LanguageDataInter> for LanguageData {
         let skipgrams2 = get_bigram_data(inter.skipgrams2, &mut convert_u8);
         let skipgrams3 = get_bigram_data(inter.skipgrams3, &mut convert_u8);
 
-        let weighted_bigrams = BigramData::new();
+        let weighted_bigrams = Box::new([]);
 
         let trigrams = get_trigram_data(inter.trigrams, &mut convert_u8);
 
