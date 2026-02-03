@@ -12,7 +12,7 @@ xflags::xflags! {
             required name2: String
         }
         /// Rank all layouts for the currently specified language. A higher score is better.
-        cmd rank {}
+        cmd rank list {}
         /// Generate a number of layouts and displays the best 10. Note: layouts may not be correct after changing language.
         cmd generate gen g {
             required count: usize
