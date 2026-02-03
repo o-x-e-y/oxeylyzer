@@ -1,7 +1,6 @@
 use ahash::AHashMap as HashMap;
 use anyhow::Result;
 use indexmap::IndexMap;
-use itertools::Itertools;
 use serde::Deserialize;
 use serde_json;
 
@@ -10,6 +9,7 @@ use std::io::prelude::*;
 use std::path::Path;
 
 use crate::char_mapping::CharMapping;
+use crate::{REPLACEMENT_CHAR, SHIFT_CHAR, SPACE_CHAR};
 
 pub type CharacterData = Box<[f64]>;
 pub type SlowBigramData = HashMap<[u8; 2], f64>;
@@ -28,20 +28,34 @@ struct LanguageDataInter {
 }
 
 fn get_char_data(data: HashMap<char, f64>, con: &mut CharMapping) -> CharacterData {
-    data.into_iter()
-        .map(|(c, f)| {
-            con.push(c);
-            f
-        })
-        .collect()
+    let mut chars = vec![0.0; data.len() + 1];
+
+    for (c, f) in data {
+        con.push(c);
+
+        let i = con.get_u(c) as usize;
+        chars[i] = f;
+    }
+
+    assert_eq!(con.len() as usize, chars.len());
+
+    chars.into_boxed_slice()
 }
 
 fn get_bigram_data(data: HashMap<String, f64>, con: &mut CharMapping) -> BigramData {
-    (0..con.len())
-        .cartesian_product(0..con.len())
-        .map(|(c1, c2)| con.as_str(&[c1, c2]))
-        .map(|bigram| *data.get(&bigram).unwrap_or(&0.0))
-        .collect::<BigramData>()
+    let len = con.len() as usize;
+    let mut bigrams = vec![0.0; len.pow(2)];
+
+    for (s, f) in data {
+        let cs = s.chars().collect::<Vec<_>>();
+
+        let u1 = con.get_u(cs[0]) as usize;
+        let u2 = con.get_u(cs[1]) as usize;
+
+        bigrams[u1 * len + u2] = f;
+    }
+
+    bigrams.into_boxed_slice()
 }
 
 fn get_trigram_data(data: IndexMap<String, f64>, con: &mut CharMapping) -> TrigramData {

@@ -1,17 +1,19 @@
 use indexmap::IndexMap;
 
-use crate::REPLACEMENT_CHAR;
+use crate::{REPLACEMENT_CHAR, SHIFT_CHAR, SPACE_CHAR};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CharMapping(IndexMap<char, u8>);
 
 impl Default for CharMapping {
     fn default() -> Self {
-        let mut map = IndexMap::default();
+        let mut mapping = Self(Default::default());
 
-        // map.insert(REPLACEMENT_CHAR, 0);
+        mapping.push(REPLACEMENT_CHAR);
+        // mapping.push(SHIFT_CHAR);
+        // mapping.push(SPACE_CHAR);
 
-        Self(map)
+        mapping
     }
 }
 
@@ -96,6 +98,20 @@ impl CharMapping {
         }
     }
 
+    pub fn get_u(&self, c: char) -> u8 {
+        match self.0.get(&c) {
+            Some(c) => *c,
+            None => 0,
+        }
+    }
+
+    pub fn get_c(&self, u: u8) -> char {
+        match self.0.get_index(u as usize) {
+            Some((c, _)) => *c,
+            None => REPLACEMENT_CHAR,
+        }
+    }
+
     pub fn insert<T>(&mut self, input: T)
     where
         T: IntoIterator<Item = char>,
@@ -175,7 +191,7 @@ mod tests {
         let mapping_s = "abcdefhgijklmnopqrstuvwxyz ";
         let mut mapping = mapping_s.chars().collect::<CharMapping>();
 
-        assert_eq!(mapping.len() as usize, mapping_s.len());
+        assert_eq!(mapping.len() as usize, mapping_s.len() + 1);
 
         let s = "this is epic-";
         let u = mapping.map_cs(s).collect::<Vec<_>>();
