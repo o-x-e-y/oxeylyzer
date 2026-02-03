@@ -450,10 +450,10 @@ pub(crate) fn is_dof_file(entry: &&std::path::PathBuf) -> bool {
 }
 
 pub(crate) fn layout_name(entry: &std::path::Path) -> Option<String> {
-    if let Some(name_os) = entry.file_stem() {
-        if let Some(name_str) = name_os.to_str() {
-            return Some(name_str.to_string());
-        }
+    if let Some(name_os) = entry.file_stem()
+        && let Some(name_str) = name_os.to_str()
+    {
+        return Some(name_str.to_string());
     }
     None
 }

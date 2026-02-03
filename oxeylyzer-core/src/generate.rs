@@ -997,11 +997,11 @@ impl LayoutGeneration {
         let mut best_swap: Option<PosPair> = None;
 
         for swap in possible_swaps {
-            if let Some(score) = self.score_swap_cached(layout, swap, cache) {
-                if score > best_score {
-                    best_score = score;
-                    best_swap = Some(*swap);
-                }
+            if let Some(score) = self.score_swap_cached(layout, swap, cache)
+                && score > best_score
+            {
+                best_score = score;
+                best_swap = Some(*swap);
             }
         }
 

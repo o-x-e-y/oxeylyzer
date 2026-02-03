@@ -213,38 +213,35 @@ impl From<(TextNgrams<'_, 5>, &str, Translator)> for TextData {
 
         for (ngram, freq) in ngrams.ngrams.into_iter() {
             let first = ngram.chars().next().unwrap();
-            if first != ' ' {
-                if let Some(first_t) = translator.table.get(&first) {
-                    if first_t != " " {
-                        let mut trans = translator.translate(ngram);
-                        match trans.chars().count() {
-                            5.. => {
-                                trans.push(' ');
+            if first != ' '
+                && let Some(first_t) = translator.table.get(&first)
+                && first_t != " "
+            {
+                let mut trans = translator.translate(ngram);
+                match trans.chars().count() {
+                    5.. => {
+                        trans.push(' ');
 
-                                let first_t_len = first_t.chars().count().max(1);
-                                let it1 = trans.char_indices().map(|(i, _)| i).take(first_t_len);
-                                let it2 = trans
-                                    .char_indices()
-                                    .map(|(i, _)| i)
-                                    .skip(5)
-                                    .take(first_t_len);
+                        let first_t_len = first_t.chars().count().max(1);
+                        let it1 = trans.char_indices().map(|(i, _)| i).take(first_t_len);
+                        let it2 = trans
+                            .char_indices()
+                            .map(|(i, _)| i)
+                            .skip(5)
+                            .take(first_t_len);
 
-                                it1.zip(it2)
-                                    .map(|(i1, i2)| &trans[i1..i2])
-                                    .for_each(|ngram| {
-                                        res.add_n_subsequent::<5>(ngram, freq as f64)
-                                    });
-                            }
-                            4 => {
-                                println!("4 long ngram: '{}'", &trans);
-                                res.add_n_subsequent::<4>(&trans, freq as f64)
-                            }
-                            3 => res.add_n_subsequent::<3>(&trans, freq as f64),
-                            2 => res.add_n_subsequent::<2>(&trans, freq as f64),
-                            1 => res.add_n_subsequent::<1>(&trans, freq as f64),
-                            _ => {}
-                        }
+                        it1.zip(it2)
+                            .map(|(i1, i2)| &trans[i1..i2])
+                            .for_each(|ngram| res.add_n_subsequent::<5>(ngram, freq as f64));
                     }
+                    4 => {
+                        println!("4 long ngram: '{}'", &trans);
+                        res.add_n_subsequent::<4>(&trans, freq as f64)
+                    }
+                    3 => res.add_n_subsequent::<3>(&trans, freq as f64),
+                    2 => res.add_n_subsequent::<2>(&trans, freq as f64),
+                    1 => res.add_n_subsequent::<1>(&trans, freq as f64),
+                    _ => {}
                 }
             }
         }
