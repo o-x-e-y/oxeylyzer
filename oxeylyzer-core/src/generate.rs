@@ -239,7 +239,6 @@ pub struct LayoutGeneration {
     lsb_indices: [PosPair; 16],
     pinky_ring_indices: [PosPair; 18],
 
-    weighted_bigrams: BigramData,
     per_char_trigrams: PerCharTrigrams,
 
     pub weights: Weights,
@@ -265,10 +264,12 @@ impl LayoutGeneration {
                 b.partial_cmp(a).unwrap()
             });
 
+            data.weighted_bigrams = Self::weighted_bigrams(&data, &config.weights);
+            data.stretch_weighted_bigrams = Self::stretch_weighted_bigrams(&data, &config.weights);
+
             Ok(Self {
                 language: language.to_string(),
                 chars_for_generation,
-                weighted_bigrams: Self::weighted_bigrams(&data, &config.weights),
                 per_char_trigrams: Self::per_char_trigrams(
                     &data.trigrams,
                     data.characters.len() as u8,
@@ -525,6 +526,22 @@ impl LayoutGeneration {
             .collect()
     }
 
+    fn stretch_weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
+        data.bigrams
+            .iter()
+            .zip(&data.skipgrams)
+            .zip(&data.skipgrams2)
+            .zip(&data.skipgrams3)
+            .map(|(((&b, s), s2), s3)| {
+                let sfb = b;
+                let sfs = s * weights.dsfb_ratio;
+                let sfs2 = s2 * weights.dsfb_ratio2;
+                let sfs3 = s3 * weights.dsfb_ratio3;
+                (sfb + sfs + sfs2 + sfs3) * weights.lsbs
+            })
+            .collect::<Box<_>>()
+    }
+
     fn per_char_trigrams(
         trigrams: &TrigramData,
         highest: u8,
@@ -739,8 +756,18 @@ impl LayoutGeneration {
         let mut res = 0.0;
 
         let len = self.data.characters.len();
-        res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or(&0.0) * dist;
-        res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or(&0.0) * dist;
+        res += self
+            .data
+            .weighted_bigrams
+            .get(c1 * len + c2)
+            .unwrap_or(&0.0)
+            * dist;
+        res += self
+            .data
+            .weighted_bigrams
+            .get(c2 * len + c1)
+            .unwrap_or(&0.0)
+            * dist;
         res
     }
 

@@ -38,7 +38,7 @@ pub static DEFAULT_FINGERMAP: [Finger; 30] = [
     LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
 ];
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PosPair(pub usize, pub usize);
 
 #[rustfmt::skip]

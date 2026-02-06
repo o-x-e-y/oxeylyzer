@@ -1,8 +1,9 @@
+use ahash::AHashMap as HashMap;
 use anyhow::Result;
 use itertools::Itertools;
 use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
 
-use crate::{char_mapping::CharMapping, utility::*, *};
+use crate::{char_mapping::CharMapping, language_data::LanguageData, utility::*, *};
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
@@ -259,43 +260,6 @@ pub struct FSpeedIndices {
     pub all: Box<[BigramPair]>,
 }
 
-fn dx_dy(k1: &PhysicalKey, k2: &PhysicalKey, _f1: Finger, _f2: Finger) -> (f64, f64) {
-    let ox1 = (k1.width() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
-    let ox2 = (k1.width() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
-
-    let oy1 = (k2.height() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
-    let oy2 = (k2.height() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
-
-    let l1 = k1.x() + ox1;
-    let r1 = k1.x() - ox1 + k1.width();
-    let t1 = k1.y() + oy1;
-    let b1 = k1.y() - oy1 + k1.height();
-
-    let l2 = k2.x() + ox2;
-    let r2 = k2.x() - ox2 + k2.width();
-    let t2 = k2.y() + oy2;
-    let b2 = k2.y() - oy2 + k2.height();
-
-    let dx = (l1.max(l2) - r1.min(r2)).max(0.0);
-    let dy = (t1.max(t2) - b1.min(b2)).max(0.0);
-
-    (dx, dy)
-}
-
-fn dist(k1: &PhysicalKey, k2: &PhysicalKey, f1: Finger, f2: Finger) -> f64 {
-    if f1 != f2 {
-        todo!("only supports distance between keys pressed with the same finger")
-    }
-
-    // TODO: move this to weights
-    static F_WEIGHTS: [f64; 10] = [1.4, 3.6, 4.8, 5.5, 3.3, 3.3, 5.5, 4.8, 3.6, 1.4];
-
-    let (dx, dy) = dx_dy(k1, k2, f1, f2);
-
-    // TODO: think about scaling differently
-    dx.hypot(dy).powf(1.3) * (5.5 / F_WEIGHTS[f1 as usize])
-}
-
 impl FSpeedIndices {
     pub fn get_finger(&self, finger: Finger) -> &[BigramPair] {
         &self.fingers[finger as usize]
@@ -317,17 +281,22 @@ impl FSpeedIndices {
             "finger len is not the same as keyboard len: "
         );
 
+        // TODO: move this to weights
+        static F_WEIGHTS: [f64; 10] = [1.4, 3.6, 4.8, 5.5, 3.3, 3.3, 5.5, 4.8, 3.6, 1.4];
+
         let fingers: Box<[_; 10]> = Finger::FINGERS
             .map(|finger| {
                 fingers
                     .iter()
                     .zip(keyboard)
                     .zip(0usize..)
-                    .filter_map(|((f, k), i)| (f == &finger).then_some((k, i)))
+                    .filter_map(|((f, k), i)| (f == &finger).then_some((*f, k, i)))
                     .tuple_combinations::<(_, _)>()
-                    .map(|((k1, i1), (k2, i2))| BigramPair {
+                    .map(|((f1, k1, i1), (_, k2, i2))| BigramPair {
                         pair: PosPair(i1, i2),
-                        dist: dist(k1, k2, finger, finger),
+                        // TODO: think about scaling differently
+                        dist: dist(k1, k2, finger, finger).powf(1.3)
+                            * (5.5 / F_WEIGHTS[f1 as usize]),
                         // * finger_weights.get(finger),
                     })
                     .collect::<Box<_>>()
@@ -342,6 +311,207 @@ impl FSpeedIndices {
 
         Self { fingers, all }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct StretchCache {
+    pub all_pairs: Box<[BigramPair]>,
+    pub per_key_pair: HashMap<PosPair, Box<[BigramPair]>>,
+    pub total: f64,
+}
+
+impl StretchCache {
+    pub fn new(
+        keys: &[char],
+        fingers: &[Finger],
+        keyboard: &[PhysicalKey],
+        data: &LanguageData,
+    ) -> Self {
+        assert!(
+            fingers.len() <= u8::MAX as usize,
+            "Too many keys to index with u8, max is {}",
+            u8::MAX
+        );
+        assert_eq!(
+            fingers.len(),
+            keyboard.len(),
+            "finger len is not the same as keyboard len: "
+        );
+
+        let all_pairs = keyboard
+            .iter()
+            .zip(fingers)
+            .zip(keys)
+            .enumerate()
+            .tuple_combinations::<(_, _)>()
+            .filter(|((_, ((_, f1), _)), (_, ((_, f2), _)))| f1 != f2 && (f1.hand() == f2.hand()))
+            .filter_map(|((i1, ((k1, &f1), _c1)), (i2, ((k2, &f2), _c2)))| {
+                let diff = (f1 as u8).abs_diff(f2 as u8) as f64;
+                let fd = diff * 1.35;
+                // let minimum_diff = diff * 0.9;
+                let (dx, dy) = dx_dy(k1, k2, f1, f2);
+                let negative_lsb = 0.0; //(minimum_diff - dx.abs() - 1.0).max(0.0) * 2.0;
+                let dist = dx.hypot(dy);
+
+                let xo = x_overlap(dx, dy, f1, f2);
+
+                let stretch = dist + xo + negative_lsb - fd;
+
+                // if stretch > 0.001 {
+                //     println!("{_c1}{_c2}: {}", (stretch * 100.0) as i64);
+                // }
+
+                (stretch > 0.001).then_some(BigramPair {
+                    pair: PosPair(i1, i2),
+                    dist: stretch,
+                })
+            })
+            .collect::<Box<[_]>>();
+
+        // println!("pair count: {}", all_pairs.len());
+
+        let per_keypair = (0..(fingers.len()))
+            .cartesian_product(0..(fingers.len()))
+            .map(|(i1, i2)| {
+                let is = [i1, i2];
+
+                let pairs = all_pairs
+                    .iter()
+                    .filter(move |b| is.contains(&b.pair.0) || is.contains(&b.pair.1))
+                    .copied()
+                    .collect::<Box<[_]>>();
+
+                (PosPair(i1, i2), pairs)
+            })
+            .collect::<HashMap<_, _>>();
+
+        let total = all_pairs
+            .iter()
+            .map(
+                |BigramPair {
+                     dist,
+                     pair: PosPair(a, b),
+                 }| {
+                    let u1 = keys[*a];
+                    let u2 = keys[*b];
+
+                    (data.get_stretch_weighted_bigram([u1, u2])
+                        + data.get_stretch_weighted_bigram([u2, u1]))
+                        * dist
+                },
+            )
+            .sum();
+
+        Self {
+            all_pairs,
+            per_key_pair: per_keypair,
+            total,
+        }
+    }
+}
+
+fn x_finger_overlap(f1: Finger, f2: Finger) -> f64 {
+    use Finger::*;
+
+    match (f1, f2) {
+        (LP, LR) => 0.8,
+        (LR, LP) => 0.8,
+        (LR, LM) => 0.4,
+        (LM, LR) => 0.4,
+        (LM, LI) => 0.1,
+        (LI, LM) => 0.1,
+        (LI, LT) => -2.5,
+        (LT, LI) => -2.5,
+        (RT, RI) => -2.5,
+        (RI, RT) => -2.5,
+        (RI, RM) => 0.1,
+        (RM, RI) => 0.1,
+        (RM, RR) => 0.4,
+        (RR, RM) => 0.4,
+        (RR, RP) => 0.8,
+        (RP, RR) => 0.8,
+        _ => 0.0,
+    }
+}
+
+fn x_overlap(dx: f64, dy: f64, f1: Finger, f2: Finger) -> f64 {
+    let x_offset = x_finger_overlap(f1, f2);
+
+    let dx_offset = x_offset - dx * 1.3;
+    let dy_offset = 0.3333 * dy;
+
+    (dx_offset + dy_offset).max(0.0)
+}
+
+fn dx_dy(k1: &PhysicalKey, k2: &PhysicalKey, f1: Finger, f2: Finger) -> (f64, f64) {
+    let f_len = |f: Finger| match f {
+        Finger::LP | Finger::RP => -0.15,
+        Finger::LR | Finger::RR => 0.35,
+        Finger::LM | Finger::RM => 0.25,
+        Finger::LI | Finger::RI => -0.30,
+        Finger::LT | Finger::RT => -1.80,
+    };
+
+    let ox1 = (k1.width() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
+    let ox2 = (k1.width() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
+
+    let oy1 = (k2.height() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
+    let oy2 = (k2.height() * KEY_EDGE_OFFSET).min(KEY_EDGE_OFFSET);
+
+    let l1 = k1.x() + ox1;
+    let r1 = k1.x() - ox1 + k1.width();
+    let t1 = k1.y() + oy1 + f_len(f1);
+    let b1 = k1.y() - oy1 + k1.height() + f_len(f1);
+
+    let l2 = k2.x() + ox2;
+    let r2 = k2.x() - ox2 + k2.width();
+    let t2 = k2.y() + oy2 + f_len(f2);
+    let b2 = k2.y() - oy2 + k2.height() + f_len(f2);
+
+    let dx = (l1.max(l2) - r1.min(r2)).max(0.0);
+    let dy = (t1.max(t2) - b1.min(b2)).max(0.0);
+
+    // Checks whether or not a finger is below or to the side of another finger, in which case the
+    // distance is considered negative. To the side meaning, where the distance between qwerty `er`
+    // pressed with middle and index is considered 1, if each key were pressed with the other
+    // finger, the distance is negative (because who the fuck is doing that, that's not good).
+
+    let xo = x_finger_overlap(f1, f2);
+
+    // match (f1.hand(), f2.hand()) {
+    //     (Hand::Left, Hand::Left) => match ((f1 as u8) > (f2 as u8), (f1 as u8) < (f2 as u8)) {
+    //         (true, false) if r1 < l2 => (-dx, dy),
+    //         (false, true) if l1 > r2 => (-dx, dy),
+    //         _ => (dx, dy),
+    //     },
+    //     (Hand::Right, Hand::Right) => match ((f2 as u8) > (f1 as u8), (f2 as u8) < (f1 as u8)) {
+    //         (true, false) if r1 > l2 => (-dx, dy),
+    //         (false, true) if l1 < r2 => (-dx, dy),
+    //         _ => (dx, dy),
+    //     },
+    //     _ => (dx, dy)
+    // }
+    match ((f1 as u8) > (f2 as u8), (f1 as u8) < (f2 as u8)) {
+        (true, false) if r1 < l2 + xo => (-dx, dy),
+        (false, true) if l1 + xo > r2 => (-dx, dy),
+        _ => (dx, dy),
+    }
+}
+
+fn dist(k1: &PhysicalKey, k2: &PhysicalKey, f1: Finger, f2: Finger) -> f64 {
+    let (dx, dy) = dx_dy(k1, k2, f1, f2);
+
+    let dist = dx.hypot(dy);
+
+    println!(
+        "({}, {}) -> ({}, {}) = {dist}",
+        k1.x(),
+        k1.y(),
+        k2.x(),
+        k2.y()
+    );
+
+    dist
 }
 
 #[cfg(test)]
