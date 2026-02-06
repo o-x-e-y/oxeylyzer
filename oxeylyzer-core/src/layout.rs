@@ -522,6 +522,58 @@ mod tests {
         Lazy::new(|| CharMapping::from("abcdefghijklmnopqrstuvwxyz'.,;/"));
 
     #[test]
+    fn test_key_dist() {
+        let k1 = "1 0 0 0"
+            .parse::<PhysicalKey>()
+            .expect("couldn't create k1");
+
+        let k2 = "2 1 0 0"
+            .parse::<PhysicalKey>()
+            .expect("couldn't create k2");
+
+        let d = dist(&k1, &k2, Finger::RP, Finger::RP);
+
+        approx::assert_abs_diff_eq!(d, 2f64.sqrt(), epsilon = 1e-9);
+    }
+
+    // #[cfg(not(target_arch = "wasm32"))]
+    // #[test]
+    // fn test_square_shapes() {
+    //     fn print_key_info(layout: &FastLayout, c: char) {
+    //         let c =
+    //         let i = match layout.matrix.iter().position(|k| k == &c) {
+    //             Some(i) => i,
+    //             None => {
+    //                 println!("layout '{}' does not contain '{c}'", layout.name);
+    //                 return;
+    //             }
+    //         };
+
+    //         let p = &layout.keyboard[i];
+    //         let f = &layout.fingers[i];
+
+    //         println!("{c} uses {f}, key: {p:?}")
+    //     }
+
+    //     let k1 = "6.25 3 1 1"
+    //         .parse::<PhysicalKey>()
+    //         .expect("couldn't create k1");
+
+    //     let k2 = "3.75 4 6.25 1 "
+    //         .parse::<PhysicalKey>()
+    //         .expect("couldn't create k2");
+
+    //     let d = dist(&k1, &k2, Finger::LP, Finger::LP);
+
+    //     approx::assert_abs_diff_eq!(d, 1.0, epsilon = 1e-9);
+
+    //     let layout = crate::layout::Layout::load("../layouts/qwerty.dof").unwrap();
+
+    //     print_key_info(&layout, 'b');
+    //     print_key_info(&layout, '␣');
+    // }
+
+    #[test]
     fn layout_str() {
         let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
         println!("{qwerty_bytes:?}");
