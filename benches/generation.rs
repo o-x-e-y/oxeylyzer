@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+mod languages;
+
 use std::hint::black_box;
 
 use diol::prelude::*;
@@ -19,11 +21,13 @@ fn main() -> std::io::Result<()> {
         .filter_map(|(i, swap)| ((i + 17) % 50 == 0).then_some(swap))
         .collect::<Vec<_>>();
 
+    let languages = ["english", "bokmal", "german", "hebrew", "russian", "tr"];
+
     let mut bench = Bench::new(BenchConfig::from_args()?);
 
     bench.register(score_swap, swaps);
     bench.register(score_layout, layout_names.clone());
-    bench.register(generate, [0]);
+    bench.register(generate, languages);
     bench.register(best_swap_cached, layout_names);
 
     bench.run()?;
@@ -63,8 +67,8 @@ fn best_swap_cached(bencher: Bencher, name: String) {
     })
 }
 
-fn generate(bencher: Bencher, _: usize) {
-    let g = black_box(LayoutGeneration::new("english", "./static/", None).unwrap());
+fn generate(bencher: Bencher, language: &str) {
+    let g = black_box(LayoutGeneration::new(language, "./static/", None).unwrap());
 
     bencher.bench(|| {
         g.generate();
