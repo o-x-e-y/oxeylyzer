@@ -24,8 +24,9 @@ impl LayoutGeneration {
 
         let trigram_iter = self.data.trigrams.iter().take(trigram_precision);
         let trigram_score = self.trigram_score_iter(layout, trigram_iter);
+        let stretch_score = self.stretch_score(layout);
 
-        trigram_score /* - effort */ - fspeed_usage - scissors - lsbs - pinky_ring
+        trigram_score - stretch_score - fspeed_usage - scissors - lsbs - pinky_ring
     }
 
     #[allow(dead_code)]

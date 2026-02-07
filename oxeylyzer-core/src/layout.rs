@@ -3,7 +3,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
 
-use crate::{char_mapping::CharMapping, language_data::LanguageData, utility::*, *};
+use crate::{char_mapping::CharMapping, utility::*, *};
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
@@ -34,6 +34,7 @@ pub struct FastLayout {
     pub matrix_fingers: Box<[Finger]>,
     pub matrix_physical: Box<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
+    pub stretch_indices: StretchCache,
     pub shape: Shape,
     pub score: f64,
 }
@@ -138,6 +139,7 @@ impl FastLayout {
             .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
 
         let fspeed_indices = FSpeedIndices::new(&matrix_fingers, &matrix_physical);
+        let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
         let shape = dof.shape();
 
         // let name = dof.name().to_owned();
@@ -150,6 +152,7 @@ impl FastLayout {
             matrix_physical,
             char_to_finger,
             fspeed_indices,
+            stretch_indices,
             shape,
             score: 0.0,
         };
@@ -165,6 +168,11 @@ impl Layout<u8> for FastLayout {
         let matrix_physical = default_physical_map();
         let char_to_finger = Box::new([None; 64]);
         let fspeed_indices = FSpeedIndices::new(matrix_fingers.as_slice(), &matrix_physical);
+        let stretch_indices = StretchCache::new(
+            matrix.as_slice(),
+            matrix_fingers.as_slice(),
+            &matrix_physical,
+        );
         let shape = Shape::from(vec![10, 10, 10]);
         let score = 0.0;
 
@@ -174,6 +182,7 @@ impl Layout<u8> for FastLayout {
             matrix_physical,
             char_to_finger,
             fspeed_indices,
+            stretch_indices,
             shape,
             score,
         }
@@ -313,20 +322,14 @@ impl FSpeedIndices {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct StretchCache {
     pub all_pairs: Box<[BigramPair]>,
     pub per_key_pair: HashMap<PosPair, Box<[BigramPair]>>,
-    pub total: f64,
 }
 
 impl StretchCache {
-    pub fn new(
-        keys: &[char],
-        fingers: &[Finger],
-        keyboard: &[PhysicalKey],
-        data: &LanguageData,
-    ) -> Self {
+    pub fn new(keys: &[u8], fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
         assert!(
             fingers.len() <= u8::MAX as usize,
             "Too many keys to index with u8, max is {}",
@@ -385,27 +388,9 @@ impl StretchCache {
             })
             .collect::<HashMap<_, _>>();
 
-        let total = all_pairs
-            .iter()
-            .map(
-                |BigramPair {
-                     dist,
-                     pair: PosPair(a, b),
-                 }| {
-                    let u1 = keys[*a];
-                    let u2 = keys[*b];
-
-                    (data.get_stretch_weighted_bigram([u1, u2])
-                        + data.get_stretch_weighted_bigram([u2, u1]))
-                        * dist
-                },
-            )
-            .sum();
-
         Self {
             all_pairs,
             per_key_pair: per_keypair,
-            total,
         }
     }
 }
@@ -501,17 +486,7 @@ fn dx_dy(k1: &PhysicalKey, k2: &PhysicalKey, f1: Finger, f2: Finger) -> (f64, f6
 fn dist(k1: &PhysicalKey, k2: &PhysicalKey, f1: Finger, f2: Finger) -> f64 {
     let (dx, dy) = dx_dy(k1, k2, f1, f2);
 
-    let dist = dx.hypot(dy);
-
-    println!(
-        "({}, {}) -> ({}, {}) = {dist}",
-        k1.x(),
-        k1.y(),
-        k2.x(),
-        k2.y()
-    );
-
-    dist
+    dx.hypot(dy)
 }
 
 #[cfg(test)]

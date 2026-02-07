@@ -144,7 +144,24 @@ impl LanguageData {
         let u1 = self.char_mapping.get_u(c1) as usize;
         let u2 = self.char_mapping.get_u(c2) as usize;
 
-        let i = u1 * self.characters.len() + u2;
-        self.stretch_weighted_bigrams[i]
+        if u1 < self.characters.len() && u2 < self.characters.len() {
+            let i = u1 * self.characters.len() + u2;
+            self.stretch_weighted_bigrams[i]
+        } else {
+            0.0
+        }
+    }
+
+    #[inline]
+    pub fn get_stretch_weighted_bigram_u(&self, [c1, c2]: [u8; 2]) -> f64 {
+        let u1 = c1 as usize;
+        let u2 = c2 as usize;
+
+        if u1 < self.characters.len() && u2 < self.characters.len() {
+            let i = u1 * self.characters.len() + u2;
+            self.stretch_weighted_bigrams[i]
+        } else {
+            0.0
+        }
     }
 }
