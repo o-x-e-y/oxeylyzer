@@ -146,6 +146,7 @@ pub struct LayoutStats {
     pub dsfb3: f64,
     pub scissors: f64,
     pub lsbs: f64,
+    pub stretches: f64,
     pub pinky_ring: f64,
     pub trigram_stats: TrigramStats,
     pub fspeed: f64,
@@ -158,12 +159,14 @@ impl std::fmt::Display for LayoutStats {
             f,
             concat!(
                 "Sfb:  {:.3}%\nDsfb: {:.3}%\n\nFinger Speed: {:.3}\n",
-                "{}\nScissors: {:.3}%\nLsbs: {:.3}%\nPinky Ring Bigrams: {:.3}%\n\n{}"
+                "{}\nStretches: {:.3}\nScissors: {:.3}%\nLsbs: {:.3}%\n",
+                "Pinky Ring Bigrams: {:.3}%\n\n{}"
             ),
             self.sfb * 100.0,
             self.dsfb * 100.0,
             self.fspeed * 10.0,
             format_fspeed(&self.finger_speed),
+            self.stretches * 10.0,
             self.scissors * 100.0,
             self.lsbs * 100.0,
             self.pinky_ring * 100.0,
@@ -187,6 +190,7 @@ pub struct LayoutCache {
     fspeed_total: f64,
 
     // trigrams: HashMap<(char, Option<char>), f64>,
+    stretch_total: f64,
     trigrams_total: f64,
 
     total_score: f64,
@@ -198,7 +202,7 @@ impl LayoutCache {
             - self.scissors
             - self.lsbs
             - self.pinky_ring
-            // - self.effort_total
+            - self.stretch_total
             - self.usage_total
             - self.fspeed_total
     }
@@ -239,7 +243,6 @@ pub struct LayoutGeneration {
     lsb_indices: [PosPair; 16],
     pinky_ring_indices: [PosPair; 18],
 
-    weighted_bigrams: BigramData,
     per_char_trigrams: PerCharTrigrams,
 
     pub weights: Weights,
@@ -265,10 +268,12 @@ impl LayoutGeneration {
                 b.partial_cmp(a).unwrap()
             });
 
+            data.weighted_bigrams = Self::weighted_bigrams(&data, &config.weights);
+            data.stretch_weighted_bigrams = Self::stretch_weighted_bigrams(&data, &config.weights);
+
             Ok(Self {
                 language: language.to_string(),
                 chars_for_generation,
-                weighted_bigrams: Self::weighted_bigrams(&data, &config.weights),
                 per_char_trigrams: Self::per_char_trigrams(
                     &data.trigrams,
                     data.characters.len() as u8,
@@ -371,6 +376,7 @@ impl LayoutGeneration {
         let fspeed = cache.fspeed_total;
         let finger_speed = cache.fspeed;
 
+        let stretches = self.stretch_score(layout);
         let scissors = self.scissor_score(layout) / self.weights.scissors;
         let lsbs = self.lsb_score(layout) / self.weights.lsbs;
         let pinky_ring = self.pinky_ring_score(layout) / self.weights.pinky_ring_bigrams;
@@ -383,6 +389,7 @@ impl LayoutGeneration {
             dsfb3,
             fspeed,
             finger_speed,
+            stretches,
             scissors,
             lsbs,
             pinky_ring,
@@ -525,6 +532,22 @@ impl LayoutGeneration {
             .collect()
     }
 
+    fn stretch_weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
+        data.bigrams
+            .iter()
+            .zip(&data.skipgrams)
+            .zip(&data.skipgrams2)
+            .zip(&data.skipgrams3)
+            .map(|(((&b, s), s2), s3)| {
+                let sfb = b;
+                let sfs = s * weights.dsfb_ratio;
+                let sfs2 = s2 * weights.dsfb_ratio2;
+                let sfs3 = s3 * weights.dsfb_ratio3;
+                (sfb + sfs + sfs2 + sfs3) * weights.lsbs
+            })
+            .collect::<Box<_>>()
+    }
+
     fn per_char_trigrams(
         trigrams: &TrigramData,
         highest: u8,
@@ -657,6 +680,27 @@ impl LayoutGeneration {
         res * self.weights.pinky_ring_bigrams
     }
 
+    fn stretch_score(&self, layout: &FastLayout) -> f64 {
+        layout
+            .stretch_indices
+            .all_pairs
+            .iter()
+            .map(
+                |BigramPair {
+                     dist,
+                     pair: PosPair(a, b),
+                 }| {
+                    let u1 = layout.matrix[*a];
+                    let u2 = layout.matrix[*b];
+
+                    (self.data.get_stretch_weighted_bigram_u([u1, u2])
+                        + self.data.get_stretch_weighted_bigram_u([u2, u1]))
+                        * dist
+                },
+            )
+            .sum()
+    }
+
     fn finger_usage(&self, layout: &FastLayout, finger: Finger) -> f64 {
         let mut res = 0.0;
         match finger {
@@ -739,8 +783,18 @@ impl LayoutGeneration {
         let mut res = 0.0;
 
         let len = self.data.characters.len();
-        res += self.weighted_bigrams.get(c1 * len + c2).unwrap_or(&0.0) * dist;
-        res += self.weighted_bigrams.get(c2 * len + c1).unwrap_or(&0.0) * dist;
+        res += self
+            .data
+            .weighted_bigrams
+            .get(c1 * len + c2)
+            .unwrap_or(&0.0)
+            * dist;
+        res += self
+            .data
+            .weighted_bigrams
+            .get(c2 * len + c1)
+            .unwrap_or(&0.0)
+            * dist;
         res
     }
 
@@ -770,6 +824,32 @@ impl LayoutGeneration {
             res += self.pair_fspeed(layout, pair, *dist);
         }
         res
+    }
+
+    pub fn pair_stretch(&self, layout: &FastLayout, pair: &PosPair) -> f64 {
+        layout
+            .stretch_indices
+            .per_key_pair
+            .get(pair)
+            .map(|pairs| {
+                pairs
+                    .iter()
+                    .map(
+                        |BigramPair {
+                             pair: PosPair(a, b),
+                             dist,
+                         }| {
+                            let u1 = layout.matrix[*b];
+                            let u2 = layout.matrix[*a];
+
+                            (self.data.get_stretch_weighted_bigram_u([u1, u2])
+                                + self.data.get_stretch_weighted_bigram_u([u2, u1]))
+                                * dist
+                        },
+                    )
+                    .sum()
+            })
+            .unwrap_or_default()
     }
 
     // #[inline]
@@ -805,6 +885,8 @@ impl LayoutGeneration {
         res.lsbs = self.lsb_score(layout);
 
         res.pinky_ring = self.pinky_ring_score(layout);
+
+        res.stretch_total = self.stretch_score(layout);
 
         res.trigrams_total = self.trigram_score_iter(
             layout,
@@ -885,12 +967,19 @@ impl LayoutGeneration {
             cache.pinky_ring
         };
 
-        let trigrams_score = {
+        let (stretch_score, trigrams_score) = {
+            let stretch_new = self.pair_stretch(layout, swap);
             let trigrams_end = self.trigram_char_score(layout, swap);
+
             layout.swap_pair(swap);
+
+            let stretch_old = self.pair_stretch(layout, swap);
             let trigrams_start = self.trigram_char_score(layout, swap);
 
-            cache.trigrams_total - trigrams_start + trigrams_end
+            let stretch_score = cache.stretch_total - stretch_old + stretch_new;
+            let trigrams_score = cache.trigrams_total - trigrams_start + trigrams_end;
+
+            (stretch_score, trigrams_score)
         };
 
         Some(
@@ -898,7 +987,7 @@ impl LayoutGeneration {
                 - scissors_score
                 - lsbs_score
                 - pinky_ring_score
-                // - effort_score
+                - stretch_score
                 - usage_score
                 - fspeed_score,
         )
@@ -913,6 +1002,7 @@ impl LayoutGeneration {
             return;
         }
 
+        let stretch_start = self.pair_stretch(layout, swap);
         let trigrams_start = self.trigram_char_score(layout, swap);
 
         layout.swap_pair(swap).unwrap();
@@ -968,7 +1058,10 @@ impl LayoutGeneration {
         // cache.effort[i1] = effort1;
         // cache.effort[i2] = effort2;
 
+        let stretch_end = self.pair_stretch(layout, swap);
         let trigrams_end = self.trigram_char_score(layout, swap);
+
+        cache.stretch_total = cache.stretch_total - stretch_start + stretch_end;
         cache.trigrams_total = cache.trigrams_total - trigrams_start + trigrams_end;
 
         if swap.affects_scissor() {

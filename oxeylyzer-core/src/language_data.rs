@@ -77,6 +77,7 @@ pub struct LanguageData {
     pub skipgrams2: BigramData,
     pub skipgrams3: BigramData,
     pub weighted_bigrams: BigramData,
+    pub stretch_weighted_bigrams: BigramData,
     pub trigrams: TrigramData,
     pub language: String,
     pub char_mapping: CharMapping,
@@ -98,6 +99,7 @@ impl From<LanguageDataInter> for LanguageData {
         let skipgrams3 = get_bigram_data(inter.skipgrams3, &mut char_mapping);
 
         let weighted_bigrams = Box::new([]);
+        let stretch_weighted_bigrams = Box::new([]);
 
         let trigrams = get_trigram_data(inter.trigrams, &mut char_mapping);
 
@@ -109,6 +111,7 @@ impl From<LanguageDataInter> for LanguageData {
             skipgrams3,
             trigrams,
             weighted_bigrams,
+            stretch_weighted_bigrams,
             language: inter.language,
             char_mapping,
         }
@@ -135,5 +138,30 @@ impl LanguageData {
         let res = LanguageData::from(data);
 
         Ok(res)
+    }
+
+    pub fn get_stretch_weighted_bigram(&self, [c1, c2]: [char; 2]) -> f64 {
+        let u1 = self.char_mapping.get_u(c1) as usize;
+        let u2 = self.char_mapping.get_u(c2) as usize;
+
+        if u1 < self.characters.len() && u2 < self.characters.len() {
+            let i = u1 * self.characters.len() + u2;
+            self.stretch_weighted_bigrams[i]
+        } else {
+            0.0
+        }
+    }
+
+    #[inline]
+    pub fn get_stretch_weighted_bigram_u(&self, [c1, c2]: [u8; 2]) -> f64 {
+        let u1 = c1 as usize;
+        let u2 = c2 as usize;
+
+        if u1 < self.characters.len() && u2 < self.characters.len() {
+            let i = u1 * self.characters.len() + u2;
+            self.stretch_weighted_bigrams[i]
+        } else {
+            0.0
+        }
     }
 }
