@@ -39,6 +39,7 @@ pub struct Weights {
     #[serde(default)]
     pub dsfb_ratio3: f64,
     pub scissors: f64,
+    pub stretches: f64,
     pub lsbs: f64,
     pub pinky_ring_bigrams: f64,
     pub inrolls: f64,
@@ -130,6 +131,7 @@ impl Config {
                 dsfb_ratio2: (0.10 * 6.0f64).powi(2),
                 dsfb_ratio3: (0.08 * 6.0f64).powi(3),
                 scissors: 5.0,
+                stretches: 3.0,
                 lsbs: 2.0,
                 pinky_ring_bigrams: 0.0,
                 inrolls: 1.6,

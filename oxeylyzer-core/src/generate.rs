@@ -543,7 +543,7 @@ impl LayoutGeneration {
                 let sfs = s * weights.dsfb_ratio;
                 let sfs2 = s2 * weights.dsfb_ratio2;
                 let sfs3 = s3 * weights.dsfb_ratio3;
-                (sfb + sfs + sfs2 + sfs3) * weights.lsbs
+                (sfb + sfs + sfs2 + sfs3) * weights.stretches
             })
             .collect::<Box<_>>()
     }
