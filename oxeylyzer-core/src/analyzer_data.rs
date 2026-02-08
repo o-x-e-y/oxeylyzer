@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{o2_char_mapping::CharMapping, data::Data, weights::Weights};
+use crate::{data::Data, o2_char_mapping::CharMapping, weights::Weights};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AnalyzerData {
@@ -81,7 +81,7 @@ impl AnalyzerData {
             .map(|(&b, &s)| /* weights.sfbs * */ b + weights.dsfb_ratio as i64 * s)
             .collect::<Box<_>>();
 
-        let sfb_over_sfs = weights.dsfb_ratio;//(weights.sfbs as f64) / (weights.sfs as f64);
+        let sfb_over_sfs = weights.dsfb_ratio; //(weights.sfbs as f64) / (weights.sfs as f64);
         let stretch_weighted_bigrams = bigrams
             .iter()
             .zip(&skipgrams)

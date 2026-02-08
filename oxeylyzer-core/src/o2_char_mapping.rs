@@ -145,7 +145,7 @@ mod tests {
         let mapping_s = "abcdefhgijklmnopqrstuvwxyz ";
         let mapping = mapping_s.chars().collect::<CharMapping>();
 
-        assert_eq!(mapping.len(), mapping_s.len() + 1);
+        assert_eq!(mapping.len(), mapping_s.len() + 3);
 
         let s = "this is epic-";
         let u = mapping.map_cs(s).collect::<Vec<_>>();

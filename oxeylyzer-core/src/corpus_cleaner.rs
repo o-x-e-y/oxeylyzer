@@ -377,25 +377,6 @@ mod tests {
             println!("{c}");
         }
     }
-    
-    #[test]
-    fn gen_bokmal_thing() {
-        let cleaner_no = CorpusCleaner::builder()
-            .with_chars("abcdefghijklmnopqrstuvwxyzåøæ".chars())
-            .qwerty_punctuation_mappings(true)
-            .normalize_misc_punctuation(true)
-            // .with_chars([' '])
-            .build();
-        
-        let data = time_this::time!(crate::data::Data::from_path(
-            format!("../static/text/bokmal"),
-            &format!("bokmal_no_space"),
-            &cleaner_no,
-        ))
-        .expect("couldn't create data:");
-
-        data.save("../data/test").expect("couldn't save data:");
-    }
 
     fn _gen_save_data(name: &str, cleaner: &CorpusCleaner) {
         let data = crate::data::Data::from_path(
