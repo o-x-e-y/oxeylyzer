@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 
+mod data;
 mod languages;
 
 use std::hint::black_box;
 
 use diol::prelude::*;
 use oxeylyzer_core::{
+    corpus_cleaner::CorpusCleaner,
+    data::Data,
     generate::*,
     utility::{POSSIBLE_SWAPS, PosPair},
 };
@@ -22,6 +25,7 @@ fn main() -> std::io::Result<()> {
         .collect::<Vec<_>>();
 
     let languages = ["english", "bokmal", "german", "hebrew", "russian", "tr"];
+    let corpora = ["bokmal", "hebrew", "shai"];
 
     let mut bench = Bench::new(BenchConfig::from_args()?);
 
@@ -29,6 +33,7 @@ fn main() -> std::io::Result<()> {
     bench.register(score_layout, layout_names.clone());
     bench.register(generate, languages);
     bench.register(best_swap_cached, layout_names);
+    bench.register(language_data, corpora);
 
     bench.run()?;
     Ok(())
@@ -72,5 +77,14 @@ fn generate(bencher: Bencher, language: &str) {
 
     bencher.bench(|| {
         g.generate();
+    })
+}
+
+fn language_data(bencher: Bencher, language: &str) {
+    let cleaner = CorpusCleaner::raw();
+
+    bencher.bench(|| {
+        Data::from_path(format!("./static/text/{language}"), language, &cleaner)
+            .expect("couldn't create data:");
     })
 }
