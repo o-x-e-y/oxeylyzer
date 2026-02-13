@@ -11,32 +11,37 @@ pub struct AnalyzerData {
     skipgrams2: Box<[i64]>,
     skipgrams3: Box<[i64]>,
     trigrams: Box<[i64]>,
+    gen_trigrams: Box<[([u8; 3], i64)]>,
     same_finger_weighted_bigrams: Box<[i64]>,
     stretch_weighted_bigrams: Box<[i64]>,
-    pub char_total: f64,
-    pub bigram_total: f64,
-    pub skipgram_total: f64,
-    pub trigram_total: f64,
+    pub char_total: i64,
+    pub bigram_total: i64,
+    pub skipgram_total: i64,
+    pub skipgram2_total: i64,
+    pub skipgram3_total: i64,
+    pub trigram_total: i64,
     pub mapping: Arc<CharMapping>,
 }
 
 impl AnalyzerData {
     pub fn new(data: Data, weights: &Weights) -> Self {
-        let char_total = data.char_total as f64 / 100.0;
-        let bigram_total = data.bigram_total as f64 / 100.0;
-        let skipgram_total = data.skipgram_total as f64 / 100.0;
-        let skipgram2_total = data.skipgram2_total as f64 / 100.0;
-        let skipgram3_total = data.skipgram3_total as f64 / 100.0;
-        let trigram_total = data.trigram_total as f64 / 100.0;
+        let convert_total = |total| total as f64 / 10.0;
 
-        let mut chars = vec![0; data.chars.len() + 2];
+        let char_total = data.char_total; // as f64 / 10.0;
+        let bigram_total = data.bigram_total; // as f64 / 10.0;
+        let skipgram_total = data.skipgram_total; // as f64 / 10.0;
+        let skipgram2_total = data.skipgram2_total; // as f64 / 10.0;
+        let skipgram3_total = data.skipgram3_total; // as f64 / 10.0;
+        let trigram_total = data.trigram_total; // as f64 / 10.0;
+
+        let mut chars = vec![0; data.chars.len() + 3];
         let mut mapping = CharMapping::new();
 
         for (c, f) in data.chars {
             mapping.push(c);
 
             let i = mapping.get_u(c) as usize;
-            chars[i] = (f * char_total) as i64;
+            chars[i] = (f * convert_total(data.char_total)) as i64;
         }
 
         debug_assert!(chars.len() >= mapping.len());
@@ -44,17 +49,6 @@ impl AnalyzerData {
         chars.truncate(mapping.len());
 
         let len = chars.len();
-
-        // let same_finger_weighted_bigrams = vec![0; len.pow(2)];
-
-        // for ([c1, c2], f) in &data.bigrams {
-        //     let u1 = mapping.get_u(c1) as usize;
-        //     let u2 = mapping.get_u(c2) as usize;
-
-        //     let i = u1 * len + u2;
-        //     debug_assert_eq!(bigrams[i], 0);
-        //     bigrams[i] = (f * bigram_total) as i64;
-        // }
 
         let mut bigrams = vec![0; len.pow(2)];
 
@@ -64,7 +58,7 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(bigrams[i], 0);
-            bigrams[i] = (f * bigram_total) as i64;
+            bigrams[i] = (f * convert_total(bigram_total)) as i64;
         }
 
         let mut skipgrams = vec![0; len.pow(2)];
@@ -75,7 +69,7 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(skipgrams[i], 0);
-            skipgrams[i] = (f * skipgram_total) as i64;
+            skipgrams[i] = (f * convert_total(skipgram_total)) as i64;
         }
 
         let mut skipgrams2 = vec![0; len.pow(2)];
@@ -86,7 +80,7 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(skipgrams2[i], 0);
-            skipgrams2[i] = (f * skipgram2_total) as i64;
+            skipgrams2[i] = (f * convert_total(skipgram2_total)) as i64;
         }
 
         let mut skipgrams3 = vec![0; len.pow(2)];
@@ -97,20 +91,31 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(skipgrams3[i], 0);
-            skipgrams3[i] = (f * skipgram3_total) as i64;
+            skipgrams3[i] = (f * convert_total(skipgram3_total)) as i64;
         }
 
         let mut trigrams = vec![0; len.pow(3)];
 
-        for ([c1, c2, c3], f) in data.trigrams {
+        for (&[c1, c2, c3], f) in data.trigrams.iter() {
             let u1 = mapping.get_u(c1) as usize;
             let u2 = mapping.get_u(c2) as usize;
             let u3 = mapping.get_u(c3) as usize;
 
             let i = u1 * len.pow(2) + u2 * len + u3;
             debug_assert_eq!(trigrams[i], 0);
-            trigrams[i] = (f * trigram_total) as i64;
+            trigrams[i] = (f * convert_total(trigram_total)) as i64;
         }
+
+        let gen_trigrams = data
+            .trigrams
+            .into_iter()
+            .map(|([c1, c2, c3], f)| {
+                let u1 = mapping.get_u(c1);
+                let u2 = mapping.get_u(c2);
+                let u3 = mapping.get_u(c3);
+                ([u1, u2, u3], (f * convert_total(trigram_total)) as i64)
+            })
+            .collect::<Box<_>>();
 
         let same_finger_weighted_bigrams = bigrams
             .iter()
@@ -150,12 +155,15 @@ impl AnalyzerData {
             skipgrams2: skipgrams2.into(),
             skipgrams3: skipgrams3.into(),
             trigrams: trigrams.into(),
+            gen_trigrams,
             same_finger_weighted_bigrams,
             stretch_weighted_bigrams,
 
             char_total,
             bigram_total,
             skipgram_total,
+            skipgram2_total,
+            skipgram3_total,
             trigram_total,
 
             mapping,
@@ -172,6 +180,34 @@ impl AnalyzerData {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn chars(&self) -> &[i64] {
+        &self.chars
+    }
+
+    pub fn bigrams(&self) -> &[i64] {
+        &self.bigrams
+    }
+
+    pub fn skipgrams(&self) -> &[i64] {
+        &self.skipgrams
+    }
+
+    pub fn skipgrams2(&self) -> &[i64] {
+        &self.skipgrams2
+    }
+
+    pub fn skipgrams3(&self) -> &[i64] {
+        &self.skipgrams3
+    }
+
+    pub fn trigrams(&self) -> &[i64] {
+        &self.trigrams
+    }
+
+    pub fn gen_trigrams(&self) -> &[([u8; 3], i64)] {
+        &self.gen_trigrams
     }
 
     pub fn get_char(&self, c: char) -> i64 {
@@ -222,7 +258,7 @@ impl AnalyzerData {
 
     #[inline]
     pub fn get_char_u(&self, c: u8) -> i64 {
-        self.chars[c as usize]
+        self.chars.get(c as usize).copied().unwrap_or_default()
     }
 
     #[inline]
@@ -230,8 +266,12 @@ impl AnalyzerData {
         let u1 = c1 as usize;
         let u2 = c2 as usize;
 
-        let i = u1 * self.len() + u2;
-        self.bigrams[i]
+        if u1 < self.len() && u2 < self.len() {
+            let i = u1 * self.len() + u2;
+            self.bigrams[i]
+        } else {
+            0
+        }
     }
 
     #[inline]
@@ -239,8 +279,12 @@ impl AnalyzerData {
         let u1 = c1 as usize;
         let u2 = c2 as usize;
 
-        let i = u1 * self.len() + u2;
-        self.skipgrams[i]
+        if u1 < self.len() && u2 < self.len() {
+            let i = u1 * self.len() + u2;
+            self.skipgrams[i]
+        } else {
+            0
+        }
     }
 
     #[inline]
@@ -249,8 +293,12 @@ impl AnalyzerData {
         let u2 = c2 as usize;
         let u3 = c3 as usize;
 
-        let i = u1 * self.len().pow(2) + u2 * self.len() + u3;
-        self.trigrams[i]
+        if u1 < self.len() && u2 < self.len() && u3 < self.len() {
+            let i = u1 * self.len().pow(2) + u2 * self.len() + u3;
+            self.trigrams[i]
+        } else {
+            0
+        }
     }
 
     #[inline]
@@ -258,8 +306,12 @@ impl AnalyzerData {
         let u1 = c1 as usize;
         let u2 = c2 as usize;
 
-        let i = u1 * self.len() + u2;
-        self.same_finger_weighted_bigrams[i]
+        if u1 < self.len() && u2 < self.len() {
+            let i = u1 * self.len() + u2;
+            self.same_finger_weighted_bigrams[i]
+        } else {
+            0
+        }
     }
 
     #[inline]
@@ -267,7 +319,11 @@ impl AnalyzerData {
         let u1 = c1 as usize;
         let u2 = c2 as usize;
 
-        let i = u1 * self.len() + u2;
-        self.stretch_weighted_bigrams[i]
+        if u1 < self.len() && u2 < self.len() {
+            let i = u1 * self.len() + u2;
+            self.stretch_weighted_bigrams[i]
+        } else {
+            0
+        }
     }
 }

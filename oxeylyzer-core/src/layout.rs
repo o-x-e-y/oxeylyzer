@@ -3,7 +3,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
 
-use crate::{char_mapping::CharMapping, utility::*, *};
+use crate::{o2_char_mapping::CharMapping, utility::*, *};
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
@@ -36,7 +36,7 @@ pub struct FastLayout {
     pub fspeed_indices: FSpeedIndices,
     pub stretch_indices: StretchCache,
     pub shape: Shape,
-    pub score: f64,
+    pub score: i64,
 }
 
 impl Default for FastLayout {
@@ -77,7 +77,7 @@ impl TryFrom<&[u8]> for FastLayout {
 
 impl FastLayout {
     pub fn layout_str(&self, con: &CharMapping) -> String {
-        con.as_str(&self.matrix)
+        con.map_us(&self.matrix).collect()
     }
 
     pub fn formatted_string(&self, con: &CharMapping) -> String {
@@ -88,7 +88,7 @@ impl FastLayout {
         for &l in self.shape.inner().iter() {
             let mut i = 0;
             for u in iter.by_ref() {
-                let c = con.from_single(*u);
+                let c = con.get_c(*u);
                 res.push_str(&format!("{c} "));
 
                 i += 1;
@@ -105,7 +105,7 @@ impl FastLayout {
         res
     }
 
-    pub fn from_dof(dof: Dof, convert: &mut CharMapping) -> Result<Self> {
+    pub fn from_dof(dof: Dof, convert: &CharMapping) -> Result<Self> {
         use libdof::prelude::{Key, SpecialKey};
 
         // let key_count = dof.main_layer().shape().inner().iter().sum::<usize>();
@@ -126,7 +126,7 @@ impl FastLayout {
                 },
                 _ => REPLACEMENT_CHAR,
             })
-            .map(|c| convert.to_single(c))
+            .map(|c| convert.get_u(c))
             .collect::<Box<_>>();
 
         let matrix_fingers = dof.fingering().keys().copied().collect::<Box<_>>();
@@ -154,7 +154,7 @@ impl FastLayout {
             fspeed_indices,
             stretch_indices,
             shape,
-            score: 0.0,
+            score: 0,
         };
 
         Ok(layout)
@@ -174,7 +174,7 @@ impl Layout<u8> for FastLayout {
             &matrix_physical,
         );
         let shape = Shape::from(vec![10, 10, 10]);
-        let score = 0.0;
+        let score = 0;
 
         FastLayout {
             matrix,
@@ -549,7 +549,9 @@ mod tests {
 
     #[test]
     fn layout_str() {
-        let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty_bytes = CON
+            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
+            .collect::<Vec<_>>();
         println!("{qwerty_bytes:?}");
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
@@ -568,7 +570,9 @@ mod tests {
 
     #[test]
     fn swap() {
-        let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty_bytes = CON
+            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
+            .collect::<Vec<_>>();
         println!("{qwerty_bytes:?}");
         let mut qwerty =
             FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
@@ -582,7 +586,9 @@ mod tests {
 
     #[test]
     fn swap_no_bounds() {
-        let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty_bytes = CON
+            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
+            .collect::<Vec<_>>();
         let mut qwerty =
             FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
@@ -595,7 +601,9 @@ mod tests {
 
     #[test]
     fn swap_cols_no_bounds() {
-        let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty_bytes = CON
+            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
+            .collect::<Vec<_>>();
         let mut qwerty =
             FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
@@ -608,7 +616,9 @@ mod tests {
 
     #[test]
     fn swap_pair() {
-        let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty_bytes = CON
+            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
+            .collect::<Vec<_>>();
         let mut qwerty =
             FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
@@ -622,7 +632,9 @@ mod tests {
 
     #[test]
     fn swap_pair_no_bounds() {
-        let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty_bytes = CON
+            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
+            .collect::<Vec<_>>();
         let mut qwerty =
             FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
@@ -636,7 +648,9 @@ mod tests {
 
     #[test]
     fn char_to_finger() {
-        let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty_bytes = CON
+            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
+            .collect::<Vec<_>>();
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
         assert_eq!(
@@ -686,7 +700,9 @@ mod tests {
 
     #[test]
     fn char() {
-        let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty_bytes = CON
+            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
+            .collect::<Vec<_>>();
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
         assert_eq!(qwerty.char(4 + (1 * 10)), Some(CON.to_single_lossy('g')));
@@ -696,7 +712,9 @@ mod tests {
 
     #[test]
     fn char_by_index() {
-        let qwerty_bytes = CON.to_lossy("qwertyuiopasdfghjkl;zxcvbnm,./".chars());
+        let qwerty_bytes = CON
+            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
+            .collect::<Vec<_>>();
         let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
 
         assert_eq!(qwerty.char(10), Some(CON.to_single_lossy('a')));

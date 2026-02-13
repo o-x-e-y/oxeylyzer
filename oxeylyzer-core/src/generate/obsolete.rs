@@ -1,6 +1,10 @@
 use libdof::prelude::Finger;
 
-use crate::{generate::LayoutGeneration, layout::*, utility::*};
+use crate::{
+    generate::{LayoutGeneration, SMALLEST_SCORE},
+    layout::*,
+    utility::*,
+};
 
 impl LayoutGeneration {
     #[allow(dead_code)]
@@ -8,7 +12,7 @@ impl LayoutGeneration {
         &self,
         layout: &FastLayout,
         trigram_precision: usize,
-    ) -> f64 {
+    ) -> i64 {
         // let effort = (0..layout.matrix.len())
         //     .map(|i| self.char_effort(layout, i))
         //     .sum::<f64>();
@@ -16,13 +20,13 @@ impl LayoutGeneration {
         let fspeed_usage = Finger::FINGERS
             .into_iter()
             .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
-            .sum::<f64>();
+            .sum::<i64>();
 
         let scissors = self.scissor_score(layout);
         let lsbs = self.lsb_score(layout);
         let pinky_ring = self.pinky_ring_score(layout);
 
-        let trigram_iter = self.data.trigrams.iter().take(trigram_precision);
+        let trigram_iter = self.data.gen_trigrams().iter().take(trigram_precision);
         let trigram_score = self.trigram_score_iter(layout, trigram_iter);
         let stretch_score = self.stretch_score(layout);
 
@@ -30,7 +34,7 @@ impl LayoutGeneration {
     }
 
     #[allow(dead_code)]
-    fn col_fspeed_before(&self, layout: &FastLayout, finger: Finger) -> f64 {
+    fn col_fspeed_before(&self, layout: &FastLayout, finger: Finger) -> i64 {
         let (start, len) = Self::col_to_start_len(finger);
 
         let mut res = 0.0;
@@ -44,27 +48,51 @@ impl LayoutGeneration {
             let c1 = layout.char(i1).unwrap() as usize;
             let c2 = layout.char(i2).unwrap() as usize;
 
-            let len = self.data.characters.len();
+            let len = self.data.len();
             let (pair, rev) = (c1 * len + c2, c2 * len + c1);
 
-            res += self.data.bigrams.get(pair).unwrap_or(&0.0) * dist;
-            res += self.data.bigrams.get(rev).unwrap_or(&0.0) * dist;
+            let dist = dist * 10.0;
 
-            res += self.data.skipgrams.get(pair).unwrap_or(&0.0) * dist * dsfb_ratio;
-            res += self.data.skipgrams.get(rev).unwrap_or(&0.0) * dist * dsfb_ratio;
+            let bp = self.data.bigrams().get(pair).copied().unwrap_or_default();
+            let br = self.data.bigrams().get(rev).copied().unwrap_or_default();
 
-            res += self.data.skipgrams2.get(pair).unwrap_or(&0.0) * dist * dsfb_ratio2;
-            res += self.data.skipgrams2.get(rev).unwrap_or(&0.0) * dist * dsfb_ratio2;
+            let sp = self.data.skipgrams().get(pair).copied().unwrap_or_default();
+            let br = self.data.skipgrams().get(rev).copied().unwrap_or_default();
 
-            res += self.data.skipgrams3.get(pair).unwrap_or(&0.0) * dist * dsfb_ratio3;
-            res += self.data.skipgrams3.get(rev).unwrap_or(&0.0) * dist * dsfb_ratio3;
+            let s2p = self
+                .data
+                .skipgrams2()
+                .get(pair)
+                .copied()
+                .unwrap_or_default();
+            let s2r = self.data.skipgrams2().get(rev).copied().unwrap_or_default();
+
+            let s3p = self
+                .data
+                .skipgrams3()
+                .get(pair)
+                .copied()
+                .unwrap_or_default();
+            let s3r = self.data.skipgrams3().get(rev).copied().unwrap_or_default();
+
+            res += (bp as f64) * dist;
+            res += (br as f64) * dist;
+
+            res += (sp as f64 * dsfb_ratio) * dist;
+            res += (br as f64 * dsfb_ratio) * dist;
+
+            res += (s2p as f64 * dsfb_ratio2) * dist;
+            res += (s2r as f64 * dsfb_ratio2) * dist;
+
+            res += (s3p as f64 * dsfb_ratio3) * dist;
+            res += (s3r as f64 * dsfb_ratio3) * dist;
         }
 
-        res * self.weights.fspeed
+        (res * self.weights.fspeed) as i64
     }
 
     #[allow(dead_code)]
-    pub(crate) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> f64 {
+    pub(crate) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> i64 {
         layout.swap_pair(swap);
         let score = self.score_with_precision(layout, self.trigram_precision);
         layout.swap_pair(swap);
@@ -75,10 +103,10 @@ impl LayoutGeneration {
     pub(crate) fn best_swap(
         &self,
         layout: &mut FastLayout,
-        current_best_score: Option<f64>,
+        current_best_score: Option<i64>,
         possible_swaps: &[PosPair],
-    ) -> (Option<PosPair>, f64) {
-        let mut best_score = current_best_score.unwrap_or(f64::MIN / 2.0);
+    ) -> (Option<PosPair>, i64) {
+        let mut best_score = current_best_score.unwrap_or(SMALLEST_SCORE);
         let mut best_swap = None;
 
         for swap in possible_swaps.iter() {
@@ -99,7 +127,7 @@ impl LayoutGeneration {
         mut layout: FastLayout,
         possible_swaps: &[PosPair],
     ) -> FastLayout {
-        let mut current_best_score = f64::MIN / 2.0;
+        let mut current_best_score = SMALLEST_SCORE;
 
         while let (Some(best_swap), new_score) =
             self.best_swap(&mut layout, Some(current_best_score), possible_swaps)
@@ -119,7 +147,7 @@ impl LayoutGeneration {
     // }
 
     #[allow(dead_code)]
-    pub(crate) fn usage_score(&self, layout: &FastLayout) -> f64 {
+    pub(crate) fn usage_score(&self, layout: &FastLayout) -> i64 {
         Finger::FINGERS
             .into_iter()
             .map(|f| self.finger_usage(layout, f))
@@ -127,7 +155,7 @@ impl LayoutGeneration {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn fspeed_score(&self, layout: &FastLayout) -> f64 {
+    pub(crate) fn fspeed_score(&self, layout: &FastLayout) -> i64 {
         Finger::FINGERS
             .into_iter()
             .map(|f| self.finger_fspeed(layout, f))

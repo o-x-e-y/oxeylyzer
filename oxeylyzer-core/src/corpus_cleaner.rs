@@ -380,43 +380,44 @@ mod tests {
 
     fn _gen_save_data(name: &str, cleaner: &CorpusCleaner) {
         let data = crate::data::Data::from_path(
-            format!("../corpora/{name}"),
-            &format!("{name}_no_space"),
+            format!("../static/text/{name}"),
+            &format!("{name}"),
             cleaner,
         )
         .expect("couldn't create data:");
 
-        data.save("../data").expect("couldn't save data:");
+        data.save("../static/language_data_new/")
+            .expect("couldn't save data:");
     }
 
-    // #[test]
+    #[test]
     fn _generate_data() {
-        let cleaner_ru = CorpusCleaner::builder()
-            .with_chars("абвгдеёжзийклмнопрстуфхцчшщъыьэюя".chars())
-            .qwerty_punctuation_mappings(true)
-            .normalize_misc_punctuation(true)
-            // .with_chars([' '])
-            .build();
+        // let cleaner_ru = CorpusCleaner::builder()
+        //     .with_chars("абвгдеёжзийклмнопрстуфхцчшщъыьэюя".chars())
+        //     .qwerty_punctuation_mappings(true)
+        //     .normalize_misc_punctuation(true)
+        //     // .with_chars([' '])
+        //     .build();
 
-        _gen_save_data("russian", &cleaner_ru);
+        // _gen_save_data("russian", &cleaner_ru);
 
-        let cleaner_de = CorpusCleaner::builder()
-            .with_chars("abcdefghijklmnopqrstuvwxyzäöüß".chars())
-            .qwerty_punctuation_mappings(true)
-            .normalize_misc_punctuation(true)
-            // .with_chars([' '])
-            .build();
+        // let cleaner_de = CorpusCleaner::builder()
+        //     .with_chars("abcdefghijklmnopqrstuvwxyzäöüß".chars())
+        //     .qwerty_punctuation_mappings(true)
+        //     .normalize_misc_punctuation(true)
+        //     // .with_chars([' '])
+        //     .build();
 
-        _gen_save_data("german", &cleaner_de);
+        // _gen_save_data("german", &cleaner_de);
 
-        let cleaner_fr = CorpusCleaner::builder()
-            .with_chars("abcdefghijklmnopqrstuvwxyzéàçœâêîôûèìòùáíóúäëïöü".chars())
-            .qwerty_punctuation_mappings(true)
-            .normalize_misc_punctuation(true)
-            // .with_chars([' '])
-            .build();
+        // let cleaner_fr = CorpusCleaner::builder()
+        //     .with_chars("abcdefghijklmnopqrstuvwxyzéàçœâêîôûèìòùáíóúäëïöü".chars())
+        //     .qwerty_punctuation_mappings(true)
+        //     .normalize_misc_punctuation(true)
+        //     // .with_chars([' '])
+        //     .build();
 
-        _gen_save_data("french", &cleaner_fr);
+        // _gen_save_data("french", &cleaner_fr);
 
         let cleaner_no = CorpusCleaner::builder()
             .with_chars("abcdefghijklmnopqrstuvwxyzåøæ".chars())
@@ -426,39 +427,39 @@ mod tests {
             .build();
 
         _gen_save_data("bokmal", &cleaner_no);
-        _gen_save_data("nynorsk", &cleaner_no);
+        // _gen_save_data("nynorsk", &cleaner_no);
 
-        let cleaner_it = CorpusCleaner::builder()
-            .with_chars("abcdefghijklmnopqrstuvwxyz".chars())
-            .with_dead_key(
-                [('à', 'a'), ('è', 'e'), ('ì', 'i'), ('ò', 'o'), ('ù', 'u')],
-                '*',
-            )
-            .qwerty_punctuation_mappings(true)
-            .normalize_misc_punctuation(true)
-            // .with_chars([' '])
-            .build();
+        // let cleaner_it = CorpusCleaner::builder()
+        //     .with_chars("abcdefghijklmnopqrstuvwxyz".chars())
+        //     .with_dead_key(
+        //         [('à', 'a'), ('è', 'e'), ('ì', 'i'), ('ò', 'o'), ('ù', 'u')],
+        //         '*',
+        //     )
+        //     .qwerty_punctuation_mappings(true)
+        //     .normalize_misc_punctuation(true)
+        //     // .with_chars([' '])
+        //     .build();
 
-        _gen_save_data("italian", &cleaner_it);
+        // _gen_save_data("italian", &cleaner_it);
 
-        let cleaner_en = CorpusCleaner::builder()
-            .with_chars("abcdefghijklmnopqrstuvwxyz".chars())
-            .qwerty_punctuation_mappings(true)
-            .normalize_misc_punctuation(true)
-            // .with_chars([' '])
-            .build();
+        // let cleaner_en = CorpusCleaner::builder()
+        //     .with_chars("abcdefghijklmnopqrstuvwxyz".chars())
+        //     .qwerty_punctuation_mappings(true)
+        //     .normalize_misc_punctuation(true)
+        //     // .with_chars([' '])
+        //     .build();
 
-        _gen_save_data("english", &cleaner_en);
-        _gen_save_data("dutch", &cleaner_en);
+        // _gen_save_data("shai", &cleaner_en);
+        // _gen_save_data("dutch", &cleaner_en);
 
-        let cleaner_sw = CorpusCleaner::builder()
-            .with_chars("abcdefghijklmnopqrstuvwxyzäåö".chars())
-            .qwerty_punctuation_mappings(true)
-            .normalize_misc_punctuation(true)
-            // .with_chars([' '])
-            .build();
+        // let cleaner_sw = CorpusCleaner::builder()
+        //     .with_chars("abcdefghijklmnopqrstuvwxyzäåö".chars())
+        //     .qwerty_punctuation_mappings(true)
+        //     .normalize_misc_punctuation(true)
+        //     // .with_chars([' '])
+        //     .build();
 
-        _gen_save_data("finnish", &cleaner_sw);
-        _gen_save_data("swedish", &cleaner_sw);
+        // _gen_save_data("finnish", &cleaner_sw);
+        // _gen_save_data("swedish", &cleaner_sw);
     }
 }
