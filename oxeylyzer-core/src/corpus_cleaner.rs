@@ -390,7 +390,7 @@ mod tests {
             .expect("couldn't save data:");
     }
 
-    #[test]
+    // #[test]
     fn _generate_data() {
         // let cleaner_ru = CorpusCleaner::builder()
         //     .with_chars("абвгдеёжзийклмнопрстуфхцчшщъыьэюя".chars())
