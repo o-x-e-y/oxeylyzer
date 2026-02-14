@@ -77,7 +77,8 @@ impl Repl {
 
     pub fn rank(&self) {
         for (name, layout) in self.saved.iter() {
-            println!("{:10}{}", format!("{:.3}:", layout.score), name);
+            let score = (layout.score as f64) / (self.layout_gen.data.char_total as f64);
+            println!("{:10}{}", format!("{:.3}:", score), name);
         }
     }
 
@@ -110,8 +111,9 @@ impl Repl {
             let mut new_name = self
                 .layout_gen
                 .data
-                .char_mapping
-                .as_str(new_name_bytes.as_slice())
+                .mapping
+                .map_us(&new_name_bytes)
+                .collect::<String>()
                 .replace('*', "");
 
             new_name.push_str(format!("{}", i).as_str());
@@ -137,7 +139,7 @@ impl Repl {
             .open(format!("static/layouts/{}/{}.kb", self.language, new_name))
             .map_err(|e| e.to_string())?;
 
-        let layout_formatted = layout.formatted_string(&self.layout_gen.data.char_mapping);
+        let layout_formatted = layout.formatted_string(&self.layout_gen.data.mapping);
         println!("saved {}\n{}", new_name, layout_formatted);
         f.write_all(layout_formatted.as_bytes()).unwrap();
 
@@ -151,7 +153,7 @@ impl Repl {
 
     pub fn analyze(&self, layout: &FastLayout) {
         let stats = self.layout_gen.get_layout_stats(layout);
-        let score = if layout.score == 0.000 {
+        let score = if layout.score == 0 {
             self.layout_gen.score(layout)
         } else {
             layout.score
@@ -159,7 +161,7 @@ impl Repl {
 
         let layout_str = heatmap_string(&self.layout_gen.data, layout);
 
-        println!("{}\n{}\nScore: {:.3}", layout_str, stats, score);
+        // println!("{}\n{}\nScore: {:.3}", layout_str, stats, score);
     }
 
     pub fn compare_name(&self, name1: &str, name2: &str) {
@@ -200,75 +202,75 @@ impl Repl {
         let ts1 = s1.trigram_stats;
         let ts2 = s2.trigram_stats;
         println!(
-            concat!(
-                "Sfb:                {: <11} Sfb:                {:.3}%\n",
-                "Dsfb:               {: <11} Dsfb:               {:.3}%\n",
-                "Finger Speed:       {: <11} Finger Speed:       {:.3}\n",
-                "Scissors:           {: <11} Scissors:           {:.3}%\n",
-                "Lsbs:               {: <11} Lsbs:               {:.3}%\n",
-                "Pinky Ring Bigrams: {: <11} Pinky Ring Bigrams: {:.3}%\n\n",
-                "Inrolls:            {: <11} Inrolls:            {:.2}%\n",
-                "Outrolls:           {: <11} Outrolls:           {:.2}%\n",
-                "Total Rolls:        {: <11} Total Rolls:        {:.2}%\n",
-                "Onehands:           {: <11} Onehands:           {:.3}%\n\n",
-                "Alternates:         {: <11} Alternates:         {:.2}%\n",
-                "Alternates Sfs:     {: <11} Alternates Sfs:     {:.2}%\n",
-                "Total Alternates:   {: <11} Total Alternates:   {:.2}%\n\n",
-                "Redirects:          {: <11} Redirects:          {:.3}%\n",
-                "Redirects Sfs:      {: <11} Redirects Sfs:      {:.3}%\n",
-                "Bad Redirects:      {: <11} Bad Redirects:      {:.3}%\n",
-                "Bad Redirects Sfs:  {: <11} Bad Redirects Sfs:  {:.3}%\n",
-                "Total Redirects:    {: <11} Total Redirects:    {:.3}%\n\n",
-                "Bad Sfbs:           {: <11} Bad Sfbs:           {:.3}%\n",
-                "Sft:                {: <11} Sft:                {:.3}%\n\n",
-                "Score:              {: <11} Score:              {:.3}\n"
-            ),
-            format!("{:.3}%", s1.sfb * 100.0),
-            s2.sfb * 100.0,
-            format!("{:.3}%", s1.dsfb * 100.0),
-            s2.dsfb * 100.0,
-            format!("{:.3}", s1.fspeed * 10.0),
-            s2.fspeed * 10.0,
-            format!("{:.3}%", s1.scissors * 100.0),
-            s2.scissors * 100.0,
-            format!("{:.3}%", s1.lsbs * 100.0),
-            s2.lsbs * 100.0,
-            format!("{:.3}%", s1.pinky_ring * 100.0),
-            s2.pinky_ring * 100.0,
-            format!("{:.2}%", ts1.inrolls * 100.0),
-            ts2.inrolls * 100.0,
-            format!("{:.2}%", ts1.outrolls * 100.0),
-            ts2.outrolls * 100.0,
-            format!("{:.2}%", (ts1.inrolls + ts1.outrolls) * 100.0),
-            (ts2.inrolls + ts2.outrolls) * 100.0,
-            format!("{:.3}%", ts1.onehands * 100.0),
-            ts2.onehands * 100.0,
-            format!("{:.2}%", ts1.alternates * 100.0),
-            ts2.alternates * 100.0,
-            format!("{:.2}%", ts1.alternates_sfs * 100.0),
-            ts2.alternates_sfs * 100.0,
-            format!("{:.2}%", (ts1.alternates + ts1.alternates_sfs) * 100.0),
-            (ts2.alternates + ts2.alternates_sfs) * 100.0,
-            format!("{:.3}%", ts1.redirects * 100.0),
-            ts2.redirects * 100.0,
-            format!("{:.3}%", ts1.redirects_sfs * 100.0),
-            ts2.redirects_sfs * 100.0,
-            format!("{:.3}%", ts1.bad_redirects * 100.0),
-            ts2.bad_redirects * 100.0,
-            format!("{:.3}%", ts1.bad_redirects_sfs * 100.0),
-            ts2.bad_redirects_sfs * 100.0,
-            format!(
-                "{:.3}%",
-                (ts1.redirects + ts1.redirects_sfs + ts1.bad_redirects + ts1.bad_redirects_sfs)
-                    * 100.0
-            ),
-            (ts2.redirects + ts2.redirects_sfs + ts2.bad_redirects + ts2.bad_redirects_sfs) * 100.0,
-            format!("{:.3}%", ts1.bad_sfbs * 100.0),
-            ts2.bad_sfbs * 100.0,
-            format!("{:.3}%", ts1.sfts * 100.0),
-            ts2.sfts * 100.0,
-            format!("{:.3}", l1.score),
-            l2.score
+            // concat!(
+            //     "Sfb:                {: <11} Sfb:                {:.3}%\n",
+            //     "Dsfb:               {: <11} Dsfb:               {:.3}%\n",
+            //     "Finger Speed:       {: <11} Finger Speed:       {:.3}\n",
+            //     "Scissors:           {: <11} Scissors:           {:.3}%\n",
+            //     "Lsbs:               {: <11} Lsbs:               {:.3}%\n",
+            //     "Pinky Ring Bigrams: {: <11} Pinky Ring Bigrams: {:.3}%\n\n",
+            //     "Inrolls:            {: <11} Inrolls:            {:.2}%\n",
+            //     "Outrolls:           {: <11} Outrolls:           {:.2}%\n",
+            //     "Total Rolls:        {: <11} Total Rolls:        {:.2}%\n",
+            //     "Onehands:           {: <11} Onehands:           {:.3}%\n\n",
+            //     "Alternates:         {: <11} Alternates:         {:.2}%\n",
+            //     "Alternates Sfs:     {: <11} Alternates Sfs:     {:.2}%\n",
+            //     "Total Alternates:   {: <11} Total Alternates:   {:.2}%\n\n",
+            //     "Redirects:          {: <11} Redirects:          {:.3}%\n",
+            //     "Redirects Sfs:      {: <11} Redirects Sfs:      {:.3}%\n",
+            //     "Bad Redirects:      {: <11} Bad Redirects:      {:.3}%\n",
+            //     "Bad Redirects Sfs:  {: <11} Bad Redirects Sfs:  {:.3}%\n",
+            //     "Total Redirects:    {: <11} Total Redirects:    {:.3}%\n\n",
+            //     "Bad Sfbs:           {: <11} Bad Sfbs:           {:.3}%\n",
+            //     "Sft:                {: <11} Sft:                {:.3}%\n\n",
+            //     "Score:              {: <11} Score:              {:.3}\n"
+            // ),
+            // format!("{:.3}%", s1.sfb * 100.0),
+            // s2.sfb * 100.0,
+            // format!("{:.3}%", s1.dsfb * 100.0),
+            // s2.dsfb * 100.0,
+            // format!("{:.3}", s1.fspeed * 10.0),
+            // s2.fspeed * 10.0,
+            // format!("{:.3}%", s1.scissors * 100.0),
+            // s2.scissors * 100.0,
+            // format!("{:.3}%", s1.lsbs * 100.0),
+            // s2.lsbs * 100.0,
+            // format!("{:.3}%", s1.pinky_ring * 100.0),
+            // s2.pinky_ring * 100.0,
+            // format!("{:.2}%", ts1.inrolls * 100.0),
+            // ts2.inrolls * 100.0,
+            // format!("{:.2}%", ts1.outrolls * 100.0),
+            // ts2.outrolls * 100.0,
+            // format!("{:.2}%", (ts1.inrolls + ts1.outrolls) * 100.0),
+            // (ts2.inrolls + ts2.outrolls) * 100.0,
+            // format!("{:.3}%", ts1.onehands * 100.0),
+            // ts2.onehands * 100.0,
+            // format!("{:.2}%", ts1.alternates * 100.0),
+            // ts2.alternates * 100.0,
+            // format!("{:.2}%", ts1.alternates_sfs * 100.0),
+            // ts2.alternates_sfs * 100.0,
+            // format!("{:.2}%", (ts1.alternates + ts1.alternates_sfs) * 100.0),
+            // (ts2.alternates + ts2.alternates_sfs) * 100.0,
+            // format!("{:.3}%", ts1.redirects * 100.0),
+            // ts2.redirects * 100.0,
+            // format!("{:.3}%", ts1.redirects_sfs * 100.0),
+            // ts2.redirects_sfs * 100.0,
+            // format!("{:.3}%", ts1.bad_redirects * 100.0),
+            // ts2.bad_redirects * 100.0,
+            // format!("{:.3}%", ts1.bad_redirects_sfs * 100.0),
+            // ts2.bad_redirects_sfs * 100.0,
+            // format!(
+            //     "{:.3}%",
+            //     (ts1.redirects + ts1.redirects_sfs + ts1.bad_redirects + ts1.bad_redirects_sfs)
+            //         * 100.0
+            // ),
+            // (ts2.redirects + ts2.redirects_sfs + ts2.bad_redirects + ts2.bad_redirects_sfs) * 100.0,
+            // format!("{:.3}%", ts1.bad_sfbs * 100.0),
+            // ts2.bad_sfbs * 100.0,
+            // format!("{:.3}%", ts1.sfts * 100.0),
+            // ts2.sfts * 100.0,
+            // format!("{:.3}", l1.score),
+            // l2.score
         );
     }
 
@@ -277,20 +279,11 @@ impl Repl {
     }
 
     pub fn sfr_freq(&self) -> f64 {
-        let len = self.layout_gen.data.characters.len();
-        let chars = 0..len;
-        chars
-            .clone()
-            .cartesian_product(chars)
-            .filter(|(i1, i2)| i1 == i2)
-            .map(|(c1, c2)| {
-                self.layout_gen
-                    .data
-                    .bigrams
-                    .get(c1 * len + c2)
-                    .unwrap_or(&0.0)
-            })
-            .sum()
+        let total = (0..self.layout_gen.data.len() as u8)
+            .map(|u| self.layout_gen.data.get_bigram_u([u, u]))
+            .sum::<i64>();
+
+        total as f64 / self.layout_gen.data.bigram_total as f64
     }
 
     fn sfbs(&self, name: &str, top_n: usize) {
@@ -413,56 +406,56 @@ impl Repl {
                         }
                     });
             }
-            Load(l) => match (l.all, l.raw) {
-                (true, true) => {
-                    return Err("You can't currently generate all corpora as raw".into());
-                }
-                (true, _) => {
-                    for (language, config) in CorpusConfig::all() {
-                        println!("loading data for language: {language}...");
+            // Load(l) => match (l.all, l.raw) {
+            //     (true, true) => {
+            //         return Err("You can't currently generate all corpora as raw".into());
+            //     }
+            //     (true, _) => {
+            //         for (language, config) in CorpusConfig::all() {
+            //             println!("loading data for language: {language}...");
 
-                        load_text::load_data(language.as_str(), config.translator())
-                            .map_err(|e| e.to_string())?;
-                    }
-                }
-                (false, true) => {
-                    println!("loading raw data for language: {}...", l.language.display());
-                    load_text::load_raw(&l.language.display().to_string());
-                }
-                (false, false) => {
-                    let language = l
-                        .language
-                        .to_str()
-                        .ok_or_else(|| format!("Language is invalid utf8: {:?}", l.language))?;
+            //             load_text::load_data(language.as_str(), config.translator())
+            //                 .map_err(|e| e.to_string())?;
+            //         }
+            //     }
+            //     (false, true) => {
+            //         println!("loading raw data for language: {}...", l.language.display());
+            //         load_text::load_raw(&l.language.display().to_string());
+            //     }
+            //     (false, false) => {
+            //         let language = l
+            //             .language
+            //             .to_str()
+            //             .ok_or_else(|| format!("Language is invalid utf8: {:?}", l.language))?;
 
-                    let translator = CorpusConfig::new_translator(language, None);
-                    let is_raw_translator = translator.is_raw;
+            //         let translator = CorpusConfig::new_translator(language, None);
+            //         let is_raw_translator = translator.is_raw;
 
-                    println!("loading data for {}...", &language);
-                    load_text::load_data(language, translator).map_err(|e| e.to_string())?;
+            //         println!("loading data for {}...", &language);
+            //         load_text::load_data(language, translator).map_err(|e| e.to_string())?;
 
-                    if !is_raw_translator {
-                        let config = Config::with_loaded_weights();
-                        match LayoutGeneration::new(language, "static", Some(config)) {
-                            Ok(generator) => {
-                                self.language = language.into();
-                                self.layout_gen = generator;
-                                self.saved = self
-                                    .layout_gen
-                                    .load_layouts("static/layouts", language)
-                                    .map_err(|e| e.to_string())?;
+            //         if !is_raw_translator {
+            //             let config = Config::with_loaded_weights();
+            //             match LayoutGeneration::new(language, "static", Some(config)) {
+            //                 Ok(generator) => {
+            //                     self.language = language.into();
+            //                     self.layout_gen = generator;
+            //                     self.saved = self
+            //                         .layout_gen
+            //                         .load_layouts("static/layouts", language)
+            //                         .map_err(|e| e.to_string())?;
 
-                                println!(
-                                    "Set language to {}. Sfr: {:.2}%",
-                                    language,
-                                    self.sfr_freq() * 100.0
-                                );
-                            }
-                            Err(e) => return Err(e.to_string()),
-                        }
-                    }
-                }
-            },
+            //                     println!(
+            //                         "Set language to {}. Sfr: {:.2}%",
+            //                         language,
+            //                         self.sfr_freq() * 100.0
+            //                     );
+            //                 }
+            //                 Err(e) => return Err(e.to_string()),
+            //             }
+            //         }
+            //     }
+            // },
             Ngram(n) => println!("{}", get_ngram_info(&mut self.layout_gen.data, &n.ngram)),
             Reload(_) => {
                 let config = Config::with_loaded_weights();

@@ -261,7 +261,7 @@ impl LayoutGeneration {
         let config = config.unwrap_or_else(Config::with_loaded_weights);
         let data_path = base_path
             .as_ref()
-            .join("language_data_new")
+            .join("language_data")
             .join(language)
             .with_extension("json");
 

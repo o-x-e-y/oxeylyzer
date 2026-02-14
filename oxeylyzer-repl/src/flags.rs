@@ -43,11 +43,11 @@ xflags::xflags! {
         /// Lists all currently available languages.
         cmd languages langs {}
         /// Loads a corpus for a certain language.
-        cmd load {
-            required language: PathBuf
-            optional -a, --all
-            optional -r, --raw
-        }
+        // cmd load {
+        //     required language: PathBuf
+        //     optional -a, --all
+        //     optional -r, --raw
+        // }
         /// Gives information about a certain ngram. for 2 letter ones, skipgram info will be provided as well.
         cmd ngram n occ freq {
             required ngram: String
