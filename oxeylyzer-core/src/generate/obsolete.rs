@@ -49,37 +49,27 @@ impl LayoutGeneration {
             let c2 = layout.char(i2).unwrap() as usize;
 
             let len = self.data.len();
-            let (pair, rev) = (c1 * len + c2, c2 * len + c1);
+            let (idx, rev) = (c1 * len + c2, c2 * len + c1);
 
             let dist = dist * 10.0;
 
-            let bp = self.data.bigrams().get(pair).copied().unwrap_or_default();
+            let bp = self.data.bigrams().get(idx).copied().unwrap_or_default();
             let br = self.data.bigrams().get(rev).copied().unwrap_or_default();
 
-            let sp = self.data.skipgrams().get(pair).copied().unwrap_or_default();
-            let br = self.data.skipgrams().get(rev).copied().unwrap_or_default();
+            let sp = self.data.skipgrams().get(idx).copied().unwrap_or_default();
+            let sr = self.data.skipgrams().get(rev).copied().unwrap_or_default();
 
-            let s2p = self
-                .data
-                .skipgrams2()
-                .get(pair)
-                .copied()
-                .unwrap_or_default();
+            let s2p = self.data.skipgrams2().get(idx).copied().unwrap_or_default();
             let s2r = self.data.skipgrams2().get(rev).copied().unwrap_or_default();
 
-            let s3p = self
-                .data
-                .skipgrams3()
-                .get(pair)
-                .copied()
-                .unwrap_or_default();
+            let s3p = self.data.skipgrams3().get(idx).copied().unwrap_or_default();
             let s3r = self.data.skipgrams3().get(rev).copied().unwrap_or_default();
 
             res += (bp as f64) * dist;
             res += (br as f64) * dist;
 
             res += (sp as f64 * dsfb_ratio) * dist;
-            res += (br as f64 * dsfb_ratio) * dist;
+            res += (sr as f64 * dsfb_ratio) * dist;
 
             res += (s2p as f64 * dsfb_ratio2) * dist;
             res += (s2r as f64 * dsfb_ratio2) * dist;
