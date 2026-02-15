@@ -12,13 +12,15 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use crate::REPEAT_KEY;
 use crate::analyzer_data::AnalyzerData;
 use crate::data::Data;
-// use crate::char_mapping::CharMapping;
-use crate::language_data::TrigramData;
+use crate::char_mapping::CharMapping;
 use crate::layout::*;
-use crate::o2_char_mapping::CharMapping as O2CharMapping;
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::utility::*;
 use crate::weights::{Config, Weights};
+
+pub type CharacterData = Box<[f64]>;
+pub type BigramData = Box<[f64]>;
+pub type TrigramData = Box<[([u8; 3], i64)]>;
 
 const SMALLEST_SCORE: i64 = i64::MIN;
 
@@ -235,7 +237,7 @@ pub(crate) fn pinned_swaps(pins: &[usize]) -> Vec<PosPair> {
 pub struct LayoutGeneration {
     pub language: String,
     pub data: AnalyzerData,
-    pub mapping: Arc<O2CharMapping>,
+    pub mapping: Arc<CharMapping>,
     pub repeat_key: usize,
     pub chars_for_generation: [u8; 30],
     pub trigram_precision: usize,

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{data::Data, o2_char_mapping::CharMapping, weights::Weights};
+use crate::{data::Data, char_mapping::CharMapping, weights::Weights};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AnalyzerData {

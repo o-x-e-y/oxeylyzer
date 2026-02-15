@@ -3,7 +3,7 @@ use std::path::Path;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
-use oxeylyzer_core::{generate::LayoutGeneration, layout::*, load_text, rayon, weights::Config};
+use oxeylyzer_core::{generate::LayoutGeneration, layout::*, rayon, weights::Config};
 
 use crate::corpus_transposition::CorpusConfig;
 use crate::tui::*;

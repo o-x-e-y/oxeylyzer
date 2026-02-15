@@ -1,19 +1,19 @@
 use indexmap::IndexMap;
 
-use crate::REPLACEMENT_CHAR;
+use crate::{REPLACEMENT_CHAR, SHIFT_CHAR, SPACE_CHAR};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CharMapping(IndexMap<char, u8>);
 
 impl Default for CharMapping {
     fn default() -> Self {
-        let mut mapping = Self(Default::default());
+        let mut map = Self(Default::default());
 
-        mapping.push(REPLACEMENT_CHAR);
-        // mapping.push(SHIFT_CHAR);
-        // mapping.push(SPACE_CHAR);
+        map.push(REPLACEMENT_CHAR);
+        map.push(SHIFT_CHAR);
+        map.push(SPACE_CHAR);
 
-        mapping
+        map
     }
 }
 
@@ -22,80 +22,18 @@ impl CharMapping {
         Self::default()
     }
 
-    pub fn from_single(&self, u: u8) -> char {
-        match self.0.get_index(u as usize) {
-            Some((c, _)) => *c,
-            None => REPLACEMENT_CHAR,
-        }
-    }
-
-    pub fn to_single(&mut self, c: char) -> u8 {
-        if let Some(u) = self.0.get(&c) {
-            *u
-        } else {
-            let new = self.len();
-            self.0.insert(c, new);
-            new
-        }
-    }
-
-    pub fn to_bigram(&mut self, from: [char; 2]) -> [u8; 2] {
-        [self.to_single(from[0]), self.to_single(from[1])]
-    }
-
-    pub fn to_trigram(&mut self, from: [char; 3]) -> [u8; 3] {
-        [
-            self.to_single(from[0]),
-            self.to_single(from[1]),
-            self.to_single(from[2]),
-        ]
-    }
-
-    pub fn to<T>(&mut self, input: T) -> Vec<u8>
-    where
-        T: IntoIterator<Item = char>,
-    {
-        input.into_iter().map(|c| self.to_single(c)).collect()
-    }
-
-    pub fn to_single_lossy(&self, c: char) -> u8 {
-        if let Some(u) = self.0.get(&c) {
-            *u
-        } else {
-            self.len()
-        }
-    }
-
-    pub fn to_bigram_lossy(&self, from: [char; 2], char_count: usize) -> usize {
-        let c1 = self.to_single_lossy(from[0]) as usize;
-        let c2 = self.to_single_lossy(from[1]) as usize;
-        if c1 < char_count && c2 < char_count {
-            c1 * char_count + c2
-        } else {
-            u8::MAX as usize
-        }
-    }
-
-    pub fn to_trigram_lossy(&self, from: [char; 3]) -> [u8; 3] {
-        [
-            self.to_single_lossy(from[0]),
-            self.to_single_lossy(from[1]),
-            self.to_single_lossy(from[2]),
-        ]
-    }
-
-    pub fn to_lossy<T>(&self, input: T) -> Vec<u8>
-    where
-        T: IntoIterator<Item = char>,
-    {
-        input.into_iter().map(|c| self.to_single_lossy(c)).collect()
-    }
-
     pub fn push(&mut self, c: char) {
-        let new = self.len();
         if !self.0.contains_key(&c) {
-            self.0.insert(c, new);
+            self.0.insert(c, self.len() as u8);
         }
+    }
+
+    pub fn remove(&mut self, c: char) -> Option<u8> {
+        self.0.swap_remove(&c)
+    }
+
+    pub fn pop(&mut self) -> Option<(char, u8)> {
+        self.0.pop()
     }
 
     pub fn get_u(&self, c: char) -> u8 {
@@ -112,31 +50,21 @@ impl CharMapping {
         }
     }
 
-    pub fn insert<T>(&mut self, input: T)
-    where
-        T: IntoIterator<Item = char>,
-    {
-        input.into_iter().for_each(|c| self.push(c));
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 
-    pub fn as_str(&self, input: &[u8]) -> String {
-        input.iter().map(|&u| self.from_single(u)).collect()
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
-    pub fn map_cs<'a>(&'a mut self, s: &'a str) -> impl Iterator<Item = u8> + 'a {
-        s.chars().map(|c| self.to_single(c))
+    pub fn map_cs<'a>(&'a self, s: &'a str) -> impl Iterator<Item = u8> + 'a {
+        s.chars().map(|c| self.get_u(c))
     }
 
     pub fn map_us<'a>(&'a self, u: &'a [u8]) -> impl Iterator<Item = char> + 'a {
-        u.iter().map(|u| self.from_single(*u))
-    }
-
-    pub fn len(&self) -> u8 {
-        self.0.len() as u8
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
+        u.iter().map(|u| self.get_c(*u))
     }
 }
 
@@ -183,21 +111,46 @@ impl<'a> FromIterator<&'a char> for CharMapping {
 }
 
 #[cfg(test)]
+impl CharMapping {
+    pub fn to_single_lossy(&self, c: char) -> u8 {
+        let u = self.get_u(c);
+        if u != 0 { u } else { self.len() as u8 }
+    }
+
+    pub fn to_bigram_lossy(&self, from: [char; 2], char_count: usize) -> usize {
+        let c1 = self.to_single_lossy(from[0]) as usize;
+        let c2 = self.to_single_lossy(from[1]) as usize;
+        if c1 < char_count && c2 < char_count {
+            c1 * char_count + c2
+        } else {
+            u8::MAX as usize
+        }
+    }
+
+    pub fn to_trigram_lossy(&self, from: [char; 3]) -> [u8; 3] {
+        [
+            self.to_single_lossy(from[0]),
+            self.to_single_lossy(from[1]),
+            self.to_single_lossy(from[2]),
+        ]
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn to_from() {
         let mapping_s = "abcdefhgijklmnopqrstuvwxyz ";
-        let mut mapping = mapping_s.chars().collect::<CharMapping>();
+        let mapping = mapping_s.chars().collect::<CharMapping>();
 
-        assert_eq!(mapping.len() as usize, mapping_s.len() + 1);
+        assert_eq!(mapping.len(), mapping_s.len() + 3);
 
         let s = "this is epic-";
         let u = mapping.map_cs(s).collect::<Vec<_>>();
         let c = mapping.map_us(&u).collect::<String>();
 
-        // assert_eq!(c, "this is epic�")
-        assert_eq!(c, "this is epic-")
+        assert_eq!(c, "this is epic�")
     }
 }

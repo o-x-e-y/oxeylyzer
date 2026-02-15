@@ -3,7 +3,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
 
-use crate::{o2_char_mapping::CharMapping, utility::*, *};
+use crate::{char_mapping::CharMapping, utility::*, *};
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
