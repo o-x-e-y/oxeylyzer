@@ -1,5 +1,5 @@
 use glob::glob;
-// use oxeylyzer_core::translation::*;
+use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use serde::Deserialize;
 
 use std::fs::File;
@@ -13,7 +13,7 @@ struct Multiple {
     list: Vec<[String; 2]>,
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 struct OneToOne {
     pub from: String,
     to: String,
@@ -32,8 +32,6 @@ impl std::ops::Add for OneToOne {
 
 #[derive(Deserialize)]
 struct CorpusConfigLoad {
-    // source: Option<String>,
-    // #[serde(from = "OneOrMany<_>")]
     #[serde(default)]
     inherits: Vec<String>,
     #[serde(default)]
@@ -53,16 +51,17 @@ impl CorpusConfigLoad {
         let try_find_path = glob("static/corpus_configs/*/*.toml")
             .unwrap()
             .flatten()
-            .find(|stem| stem.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("")) == language);
+            .find(|stem| stem.file_stem().unwrap_or_default() == language);
+
         if let Some(path) = try_find_path {
             let res = path
-                .as_path()
                 .parent()
                 .unwrap()
                 .components()
                 .next_back()
                 .unwrap()
                 .as_os_str();
+
             Ok(PathBuf::from(res))
         } else {
             Err("Could not find a fitting config".to_string())
@@ -84,14 +83,14 @@ impl CorpusConfigLoad {
                 .join(file_name);
 
             let mut f = File::open(path)
-                .map_err(|_| "Couldn't open file because it does not exist.".to_string())?;
+                .map_err(|e| format!("Couldn't open file because it does not exist: {e}"))?;
 
             let mut buf = String::new();
             f.read_to_string(&mut buf)
-                .map_err(|_| "Toml contains non-utf8 characters, aborting...".to_string())?;
+                .map_err(|e| format!("Toml contains non-utf8 characters, aborting... {e}"))?;
 
-            toml::from_str(buf.as_str()).map_err(|_| {
-                "Toml contains invalid elements. Check the readme for what is allowed.".to_string()
+            toml::from_str(buf.as_str()).map_err(|e| {
+                format!("Toml contains invalid elements. Check the readme for what is allowed: {e}")
             })
         } else {
             Err("No config file found!".to_string())
@@ -99,8 +98,10 @@ impl CorpusConfigLoad {
     }
 }
 
+// TODO: adapt for cleaner
+#[derive(Debug, Clone, Default)]
 pub struct CorpusConfig {
-    // source_language: String,
+    // TODO: add cycle detection
     inherits: Vec<String>,
     letters_to_lowercase: String,
     punct_unshifted: OneToOne,
@@ -158,34 +159,75 @@ impl CorpusConfig {
             .collect::<Vec<_>>()
     }
 
-    pub fn new_translator(language: &str, preferred_folder: Option<&str>) -> Translator {
+    pub fn new_translator(language: &str, preferred_folder: Option<&str>) -> CorpusCleaner {
         match Self::new(language, preferred_folder) {
-            Ok(config) => config.translator(),
+            Ok(config) => config.into(),
             Err(error) => {
                 println!("{error}\nUsing a raw translator instead.");
-                Self::raw_translator()
+                CorpusCleaner::raw()
             }
         }
     }
+}
 
-    pub fn translator(self) -> Translator {
-        let mut res = Translator::new()
-            .letters_to_lowercase(&self.letters_to_lowercase)
-            .keep(&self.keep)
-            .one_to_one(&self.one_to_one.from, &self.one_to_one.to)
-            .custom_unshift(&self.punct_unshifted.from, &self.punct_unshifted.to)
-            .to_multiple_string(&self.to_multiple)
-            .build();
+impl std::ops::Add<CorpusConfig> for CorpusConfig {
+    type Output = CorpusConfig;
 
-        for inherits in self.inherits {
-            if let Ok(new) = Self::new(&inherits, None) {
-                res = res + new.translator();
+    fn add(self, rhs: CorpusConfig) -> Self::Output {
+        let inherits = self.inherits.into_iter().chain(rhs.inherits).collect();
+        let to_multiple = self
+            .to_multiple
+            .into_iter()
+            .chain(rhs.to_multiple)
+            .collect();
+        let letters_to_lowercase = self.letters_to_lowercase + &rhs.letters_to_lowercase;
+        let punct_unshifted = self.punct_unshifted + rhs.punct_unshifted;
+        let keep = self.keep + &rhs.keep;
+        let one_to_one = self.one_to_one + rhs.one_to_one;
+
+        CorpusConfig {
+            inherits,
+            letters_to_lowercase,
+            punct_unshifted,
+            keep,
+            to_multiple,
+            one_to_one,
+        }
+    }
+}
+
+impl From<CorpusConfig> for CorpusCleaner {
+    fn from(mut config: CorpusConfig) -> Self {
+        for inherits in config.inherits.clone() {
+            if let Ok(new) = CorpusConfig::new(&inherits, None) {
+                config = config + new;
             }
         }
-        res
-    }
 
-    pub fn raw_translator() -> Translator {
-        Translator::raw(true)
+        // TODO: add proper dead key mapping, custom shift and repeat char
+        CorpusCleaner::builder()
+            .with_chars(config.letters_to_lowercase.chars())
+            .with_exact_mappings(config.keep.chars())
+            .with_char_mappings(
+                config
+                    .one_to_one
+                    .from
+                    .chars()
+                    .zip(config.one_to_one.to.chars()),
+            )
+            .with_uppercase_mappings(
+                config
+                    .punct_unshifted
+                    .to
+                    .chars()
+                    .zip(config.punct_unshifted.from.chars()),
+            )
+            .with_mappings(
+                config
+                    .to_multiple
+                    .into_iter()
+                    .map(|(c, s)| (c, s.chars().collect())),
+            )
+            .build()
     }
 }
