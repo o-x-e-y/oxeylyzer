@@ -85,7 +85,7 @@ impl CorpusCleanerBuilder {
         if self.chars.insert(c) && !c.is_uppercase() {
             let upper = c.to_uppercase();
 
-            if upper.len() == 1 {
+            if upper.clone().count() == 1 {
                 let cu = upper
                     .into_iter()
                     .next()
