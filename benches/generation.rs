@@ -24,7 +24,7 @@ fn main() -> std::io::Result<()> {
         .filter_map(|(i, swap)| ((i + 17) % 50 == 0).then_some(swap))
         .collect::<Vec<_>>();
 
-    let languages = ["english", "bokmal", "german", "hebrew", "russian", "tr"];
+    let languages = ["english", "bokmal"];
     let corpora = ["bokmal", "hebrew", "shai"];
 
     let mut bench = Bench::new(BenchConfig::from_args()?);

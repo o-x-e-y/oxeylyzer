@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn trigram_combinations() {
-        let dvorak_bytes = CON.to_lossy("',.pyfgcrlaoeuidhtns;qjkxbmwvz".chars());
+        let dvorak_bytes = CON.map_cs("',.pyfgcrlaoeuidhtns;qjkxbmwvz").collect::<Vec<_>>();
         let dvorak = FastLayout::try_from(dvorak_bytes.as_slice()).expect("couldn't create dvorak");
 
         assert_eq!(
