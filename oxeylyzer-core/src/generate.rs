@@ -11,8 +11,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::REPEAT_KEY;
 use crate::analyzer_data::AnalyzerData;
-use crate::data::Data;
 use crate::char_mapping::CharMapping;
+use crate::data::Data;
 use crate::layout::*;
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::utility::*;
