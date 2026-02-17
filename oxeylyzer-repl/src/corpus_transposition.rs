@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     convert::Infallible,
     fs::File,
     io::Read,
@@ -75,7 +76,6 @@ impl std::ops::Add for OneToOne {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct CorpusConfig {
-    // TODO: add cycle detection
     inherits: Vec<String>,
     #[serde_as(as = "StringAsCharArray")]
     letters_to_lowercase: Vec<char>,
@@ -85,6 +85,8 @@ pub struct CorpusConfig {
     multiple: Vec<(char, String)>,
     one_to_one: OneToOne,
     punct_unshifted: OneToOne,
+    #[serde(skip)]
+    inherits_visited: HashSet<String>,
 }
 
 impl CorpusConfig {
@@ -190,6 +192,11 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
         let keep = self.keep.into_iter().chain(rhs.keep).collect();
         let punct_unshifted = self.punct_unshifted + rhs.punct_unshifted;
         let one_to_one = self.one_to_one + rhs.one_to_one;
+        let inherits_visited = self
+            .inherits_visited
+            .into_iter()
+            .chain(rhs.inherits_visited)
+            .collect();
 
         CorpusConfig {
             inherits,
@@ -198,6 +205,7 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
             keep,
             multiple,
             one_to_one,
+            inherits_visited,
         }
     }
 }
@@ -205,7 +213,10 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
 impl From<CorpusConfig> for CorpusCleaner {
     fn from(mut config: CorpusConfig) -> Self {
         for inherits in config.inherits.clone() {
-            if let Ok(new) = CorpusConfig::load(&inherits, None) {
+            if !config.inherits_visited.contains(&inherits)
+                && let Ok(new) = CorpusConfig::load(&inherits, None)
+            {
+                config.inherits_visited.insert(inherits);
                 config = config + new;
             }
         }
@@ -245,7 +256,7 @@ mod tests {
 
         let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
         let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
-        assert_eq!(config1.inherits, vec!["dofsmie"]);
+        assert_eq!(config1.inherits, vec!["dofsmie".to_string()]);
         assert_eq!(config2.inherits, vec!["yeah"]);
 
         let config = config1 + config2;
