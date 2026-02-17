@@ -234,6 +234,8 @@ impl From<CorpusConfig> for CorpusCleaner {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
 
     #[test]
@@ -374,6 +376,45 @@ mod tests {
                     c.to_lowercase().to_string(),
                     "Corpus config for lang {lang} has keep rule for {c} which has an uppercase"
                 );
+            });
+
+            let multiple_map = config.multiple.into_iter().collect::<HashMap<_, _>>();
+
+            multiple_map.iter().for_each(|(c, str)| {
+                let lower = c.to_lowercase().collect::<Vec<char>>();
+                let upper = c.to_uppercase().collect::<Vec<char>>();
+
+                if lower != upper && lower.len() == 1 && upper.len() == 1 {
+                    let (lower, upper) = (lower[0], upper[0]);
+
+                    let lower_to = multiple_map.get(&lower);
+                    let upper_to = multiple_map.get(&upper);
+
+                    assert!(
+                        lower_to.is_some(),
+                        concat!(
+                            "multiple mapping for language {} has character '{}' mapped to ",
+                            "\"{}\", but no such mapping exists for the lowercase variant {}",
+                        ),
+                        lang,
+                        upper,
+                        str,
+                        lower
+                    );
+
+                    assert!(
+                        upper_to.is_some(),
+                        concat!(
+                            "multiple mapping for language {} has character '{}' mapped to ",
+                            "\"{}\", but no such mapping exists for the uppercase variant {}.\n",
+                            "Did you mean to enable `uppercase_versions = true`?"
+                        ),
+                        lang,
+                        lower,
+                        str,
+                        upper
+                    );
+                }
             });
         }
     }

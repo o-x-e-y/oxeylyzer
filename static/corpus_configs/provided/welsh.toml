@@ -1,3 +1,5 @@
 inherits = ["default", "welsh_pure"]
 
-keep = "ΔⳐ"
+[one_to_one]
+from = "ΔⳐ"
+to = "ΔⳐ"
