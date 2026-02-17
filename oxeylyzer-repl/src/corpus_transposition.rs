@@ -20,21 +20,21 @@ serde_conv!(
         Multiple::default()
     },
     |multiple: Multiple| -> Result<_, Infallible> {
-        let mut res = Vec::new();
-
-        for (from, to) in multiple.list {
-            res.push((from, to.clone()));
-
-            if multiple.uppercase_versions {
-                let mut upper = from.to_uppercase();
-                if upper.clone().count() == 1 {
-                    let upper_c = upper.next().unwrap();
-                    res.push((upper_c, to))
+        let vec = multiple
+            .list
+            .into_iter()
+            .map(|(from, to)| {
+                if multiple.uppercase_versions && from.to_uppercase().count() == 1 {
+                    let upper = from.to_uppercase().next().unwrap();
+                    vec![(from, to.clone()), (upper, to)]
+                } else {
+                    vec![(from, to)]
                 }
-            }
-        }
+            })
+            .flatten()
+            .collect::<Vec<_>>();
 
-        Ok(res)
+        Ok(vec)
     }
 );
 
