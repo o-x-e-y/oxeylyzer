@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
 
-#[derive(Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 struct Multiple {
     #[serde(default)]
     uppercase_versions: bool,
@@ -30,7 +30,7 @@ impl std::ops::Add for OneToOne {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct CorpusConfigLoad {
     #[serde(default)]
     inherits: Vec<String>,
@@ -111,14 +111,8 @@ pub struct CorpusConfig {
 }
 
 impl CorpusConfig {
-    pub fn new(language: &str, preferred_folder: Option<&str>) -> Result<Self, String> {
-        let loaded = CorpusConfigLoad::new(language, preferred_folder)?;
-        // let inherits = match loaded.inherits {
-        //     Some(Single(v)) => vec![v],
-        //     Some(Multiple(l)) => l,
-        //     None => Vec::new()
-        // };
-        Ok(Self {
+    fn new(loaded: CorpusConfigLoad) -> Self {
+        Self {
             // source_language: loaded.source.unwrap_or_else(|| language.to_string()),
             inherits: loaded.inherits,
             letters_to_lowercase: loaded.letters_to_lowercase,
@@ -126,7 +120,13 @@ impl CorpusConfig {
             keep: loaded.keep,
             to_multiple: Self::get_to_multiple(loaded.multiple),
             one_to_one: loaded.one_to_one,
-        })
+        }
+    }
+
+    pub fn load(language: &str, preferred_folder: Option<&str>) -> Result<Self, String> {
+        let loaded = CorpusConfigLoad::new(language, preferred_folder)?;
+
+        Ok(Self::new(loaded))
     }
 
     fn get_to_multiple(multiple: Multiple) -> Vec<(char, String)> {
@@ -154,13 +154,13 @@ impl CorpusConfig {
             .flatten()
             .filter(|pb| pb.is_dir())
             .flat_map(|pb| pb.file_name().unwrap().to_os_string().into_string())
-            .map(|l| (l.clone(), Self::new(&l, None)))
+            .map(|l| (l.clone(), Self::load(&l, None)))
             .flat_map(|(l, c)| c.ok().map(|cc| (l, cc)))
             .collect::<Vec<_>>()
     }
 
     pub fn new_translator(language: &str, preferred_folder: Option<&str>) -> CorpusCleaner {
-        match Self::new(language, preferred_folder) {
+        match Self::load(language, preferred_folder) {
             Ok(config) => config.into(),
             Err(error) => {
                 println!("{error}\nUsing a raw translator instead.");
@@ -199,7 +199,7 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
 impl From<CorpusConfig> for CorpusCleaner {
     fn from(mut config: CorpusConfig) -> Self {
         for inherits in config.inherits.clone() {
-            if let Ok(new) = CorpusConfig::new(&inherits, None) {
+            if let Ok(new) = CorpusConfig::load(&inherits, None) {
                 config = config + new;
             }
         }
@@ -229,5 +229,41 @@ impl From<CorpusConfig> for CorpusCleaner {
                     .map(|(c, s)| (c, s.chars().collect())),
             )
             .build()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_config() {
+        let config = r#"
+            inherits = ["dofsmie"]
+            
+            letters_to_lowercase = "yeah"
+            keep = "keep this"
+            
+            [multiple]
+            list = [
+              ["…", "..."],
+            ]
+            
+            [punct_unshifted]
+            from = "from"
+            to = "to"
+            
+            [one_to_one]
+            from = "from"
+            to = "to"
+        "#;
+
+        let loaded = toml::from_str::<CorpusConfigLoad>(config).unwrap();
+
+        println!("{loaded:#?}");
+
+        let config = CorpusConfig::new(loaded);
+
+        println!("\n--------------------------\n{config:#?}");
     }
 }
