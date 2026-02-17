@@ -1,3 +1,3 @@
 inherits = ["default_punct"]
 
-keep = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
+letters_to_lowercase = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"

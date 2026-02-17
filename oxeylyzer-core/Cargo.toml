@@ -22,7 +22,7 @@ ahash = { version = "0.8.11", features = ["serde"] }
 libdof = { workspace = true }
 sliding_window_alt = "0.1.2"
 thiserror = "2.0"
-serde_with = "3.16"
+serde_with = { workspace = true }
 fxhash = "0.2"
 num_cpus = "1.17"
 

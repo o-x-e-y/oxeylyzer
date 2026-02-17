@@ -41,6 +41,18 @@ impl CorpusCleaner {
     pub fn raw() -> Self {
         Self::default()
     }
+
+    pub fn shift_key(&self) -> Option<char> {
+        self.shift_key
+    }
+
+    pub fn repeat_key(&self) -> bool {
+        self.repeat_key
+    }
+
+    pub fn is_raw(&self) -> bool {
+        self.raw
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -73,7 +85,7 @@ impl CorpusCleanerBuilder {
         if self.chars.insert(c) && !c.is_uppercase() {
             let upper = c.to_uppercase();
 
-            if upper.len() == 1 {
+            if upper.clone().count() == 1 {
                 let cu = upper
                     .into_iter()
                     .next()
@@ -124,6 +136,14 @@ impl CorpusCleanerBuilder {
         mappings
             .into_iter()
             .for_each(|(from, to)| self.with_mapping((from, vec![to])));
+
+        self
+    }
+
+    pub fn with_exact_mappings(&mut self, chars: impl IntoIterator<Item = char>) -> &mut Self {
+        chars
+            .into_iter()
+            .for_each(|c| self.with_mapping((c, vec![c])));
 
         self
     }
