@@ -104,8 +104,23 @@ impl CorpusConfigLoad {
     }
 }
 
+impl From<CorpusConfigLoad> for CorpusConfig {
+    fn from(loaded: CorpusConfigLoad) -> Self {
+        Self {
+            // source_language: loaded.source.unwrap_or_else(|| language.to_string()),
+            inherits: loaded.inherits,
+            letters_to_lowercase: loaded.letters_to_lowercase,
+            punct_unshifted: loaded.punct_unshifted,
+            keep: loaded.keep,
+            to_multiple: Self::get_to_multiple(loaded.multiple),
+            one_to_one: loaded.one_to_one,
+        }
+    }
+}
+
 // TODO: adapt for cleaner
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(from = "CorpusConfigLoad")]
 pub struct CorpusConfig {
     // TODO: add cycle detection
     inherits: Vec<String>,
@@ -118,15 +133,7 @@ pub struct CorpusConfig {
 
 impl CorpusConfig {
     fn new(loaded: CorpusConfigLoad) -> Self {
-        Self {
-            // source_language: loaded.source.unwrap_or_else(|| language.to_string()),
-            inherits: loaded.inherits,
-            letters_to_lowercase: loaded.letters_to_lowercase,
-            punct_unshifted: loaded.punct_unshifted,
-            keep: loaded.keep,
-            to_multiple: Self::get_to_multiple(loaded.multiple),
-            one_to_one: loaded.one_to_one,
-        }
+        loaded.into()
     }
 
     pub fn load(language: &str, preferred_folder: Option<&str>) -> Result<Self, String> {
