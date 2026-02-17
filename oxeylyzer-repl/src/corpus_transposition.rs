@@ -1,17 +1,44 @@
 use std::{convert::Infallible, fs::File, io::Read, path::PathBuf};
 
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, serde_conv};
 
 serde_conv!(
     StringAsCharArray,
     Vec<char>,
-    |trigram: &[char]| String::from_iter(trigram),
-    |value: String| -> Result<_, Infallible> { Ok(value.chars().collect::<Vec<_>>()) }
+    |chars: &[char]| String::from_iter(chars),
+    |string: String| -> Result<_, Infallible> { Ok(string.chars().collect::<Vec<_>>()) }
 );
 
-#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+serde_conv!(
+    MultipleAsVec,
+    Vec<(char, String)>,
+    |_: &[(char, String)]| {
+        unimplemented!("Serializing a Multiple struct is currently unsupported");
+        #[allow(unused)]
+        Multiple::default()
+    },
+    |multiple: Multiple| -> Result<_, Infallible> {
+        let mut res = Vec::new();
+
+        for (from, to) in multiple.list {
+            res.push((from, to.clone()));
+
+            if multiple.uppercase_versions {
+                let mut upper = from.to_uppercase();
+                if upper.clone().count() == 1 {
+                    let upper_c = upper.next().unwrap();
+                    res.push((upper_c, to))
+                }
+            }
+        }
+
+        Ok(res)
+    }
+);
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 struct Multiple {
     #[serde(default)]
     uppercase_versions: bool,
@@ -38,43 +65,25 @@ impl std::ops::Add for OneToOne {
     }
 }
 
+// TODO: adapt for cleaner
 #[serde_as]
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
-struct CorpusConfigLoad {
+pub struct CorpusConfig {
+    // TODO: add cycle detection
     inherits: Vec<String>,
     #[serde_as(as = "StringAsCharArray")]
     letters_to_lowercase: Vec<char>,
     #[serde_as(as = "StringAsCharArray")]
     keep: Vec<char>,
-    multiple: Multiple,
+    #[serde_as(as = "MultipleAsVec")]
+    multiple: Vec<(char, String)>,
     one_to_one: OneToOne,
     punct_unshifted: OneToOne,
 }
 
-impl CorpusConfigLoad {
-    fn check_for_language(language: &str) -> Result<PathBuf, String> {
-        let try_find_path = glob::glob("static/corpus_configs/*/*.toml")
-            .unwrap()
-            .flatten()
-            .find(|stem| stem.file_stem().unwrap_or_default() == language);
-
-        if let Some(path) = try_find_path {
-            let res = path
-                .parent()
-                .unwrap()
-                .components()
-                .next_back()
-                .unwrap()
-                .as_os_str();
-
-            Ok(PathBuf::from(res))
-        } else {
-            Err("Could not find a fitting config".to_string())
-        }
-    }
-
-    fn load(language: &str, preferred_folder: Option<&str>) -> Result<Self, String> {
+impl CorpusConfig {
+    pub fn load(language: &str, preferred_folder: Option<&str>) -> Result<Self, String> {
         let preferred_folder = if let Some(folder) = preferred_folder {
             Ok(PathBuf::from(folder))
         } else {
@@ -102,63 +111,6 @@ impl CorpusConfigLoad {
             Err("No config file found!".to_string())
         }
     }
-}
-
-impl From<CorpusConfigLoad> for CorpusConfig {
-    fn from(loaded: CorpusConfigLoad) -> Self {
-        Self {
-            // source_language: loaded.source.unwrap_or_else(|| language.to_string()),
-            inherits: loaded.inherits,
-            letters_to_lowercase: loaded.letters_to_lowercase,
-            punct_unshifted: loaded.punct_unshifted,
-            keep: loaded.keep,
-            to_multiple: Self::get_to_multiple(loaded.multiple),
-            one_to_one: loaded.one_to_one,
-        }
-    }
-}
-
-// TODO: adapt for cleaner
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(from = "CorpusConfigLoad")]
-pub struct CorpusConfig {
-    // TODO: add cycle detection
-    inherits: Vec<String>,
-    letters_to_lowercase: Vec<char>,
-    punct_unshifted: OneToOne,
-    keep: Vec<char>,
-    to_multiple: Vec<(char, String)>,
-    one_to_one: OneToOne,
-}
-
-impl CorpusConfig {
-    fn new(loaded: CorpusConfigLoad) -> Self {
-        loaded.into()
-    }
-
-    pub fn load(language: &str, preferred_folder: Option<&str>) -> Result<Self, String> {
-        let loaded = CorpusConfigLoad::load(language, preferred_folder)?;
-
-        Ok(Self::new(loaded))
-    }
-
-    fn get_to_multiple(multiple: Multiple) -> Vec<(char, String)> {
-        let mut res = Vec::new();
-
-        for (from, to) in multiple.list {
-            res.push((from, to.clone()));
-
-            if multiple.uppercase_versions {
-                let mut upper = from.to_uppercase();
-                if upper.clone().count() == 1 {
-                    let upper_c = upper.next().unwrap();
-                    res.push((upper_c, to))
-                }
-            }
-        }
-
-        res
-    }
 
     pub fn all() -> Vec<(String, Self)> {
         glob::glob("static/text/*")
@@ -180,6 +132,27 @@ impl CorpusConfig {
             }
         }
     }
+
+    fn check_for_language(language: &str) -> Result<PathBuf, String> {
+        let try_find_path = glob::glob("static/corpus_configs/*/*.toml")
+            .unwrap()
+            .flatten()
+            .find(|stem| stem.file_stem().unwrap_or_default() == language);
+
+        if let Some(path) = try_find_path {
+            let res = path
+                .parent()
+                .unwrap()
+                .components()
+                .next_back()
+                .unwrap()
+                .as_os_str();
+
+            Ok(PathBuf::from(res))
+        } else {
+            Err("Could not find a fitting config".to_string())
+        }
+    }
 }
 
 impl std::ops::Add<CorpusConfig> for CorpusConfig {
@@ -187,12 +160,12 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
 
     fn add(self, rhs: CorpusConfig) -> Self::Output {
         let inherits = self.inherits.into_iter().chain(rhs.inherits).collect();
-        let to_multiple = self
-            .to_multiple
+        let multiple = self.multiple.into_iter().chain(rhs.multiple).collect();
+        let letters_to_lowercase = self
+            .letters_to_lowercase
             .into_iter()
-            .chain(rhs.to_multiple)
+            .chain(rhs.letters_to_lowercase)
             .collect();
-        let letters_to_lowercase = self.letters_to_lowercase.into_iter().chain(rhs.letters_to_lowercase).collect();
         let keep = self.keep.into_iter().chain(rhs.keep).collect();
         let punct_unshifted = self.punct_unshifted + rhs.punct_unshifted;
         let one_to_one = self.one_to_one + rhs.one_to_one;
@@ -202,7 +175,7 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
             letters_to_lowercase,
             punct_unshifted,
             keep,
-            to_multiple,
+            multiple,
             one_to_one,
         }
     }
@@ -220,13 +193,7 @@ impl From<CorpusConfig> for CorpusCleaner {
         CorpusCleaner::builder()
             .with_chars(config.letters_to_lowercase)
             .with_exact_mappings(config.keep)
-            .with_char_mappings(
-                config
-                    .one_to_one
-                    .from
-                    .into_iter()
-                    .zip(config.one_to_one.to),
-            )
+            .with_char_mappings(config.one_to_one.from.into_iter().zip(config.one_to_one.to))
             .with_uppercase_mappings(
                 config
                     .punct_unshifted
@@ -236,7 +203,7 @@ impl From<CorpusConfig> for CorpusCleaner {
             )
             .with_mappings(
                 config
-                    .to_multiple
+                    .multiple
                     .into_iter()
                     .map(|(c, s)| (c, s.chars().collect())),
             )
@@ -253,13 +220,10 @@ mod tests {
         let config1 = r#"inherits = ["dofsmie"]"#;
         let config2 = r#"inherits = ["yeah"]"#;
 
-        let loaded1 = toml::from_str::<CorpusConfigLoad>(config1).unwrap();
-        let loaded2 = toml::from_str::<CorpusConfigLoad>(config2).unwrap();
-        assert_eq!(loaded1.inherits, vec!["dofsmie"]);
-        assert_eq!(loaded2.inherits, vec!["yeah"]);
-
-        let config1 = CorpusConfig::new(loaded1);
-        let config2 = CorpusConfig::new(loaded2);
+        let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
+        let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
+        assert_eq!(config1.inherits, vec!["dofsmie"]);
+        assert_eq!(config2.inherits, vec!["yeah"]);
 
         let config = config1 + config2;
         assert_eq!(config.inherits, vec!["dofsmie", "yeah"]);
@@ -270,16 +234,22 @@ mod tests {
         let config1 = r#"letters_to_lowercase = "dofsmie""#;
         let config2 = r#"letters_to_lowercase = "yeah""#;
 
-        let loaded1 = toml::from_str::<CorpusConfigLoad>(config1).unwrap();
-        let loaded2 = toml::from_str::<CorpusConfigLoad>(config2).unwrap();
-        assert_eq!(loaded1.letters_to_lowercase, "dofsmie".chars().collect::<Vec<_>>());
-        assert_eq!(loaded2.letters_to_lowercase, "yeah".chars().collect::<Vec<_>>());
-
-        let config1 = CorpusConfig::new(loaded1);
-        let config2 = CorpusConfig::new(loaded2);
+        let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
+        let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
+        assert_eq!(
+            config1.letters_to_lowercase,
+            "dofsmie".chars().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            config2.letters_to_lowercase,
+            "yeah".chars().collect::<Vec<_>>()
+        );
 
         let config = config1 + config2;
-        assert_eq!(config.letters_to_lowercase, concat!("dofsmie", "yeah").chars().collect::<Vec<_>>());
+        assert_eq!(
+            config.letters_to_lowercase,
+            concat!("dofsmie", "yeah").chars().collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -287,16 +257,16 @@ mod tests {
         let config1 = r#"keep = "dofsmie""#;
         let config2 = r#"keep = "yeah""#;
 
-        let loaded1 = toml::from_str::<CorpusConfigLoad>(config1).unwrap();
-        let loaded2 = toml::from_str::<CorpusConfigLoad>(config2).unwrap();
-        assert_eq!(loaded1.keep, "dofsmie".chars().collect::<Vec<_>>());
-        assert_eq!(loaded2.keep, "yeah".chars().collect::<Vec<_>>());
-
-        let config1 = CorpusConfig::new(loaded1);
-        let config2 = CorpusConfig::new(loaded2);
+        let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
+        let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
+        assert_eq!(config1.keep, "dofsmie".chars().collect::<Vec<_>>());
+        assert_eq!(config2.keep, "yeah".chars().collect::<Vec<_>>());
 
         let config = config1 + config2;
-        assert_eq!(config.keep, concat!("dofsmie", "yeah").chars().collect::<Vec<_>>());
+        assert_eq!(
+            config.keep,
+            concat!("dofsmie", "yeah").chars().collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -315,29 +285,17 @@ mod tests {
             ]
         "#;
 
-        let loaded1 = toml::from_str::<CorpusConfigLoad>(config1).unwrap();
-        let loaded2 = toml::from_str::<CorpusConfigLoad>(config2).unwrap();
+        let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
+        let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
+        assert_eq!(config1.multiple, vec![('a', "dofsmie".to_string()),]);
         assert_eq!(
-            loaded1.multiple,
-            Multiple {
-                uppercase_versions: false,
-                list: vec![('a', "dofsmie".to_string())]
-            }
+            config2.multiple,
+            vec![('b', "yeah".to_string()), ('B', "yeah".to_string()),]
         );
-        assert_eq!(
-            loaded2.multiple,
-            Multiple {
-                uppercase_versions: true,
-                list: vec![('b', "yeah".to_string())]
-            }
-        );
-
-        let config1 = CorpusConfig::new(loaded1);
-        let config2 = CorpusConfig::new(loaded2);
 
         let config = config1 + config2;
         assert_eq!(
-            config.to_multiple,
+            config.multiple,
             vec![
                 ('a', "dofsmie".to_string()),
                 ('b', "yeah".to_string()),
@@ -359,25 +317,22 @@ mod tests {
             to =   "lol"
         "#;
 
-        let loaded1 = toml::from_str::<CorpusConfigLoad>(config1).unwrap();
-        let loaded2 = toml::from_str::<CorpusConfigLoad>(config2).unwrap();
+        let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
+        let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
         assert_eq!(
-            loaded1.one_to_one,
+            config1.one_to_one,
             OneToOne {
                 from: "yeah".chars().collect::<Vec<_>>(),
                 to: "dofs".chars().collect::<Vec<_>>()
             }
         );
         assert_eq!(
-            loaded2.one_to_one,
+            config2.one_to_one,
             OneToOne {
                 from: "nah".chars().collect::<Vec<_>>(),
                 to: "lol".chars().collect::<Vec<_>>()
             }
         );
-
-        let config1 = CorpusConfig::new(loaded1);
-        let config2 = CorpusConfig::new(loaded2);
 
         let config = config1 + config2;
         assert_eq!(
