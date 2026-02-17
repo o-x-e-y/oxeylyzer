@@ -1,4 +1,9 @@
-use std::{convert::Infallible, fs::File, io::Read, path::PathBuf};
+use std::{
+    convert::Infallible,
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use serde::{Deserialize, Serialize};
@@ -112,14 +117,30 @@ impl CorpusConfig {
         }
     }
 
-    pub fn all() -> Vec<(String, Self)> {
-        glob::glob("static/text/*")
+    pub fn all<P: AsRef<Path>>(base_path: P) -> Vec<(String, Self)> {
+        let path = base_path.as_ref().join("static/corpus_configs");
+        let pattern = format!("{}/*/*.toml", path.display());
+
+        glob::glob(&pattern)
             .unwrap()
             .flatten()
-            .filter(|pb| pb.is_dir())
-            .flat_map(|pb| pb.file_name().unwrap().to_os_string().into_string())
-            .map(|l| (l.clone(), Self::load(&l, None)))
-            .flat_map(|(l, c)| c.ok().map(|cc| (l, cc)))
+            .filter(|pb| pb.is_file())
+            .flat_map(|pb| {
+                File::open(&pb).map(|file| {
+                    let lang = pb
+                        .file_name()
+                        .unwrap()
+                        .to_os_string()
+                        .into_string()
+                        .unwrap();
+                    (lang, file)
+                })
+            })
+            .flat_map(|(lang, mut f)| {
+                let mut buf = String::new();
+                f.read_to_string(&mut buf).map(|_| (lang, buf))
+            })
+            .flat_map(|(lang, contents)| toml::from_str(&contents).map(|config| (lang, config)))
             .collect::<Vec<_>>()
     }
 
@@ -342,5 +363,18 @@ mod tests {
                 to: concat!("dofs", "lol").chars().collect::<Vec<_>>()
             }
         );
+    }
+
+    #[test]
+    fn existing_file_validity() {
+        for (lang, config) in CorpusConfig::all(concat!(std::env!("CARGO_MANIFEST_DIR"), "/..")) {
+            config.keep.into_iter().for_each(|c| {
+                assert_eq!(
+                    c.to_uppercase().to_string(),
+                    c.to_lowercase().to_string(),
+                    "Corpus config for lang {lang} has keep rule for {c} which has an uppercase"
+                );
+            });
+        }
     }
 }

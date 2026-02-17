@@ -416,7 +416,7 @@ impl Repl {
                 (true, _) => {
                     let base_path = PathBuf::from("./static/text");
 
-                    for (language, config) in CorpusConfig::all() {
+                    for (language, config) in CorpusConfig::all("./") {
                         println!("loading data for language: {language}...");
 
                         match Data::from_path(base_path.join(&language), &language, &config.into())
