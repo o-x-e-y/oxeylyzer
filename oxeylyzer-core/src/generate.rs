@@ -28,101 +28,103 @@ const SMALLEST_SCORE: i64 = i64::MIN;
 static ANALYZED_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 #[derive(Clone, Default)]
-pub struct TrigramStats {
-    pub alternates: i64,
-    pub alternates_sfs: i64,
-    pub inrolls: i64,
-    pub outrolls: i64,
-    pub onehands: i64,
-    pub redirects: i64,
-    pub redirects_sfs: i64,
-    pub bad_redirects: i64,
-    pub bad_redirects_sfs: i64,
-    pub sfbs: i64,
-    pub bad_sfbs: i64,
-    pub sfts: i64,
-    pub thumbs: i64,
-    pub other: i64,
-    pub invalid: i64,
+pub struct TrigramAccumulator {
+    alternates: i64,
+    alternates_sfs: i64,
+    inrolls: i64,
+    outrolls: i64,
+    onehands: i64,
+    redirects: i64,
+    redirects_sfs: i64,
+    bad_redirects: i64,
+    bad_redirects_sfs: i64,
+    sfbs: i64,
+    bad_sfbs: i64,
+    sfts: i64,
+    thumbs: i64,
+    other: i64,
+    invalid: i64,
 }
 
-// impl std::fmt::Display for TrigramStats {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(
-//             f,
-//             "Inrolls: {:.3}%\n\
-// 			Outrolls: {:.3}%\n\
-// 			Total Rolls: {:.3}%\n\
-// 			Onehands: {:.3}%\n\n\
-// 			Alternates: {:.3}%\n\
-// 			Alternates (sfs): {:.3}%\n\
-// 			Total Alternates: {:.3}%\n\n\
-// 			Redirects: {:.3}%\n\
-// 			Redirects Sfs: {:.3}%\n\
-// 			Bad Redirects: {:.3}%\n\
-// 			Bad Redirects Sfs: {:.3}%\n\
-// 			Total Redirects: {:.3}%\n\n\
-// 			Bad Sfbs: {:.3}%\n\
-// 			Sft: {:.3}%\n",
-//             self.inrolls * 100.0,
-//             self.outrolls * 100.0,
-//             (self.inrolls + self.outrolls) * 100.0,
-//             self.onehands * 100.0,
-//             self.alternates * 100.0,
-//             self.alternates_sfs * 100.0,
-//             (self.alternates + self.alternates_sfs) * 100.0,
-//             self.redirects * 100.0,
-//             self.redirects_sfs * 100.0,
-//             self.bad_redirects * 100.0,
-//             self.bad_redirects_sfs * 100.0,
-//             (self.redirects + self.redirects_sfs + self.bad_redirects + self.bad_redirects_sfs)
-//                 * 100.0,
-//             self.bad_sfbs * 100.0,
-//             self.sfts * 100.0
-//         )
-//     }
-// }
+impl TrigramAccumulator {
+    fn to_stats(self, trigram_total: i64) -> TrigramStats {
+        let total = trigram_total as f64;
 
-// impl std::fmt::Debug for TrigramStats {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(
-//             f,
-//             "Inrolls: {:.3}%\n
-// 			Outrolls: {:.3}%\n
-// 			Total Rolls: {:.3}%\n
-// 			Onehands: {:.3}%\n\n\
-// 			Alternates: {:.3}%\n
-// 			Alternates Sfs: {:.3}%\n
-// 			Total Alternates: {:.3}%\n\n
-// 			Redirects: {:.3}%\n\
-// 			Redirects Sfs: {:.3}%\n\
-// 			Bad Redirects: {:.3}%\n
-// 			Bad Redirects Sfs: {:.3}%\n\
-// 			Total Redirects: {:.3}%\n\n
-// 			Bad Sfbs: {:.3}%\n
-// 			Sft: {:.3}%\n\n
-// 			Other: {:.3}%\n
-// 			Invalid: {:.3}%",
-//             self.inrolls * 100.0,
-//             self.outrolls * 100.0,
-//             (self.inrolls + self.outrolls) * 100.0,
-//             self.onehands * 100.0,
-//             self.alternates * 100.0,
-//             self.alternates_sfs * 100.0,
-//             (self.alternates + self.alternates_sfs) * 100.0,
-//             self.redirects * 100.0,
-//             self.redirects_sfs * 100.0,
-//             self.bad_redirects * 100.0,
-//             self.bad_redirects_sfs * 100.0,
-//             (self.redirects + self.redirects_sfs + self.bad_redirects + self.bad_redirects_sfs)
-//                 * 100.0,
-//             self.bad_sfbs * 100.0,
-//             self.sfts * 100.0,
-//             self.other * 100.0,
-//             self.invalid * 100.0
-//         )
-//     }
-// }
+        TrigramStats {
+            alternates: (self.alternates as f64) / total,
+            alternates_sfs: (self.alternates_sfs as f64) / total,
+            inrolls: (self.inrolls as f64) / total,
+            outrolls: (self.outrolls as f64) / total,
+            onehands: (self.onehands as f64) / total,
+            redirects: (self.redirects as f64) / total,
+            redirects_sfs: (self.redirects_sfs as f64) / total,
+            bad_redirects: (self.bad_redirects as f64) / total,
+            bad_redirects_sfs: (self.bad_redirects_sfs as f64) / total,
+            sfbs: (self.sfbs as f64) / total,
+            bad_sfbs: (self.bad_sfbs as f64) / total,
+            sfts: (self.sfts as f64) / total,
+            thumbs: (self.thumbs as f64) / total,
+            other: (self.other as f64) / total,
+            invalid: (self.invalid as f64) / total,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct TrigramStats {
+    pub alternates: f64,
+    pub alternates_sfs: f64,
+    pub inrolls: f64,
+    pub outrolls: f64,
+    pub onehands: f64,
+    pub redirects: f64,
+    pub redirects_sfs: f64,
+    pub bad_redirects: f64,
+    pub bad_redirects_sfs: f64,
+    pub sfbs: f64,
+    pub bad_sfbs: f64,
+    pub sfts: f64,
+    pub thumbs: f64,
+    pub other: f64,
+    pub invalid: f64,
+}
+
+impl std::fmt::Display for TrigramStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Inrolls: {:.3}%\n\
+			Outrolls: {:.3}%\n\
+			Total Rolls: {:.3}%\n\
+			Onehands: {:.3}%\n\n\
+			Alternates: {:.3}%\n\
+			Alternates (sfs): {:.3}%\n\
+			Total Alternates: {:.3}%\n\n\
+			Redirects: {:.3}%\n\
+			Redirects Sfs: {:.3}%\n\
+			Bad Redirects: {:.3}%\n\
+			Bad Redirects Sfs: {:.3}%\n\
+			Total Redirects: {:.3}%\n\n\
+			Bad Sfbs: {:.3}%\n\
+			Sft: {:.3}%\n",
+            self.inrolls * 100.0,
+            self.outrolls * 100.0,
+            (self.inrolls + self.outrolls) * 100.0,
+            self.onehands * 100.0,
+            self.alternates * 100.0,
+            self.alternates_sfs * 100.0,
+            (self.alternates + self.alternates_sfs) * 100.0,
+            self.redirects * 100.0,
+            self.redirects_sfs * 100.0,
+            self.bad_redirects * 100.0,
+            self.bad_redirects_sfs * 100.0,
+            (self.redirects + self.redirects_sfs + self.bad_redirects + self.bad_redirects_sfs)
+                * 100.0,
+            self.bad_sfbs * 100.0,
+            self.sfts * 100.0
+        )
+    }
+}
 
 fn format_fspeed(finger_speed: &[f64]) -> String {
     let f = |v| format!("{:.3}", v * 10.0);
@@ -159,27 +161,27 @@ pub struct LayoutStats {
     pub finger_speed: [f64; 10],
 }
 
-// impl std::fmt::Display for LayoutStats {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(
-//             f,
-//             concat!(
-//                 "Sfb:  {:.3}%\nDsfb: {:.3}%\n\nFinger Speed: {:.3}\n",
-//                 "{}\nStretches: {:.3}\nScissors: {:.3}%\nLsbs: {:.3}%\n",
-//                 "Pinky Ring Bigrams: {:.3}%\n\n{}"
-//             ),
-//             self.sfb * 100.0,
-//             self.dsfb * 100.0,
-//             self.fspeed * 10.0,
-//             format_fspeed(&self.finger_speed),
-//             self.stretches * 10.0,
-//             self.scissors * 100.0,
-//             self.lsbs * 100.0,
-//             self.pinky_ring * 100.0,
-//             self.trigram_stats
-//         )
-//     }
-// }
+impl std::fmt::Display for LayoutStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            concat!(
+                "Sfb:  {:.3}%\nDsfb: {:.3}%\n\nFinger Speed: {:.3}\n",
+                "{}\nStretches: {:.3}\nScissors: {:.3}%\nLsbs: {:.3}%\n",
+                "Pinky Ring Bigrams: {:.3}%\n\n{}"
+            ),
+            self.sfb * 100.0,
+            self.dsfb * 100.0,
+            self.fspeed * 10.0,
+            format_fspeed(&self.finger_speed),
+            self.stretches * 10.0,
+            self.scissors * 100.0,
+            self.lsbs * 100.0,
+            self.pinky_ring * 100.0,
+            self.trigram_stats
+        )
+    }
+}
 
 #[derive(Default, Debug)]
 pub struct LayoutCache {
@@ -392,7 +394,9 @@ impl LayoutGeneration {
         let scissors = self.scissor_score(layout) as f64 / self.weights.scissors;
         let lsbs = self.lsb_score(layout) as f64 / self.weights.lsbs;
         let pinky_ring = self.pinky_ring_score(layout) as f64 / self.weights.pinky_ring_bigrams;
-        let trigram_stats = self.trigram_stats(layout, usize::MAX);
+        let trigram_stats = self
+            .trigram_stats(layout, usize::MAX)
+            .to_stats(self.data.trigram_total);
 
         LayoutStats {
             sfb,
@@ -481,10 +485,14 @@ impl LayoutGeneration {
         self.trigram_patterns[index] // TODO: handle out of bounds
     }
 
-    pub fn trigram_stats(&self, layout: &FastLayout, trigram_precision: usize) -> TrigramStats {
+    pub fn trigram_stats(
+        &self,
+        layout: &FastLayout,
+        trigram_precision: usize,
+    ) -> TrigramAccumulator {
         use TrigramPattern::*;
 
-        let mut freqs = TrigramStats::default();
+        let mut freqs = TrigramAccumulator::default();
 
         for (trigram, freq) in self.data.gen_trigrams().iter().take(trigram_precision) {
             match self.get_trigram_pattern(layout, trigram) {
@@ -608,7 +616,7 @@ impl LayoutGeneration {
     {
         use TrigramPattern::*;
 
-        let mut freqs = TrigramStats::default();
+        let mut freqs = TrigramAccumulator::default();
 
         for (trigram, freq) in trigrams {
             match self.get_trigram_pattern(layout, trigram) {
