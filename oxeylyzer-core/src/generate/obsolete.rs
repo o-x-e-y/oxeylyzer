@@ -30,55 +30,68 @@ impl LayoutGeneration {
         let trigram_score = self.trigram_score_iter(layout, trigram_iter);
         let stretch_score = self.stretch_score(layout);
 
-        trigram_score - stretch_score - fspeed_usage - scissors - lsbs - pinky_ring
+        trigram_score + stretch_score + fspeed_usage + scissors + lsbs + pinky_ring
     }
 
     #[allow(dead_code)]
     fn col_fspeed_before(&self, layout: &FastLayout, finger: Finger) -> i64 {
-        let (start, len) = Self::col_to_start_len(finger);
-
-        let mut res = 0.0;
         let dsfb_ratio = self.weights.dsfb_ratio;
         let dsfb_ratio2 = self.weights.dsfb_ratio2;
         let dsfb_ratio3 = self.weights.dsfb_ratio3;
 
-        for i in start..(start + len) {
-            let (PosPair(i1, i2), dist) = self.fspeed_vals[i];
+        let fspeed = if let Some(indices) = layout.fspeed_indices.fingers.get(finger as usize) {
+            indices
+                .iter()
+                .map(
+                    |BigramPair {
+                         pair: PosPair(p1, p2),
+                         dist,
+                     }| {
+                        if let Some(c1) = layout.char(*p1)
+                            && let Some(c2) = layout.char(*p2)
+                        {
+                            let len = self.data.len();
+                            let (c1, c2) = (c1 as usize, c2 as usize);
+                            let (idx, rev) = (c1 * len + c2, c2 * len + c1);
 
-            let c1 = layout.char(i1).unwrap() as usize;
-            let c2 = layout.char(i2).unwrap() as usize;
+                            let bp = self.data.bigrams().get(idx).copied().unwrap_or_default();
+                            let br = self.data.bigrams().get(rev).copied().unwrap_or_default();
 
-            let len = self.data.len();
-            let (idx, rev) = (c1 * len + c2, c2 * len + c1);
+                            let sp = self.data.skipgrams().get(idx).copied().unwrap_or_default();
+                            let sr = self.data.skipgrams().get(rev).copied().unwrap_or_default();
 
-            let dist = dist * 10.0;
+                            let s2p = self.data.skipgrams2().get(idx).copied().unwrap_or_default();
+                            let s2r = self.data.skipgrams2().get(rev).copied().unwrap_or_default();
 
-            let bp = self.data.bigrams().get(idx).copied().unwrap_or_default();
-            let br = self.data.bigrams().get(rev).copied().unwrap_or_default();
+                            let s3p = self.data.skipgrams3().get(idx).copied().unwrap_or_default();
+                            let s3r = self.data.skipgrams3().get(rev).copied().unwrap_or_default();
 
-            let sp = self.data.skipgrams().get(idx).copied().unwrap_or_default();
-            let sr = self.data.skipgrams().get(rev).copied().unwrap_or_default();
+                            let mut res = 0;
 
-            let s2p = self.data.skipgrams2().get(idx).copied().unwrap_or_default();
-            let s2r = self.data.skipgrams2().get(rev).copied().unwrap_or_default();
+                            res += bp * dist;
+                            res += br * dist;
 
-            let s3p = self.data.skipgrams3().get(idx).copied().unwrap_or_default();
-            let s3r = self.data.skipgrams3().get(rev).copied().unwrap_or_default();
+                            res += sp * dsfb_ratio * dist;
+                            res += sr * dsfb_ratio * dist;
 
-            res += (bp as f64) * dist;
-            res += (br as f64) * dist;
+                            res += s2p * dsfb_ratio2 * dist;
+                            res += s2r * dsfb_ratio2 * dist;
 
-            res += (sp as f64 * dsfb_ratio) * dist;
-            res += (sr as f64 * dsfb_ratio) * dist;
+                            res += s3p * dsfb_ratio3 * dist;
+                            res += s3r * dsfb_ratio3 * dist;
 
-            res += (s2p as f64 * dsfb_ratio2) * dist;
-            res += (s2r as f64 * dsfb_ratio2) * dist;
+                            res
+                        } else {
+                            0
+                        }
+                    },
+                )
+                .sum()
+        } else {
+            0
+        };
 
-            res += (s3p as f64 * dsfb_ratio3) * dist;
-            res += (s3r as f64 * dsfb_ratio3) * dist;
-        }
-
-        (res * self.weights.fspeed) as i64
+        fspeed * self.weights.fspeed
     }
 
     #[allow(dead_code)]
@@ -90,7 +103,7 @@ impl LayoutGeneration {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn best_swap(
+    pub fn best_swap(
         &self,
         layout: &mut FastLayout,
         current_best_score: Option<i64>,

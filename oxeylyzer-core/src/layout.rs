@@ -260,7 +260,7 @@ impl Layout<u8> for FastLayout {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BigramPair {
     pub pair: PosPair,
-    pub dist: f64,
+    pub dist: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -304,8 +304,9 @@ impl FSpeedIndices {
                     .map(|((f1, k1, i1), (_, k2, i2))| BigramPair {
                         pair: PosPair(i1, i2),
                         // TODO: think about scaling differently
-                        dist: dist(k1, k2, finger, finger).powf(1.3)
-                            * (5.5 / F_WEIGHTS[f1 as usize]),
+                        dist: (dist(k1, k2, finger, finger).powf(1.3)
+                            * 100.0
+                            * (5.5 / F_WEIGHTS[f1 as usize])) as i64,
                         // * finger_weights.get(finger),
                     })
                     .collect::<Box<_>>()
@@ -366,7 +367,7 @@ impl StretchCache {
 
                 (stretch > 0.001).then_some(BigramPair {
                     pair: PosPair(i1, i2),
-                    dist: stretch,
+                    dist: (stretch * 100.0) as i64,
                 })
             })
             .collect::<Box<[_]>>();
@@ -463,19 +464,6 @@ fn dx_dy(k1: &PhysicalKey, k2: &PhysicalKey, f1: Finger, f2: Finger) -> (f64, f6
 
     let xo = x_finger_overlap(f1, f2);
 
-    // match (f1.hand(), f2.hand()) {
-    //     (Hand::Left, Hand::Left) => match ((f1 as u8) > (f2 as u8), (f1 as u8) < (f2 as u8)) {
-    //         (true, false) if r1 < l2 => (-dx, dy),
-    //         (false, true) if l1 > r2 => (-dx, dy),
-    //         _ => (dx, dy),
-    //     },
-    //     (Hand::Right, Hand::Right) => match ((f2 as u8) > (f1 as u8), (f2 as u8) < (f1 as u8)) {
-    //         (true, false) if r1 > l2 => (-dx, dy),
-    //         (false, true) if l1 < r2 => (-dx, dy),
-    //         _ => (dx, dy),
-    //     },
-    //     _ => (dx, dy)
-    // }
     match ((f1 as u8) > (f2 as u8), (f1 as u8) < (f2 as u8)) {
         (true, false) if r1 < l2 + xo => (-dx, dy),
         (false, true) if l1 + xo > r2 => (-dx, dy),

@@ -68,7 +68,7 @@ pub fn generate_n_with_pins(
         .progress_chars("=>-"));
 
     let mut layouts = layout_gen
-        .generate_n_with_pins_iter(amount, based_on, pins)
+        .generate_n_with_pins_iter(amount, based_on.clone(), pins)
         .progress_with(pb)
         .collect::<Vec<_>>();
 

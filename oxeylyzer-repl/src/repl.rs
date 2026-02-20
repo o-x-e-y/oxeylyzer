@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -14,7 +15,6 @@ pub struct Repl {
     layout_gen: LayoutGeneration,
     saved: IndexMap<String, FastLayout>,
     temp_generated: Vec<FastLayout>,
-    pins: Vec<usize>,
     thread_pool: rayon::ThreadPool,
 }
 
@@ -24,9 +24,8 @@ impl Repl {
     where
         P: AsRef<Path>,
     {
-        let config = Config::with_loaded_weights();
+        let config = Config::with_loaded_weights("config.toml");
         let language = config.defaults.language.clone();
-        let pins = config.pins.clone();
 
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(config.defaults.max_cores)
@@ -50,7 +49,6 @@ impl Repl {
             language,
             layout_gen,
             temp_generated: Vec::new(),
-            pins,
             thread_pool,
         })
     }
@@ -98,6 +96,41 @@ impl Repl {
         };
         println!("{}", name);
         self.analyze(l);
+    }
+
+    pub fn pin_positions(&self, layout: &FastLayout, pin_chars: String) -> Vec<usize> {
+        let m = HashSet::<char>::from_iter(pin_chars.chars());
+
+        layout
+            .matrix
+            .iter()
+            .map(|u| self.layout_gen.mapping.get_c(*u))
+            .enumerate()
+            .filter_map(|(i, k)| m.contains(&k).then_some(i))
+            .collect()
+    }
+
+    fn improve(
+        &mut self,
+        name: &str,
+        count: Option<usize>,
+        pin_chars: Option<String>,
+    ) -> Result<(), String> {
+        let layout = self
+            .layout_by_name(name)
+            .ok_or_else(|| format!("Layout '{name}' could not be found"))?
+            .clone();
+        let count = count.unwrap_or(2500);
+        let pins = match pin_chars {
+            Some(chars) => self.pin_positions(&layout, chars),
+            None => vec![],
+        };
+
+        self.thread_pool.install(|| {
+            self.temp_generated = generate_n_with_pins(&self.layout_gen, count, layout, &pins)
+        });
+
+        Ok(())
     }
 
     fn placeholder_name(&self, layout: &FastLayout) -> Result<String, String> {
@@ -334,13 +367,7 @@ impl Repl {
                     self.temp_generated = generate_n(&self.layout_gen, g.count);
                 });
             }
-            Improve(i) => match self.layout_by_name(&i.name).cloned() {
-                Some(l) => self.thread_pool.install(|| {
-                    self.temp_generated =
-                        generate_n_with_pins(&self.layout_gen, i.count, l, &self.pins)
-                }),
-                None => return Err(format!("'{}' does not exist!", i.name)),
-            },
+            Improve(i) => self.improve(&i.name, i.count, i.pins)?,
             Save(s) => match (self.get_nth(s.n), s.name) {
                 (Some(layout), name) => self.save(layout.clone(), name)?,
                 (None, _) => {
@@ -357,7 +384,7 @@ impl Repl {
             },
             Language(l) => match l.language {
                 Some(l) => {
-                    let config = Config::with_loaded_weights();
+                    let config = Config::with_loaded_weights("config.toml");
                     let language = l
                         .to_str()
                         .ok_or_else(|| format!("Language is invalid utf8: {:?}", l))?;
@@ -461,7 +488,7 @@ impl Repl {
                     }
 
                     if !cleaner.is_raw() {
-                        let config = Config::with_loaded_weights();
+                        let config = Config::with_loaded_weights("config.toml");
                         match LayoutGeneration::new(&language, "static", Some(config)) {
                             Ok(generator) => {
                                 self.language = language.clone();
@@ -484,8 +511,7 @@ impl Repl {
             },
             Ngram(n) => println!("{}", get_ngram_info(&mut self.layout_gen.data, &n.ngram)),
             Reload(_) => {
-                let config = Config::with_loaded_weights();
-                self.pins.clone_from(&config.pins);
+                let config = Config::with_loaded_weights("config.toml");
 
                 match LayoutGeneration::new(&self.language, "static", Some(config)) {
                     Ok(generator) => {

@@ -1,20 +1,11 @@
-use crate::utility::KeyboardType;
 use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
-
-#[derive(Deserialize, Debug)]
-pub struct WeightDefaultsLoad {
-    pub language: String,
-    pub keyboard_type: String,
-    pub trigram_precision: usize,
-    pub max_cores: usize,
-}
+use std::path::Path;
 
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct WeightDefaults {
     pub language: String,
-    pub keyboard_type: KeyboardType,
     pub trigram_precision: usize,
     pub max_cores: usize,
 }
@@ -54,38 +45,94 @@ pub struct Weights {
     pub max_finger_use: MaxFingerUse,
 }
 
-#[derive(Deserialize)]
-struct ConfigLoad {
-    pub pins: String,
-    pub defaults: WeightDefaultsLoad,
-    pub weights: Weights,
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct AnalyzerMaxFingerUse {
+    pub penalty: i64,
+    pub pinky: i64,
+    pub ring: i64,
+    pub middle: i64,
+    pub index: i64,
 }
 
-impl ConfigLoad {
-    pub fn load() -> Self {
-        let mut f = File::open("config.toml").expect("The config.toml is missing! Help!");
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct AnalyzerWeights {
+    pub heatmap: i64,
+    pub lateral_penalty: i64,
+    pub fspeed: i64,
+    pub dsfb_ratio: i64,
+    #[serde(default)]
+    pub dsfb_ratio2: i64,
+    #[serde(default)]
+    pub dsfb_ratio3: i64,
+    pub scissors: i64,
+    pub stretches: i64,
+    pub lsbs: i64,
+    pub pinky_ring_bigrams: i64,
+    pub inrolls: i64,
+    pub outrolls: i64,
+    pub onehands: i64,
+    pub alternates: i64,
+    pub alternates_sfs: i64,
+    pub redirects: i64,
+    pub redirects_sfs: i64,
+    pub bad_redirects: i64,
+    pub bad_redirects_sfs: i64,
+    pub max_finger_use: AnalyzerMaxFingerUse,
+}
 
-        let mut buf = String::new();
-        f.read_to_string(&mut buf)
-            .expect("Failed to read config.toml for some reason");
+impl From<Weights> for AnalyzerWeights {
+    fn from(weights: Weights) -> Self {
+        let scale = |float| (float * 100.0) as i64;
 
-        let mut res: Self =
-            toml::from_str(&buf).expect("Failed to parse config.toml. Values might be missing.");
-        res.pins = res.pins.trim().replace([' ', '\n'], "");
-        res
+        let max_finger_use = AnalyzerMaxFingerUse {
+            penalty: scale(weights.max_finger_use.penalty),
+            pinky: scale(weights.max_finger_use.pinky),
+            ring: scale(weights.max_finger_use.ring),
+            middle: scale(weights.max_finger_use.middle),
+            index: scale(weights.max_finger_use.index),
+        };
+
+        Self {
+            heatmap: scale(weights.heatmap),
+            lateral_penalty: scale(weights.lateral_penalty),
+            fspeed: scale(weights.fspeed),
+            dsfb_ratio: scale(weights.dsfb_ratio),
+            dsfb_ratio2: scale(weights.dsfb_ratio2),
+            dsfb_ratio3: scale(weights.dsfb_ratio3),
+            scissors: scale(weights.scissors),
+            stretches: scale(weights.stretches),
+            lsbs: scale(weights.lsbs),
+            pinky_ring_bigrams: scale(weights.pinky_ring_bigrams),
+            inrolls: scale(weights.inrolls),
+            outrolls: scale(weights.outrolls),
+            onehands: scale(weights.onehands),
+            alternates: scale(weights.alternates),
+            alternates_sfs: scale(weights.alternates_sfs),
+            redirects: scale(weights.redirects),
+            redirects_sfs: scale(weights.redirects_sfs),
+            bad_redirects: scale(weights.bad_redirects),
+            bad_redirects_sfs: scale(weights.bad_redirects_sfs),
+            max_finger_use,
+        }
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
-    pub pins: Vec<usize>,
     pub defaults: WeightDefaults,
     pub weights: Weights,
 }
 
 impl Config {
-    pub fn with_loaded_weights() -> Self {
-        let mut load = ConfigLoad::load();
+    pub fn with_loaded_weights<P: AsRef<Path>>(path: P) -> Self {
+        let mut f = File::open(path).expect("The config.toml is missing! Help!");
+
+        let mut buf = String::new();
+        f.read_to_string(&mut buf)
+            .expect("Failed to read config.toml for some reason");
+
+        let mut load = toml::from_str::<Self>(&buf)
+            .expect("Failed to parse config.toml. Values might be missing.");
 
         load.weights.max_finger_use = MaxFingerUse {
             penalty: load.weights.max_finger_use.penalty,
@@ -94,20 +141,12 @@ impl Config {
             middle: load.weights.max_finger_use.middle / 100.0,
             index: load.weights.max_finger_use.index / 100.0,
         };
-        let mut pins = Vec::new();
-        for (i, c) in load.pins.chars().enumerate() {
-            if c == 'x' {
-                pins.push(i);
-            }
-        }
+
         load.weights.dsfb_ratio2 = load.weights.dsfb_ratio.powi(2);
         load.weights.dsfb_ratio3 = load.weights.dsfb_ratio.powi(3);
         Self {
-            pins,
             defaults: WeightDefaults {
                 language: load.defaults.language,
-                keyboard_type: KeyboardType::try_from(load.defaults.keyboard_type)
-                    .unwrap_or(KeyboardType::AnsiAngle),
                 trigram_precision: load.defaults.trigram_precision,
                 max_cores: load.defaults.max_cores,
             },
@@ -119,7 +158,7 @@ impl Config {
         Self {
             defaults: WeightDefaults {
                 language: "english".to_string(),
-                keyboard_type: KeyboardType::AnsiAngle,
+                // keyboard_type: KeyboardType::AnsiAngle,
                 trigram_precision: 100000,
                 max_cores: 128,
             },
@@ -151,7 +190,6 @@ impl Config {
                     index: 18.0,
                 },
             },
-            pins: Vec::new(),
         }
     }
 

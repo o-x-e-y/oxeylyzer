@@ -93,6 +93,7 @@ impl std::fmt::Display for PosPair {
     }
 }
 
+// TODO: create this on a by-layout basis
 pub const POSSIBLE_SWAPS: [PosPair; 435] = get_possible_swaps();
 
 const fn get_possible_swaps() -> [PosPair; 435] {
