@@ -245,8 +245,6 @@ pub struct LayoutGeneration {
     pub trigram_precision: usize,
     pub trigram_patterns: Box<[TrigramPattern]>,
 
-    fspeed_vals: [(PosPair, f64); 48],
-    // effort_map: [f64; 30],
     scissor_indices: [PosPair; 17],
     lsb_indices: [PosPair; 16],
     pinky_ring_indices: [PosPair; 18],
@@ -301,8 +299,6 @@ impl LayoutGeneration {
             trigram_patterns: get_trigram_combinations(),
             data,
 
-            fspeed_vals: get_fspeed(config.weights.lateral_penalty), // TODO: remove
-            // effort_map: get_effort_map(config.weights.heatmap, config.defaults.keyboard_type),
             scissor_indices: get_scissor_indices(), // TODO: remove for generation
             lsb_indices: get_lsb_indices(),         // TODO: remove for generation
             pinky_ring_indices: get_pinky_ring_indices(),
@@ -802,22 +798,6 @@ impl LayoutGeneration {
                 + self.data.get_same_finger_weighted_bigram_u([c2, c2]) * dist
         } else {
             0
-        }
-    }
-
-    #[inline(always)]
-    fn col_to_start_len(finger: Finger) -> (usize, usize) {
-        match finger {
-            Finger::LP => (0, 3),
-            Finger::LR => (3, 3),
-            Finger::LM => (6, 3),
-            Finger::LI => (18, 15),
-            Finger::LT => (0, 0), // LT
-            Finger::RT => (0, 0), // RT
-            Finger::RI => (33, 15),
-            Finger::RM => (9, 3),
-            Finger::RR => (12, 3),
-            Finger::RP => (15, 3),
         }
     }
 
