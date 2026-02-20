@@ -47,7 +47,7 @@ pub struct TrigramAccumulator {
 }
 
 impl TrigramAccumulator {
-    fn to_stats(self, trigram_total: i64) -> TrigramStats {
+    fn to_stats(&self, trigram_total: i64) -> TrigramStats {
         let total = trigram_total as f64;
 
         TrigramStats {
@@ -376,10 +376,10 @@ impl LayoutGeneration {
     }
 
     pub fn get_layout_stats(&self, layout: &FastLayout) -> LayoutStats {
-        let sfb = self.bigram_percent(layout, &self.data.bigrams(), self.data.bigram_total);
-        let dsfb = self.bigram_percent(layout, &self.data.skipgrams(), self.data.skipgram_total);
-        let dsfb2 = self.bigram_percent(layout, &self.data.skipgrams2(), self.data.skipgram2_total);
-        let dsfb3 = self.bigram_percent(layout, &self.data.skipgrams3(), self.data.skipgram3_total);
+        let sfb = self.bigram_percent(layout, self.data.bigrams(), self.data.bigram_total);
+        let dsfb = self.bigram_percent(layout, self.data.skipgrams(), self.data.skipgram_total);
+        let dsfb2 = self.bigram_percent(layout, self.data.skipgrams2(), self.data.skipgram2_total);
+        let dsfb3 = self.bigram_percent(layout, self.data.skipgrams3(), self.data.skipgram3_total);
 
         // TODO: rework conversion to f64
         let cache = self.initialize_cache(layout);
@@ -775,10 +775,10 @@ impl LayoutGeneration {
         self.weights.max_finger_use.penalty
             * match finger {
                 // TODO: fix calculation for int
-                Finger::LP | Finger::RP => res - (self.weights.max_finger_use.pinky) as i64,
-                Finger::LR | Finger::RR => res - (self.weights.max_finger_use.ring) as i64,
-                Finger::LM | Finger::RM => res - (self.weights.max_finger_use.middle) as i64,
-                Finger::LI | Finger::RI => res - (self.weights.max_finger_use.index) as i64,
+                Finger::LP | Finger::RP => res - self.weights.max_finger_use.pinky,
+                Finger::LR | Finger::RR => res - self.weights.max_finger_use.ring,
+                Finger::LM | Finger::RM => res - self.weights.max_finger_use.middle,
+                Finger::LI | Finger::RI => res - self.weights.max_finger_use.index,
                 Finger::LT | Finger::RT => 0, // TODO: fix for thumb
             }
     }

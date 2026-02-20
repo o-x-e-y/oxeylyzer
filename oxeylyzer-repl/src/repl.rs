@@ -509,7 +509,7 @@ impl Repl {
                     }
                 }
             },
-            Ngram(n) => println!("{}", get_ngram_info(&mut self.layout_gen.data, &n.ngram)),
+            Ngram(n) => println!("{}", get_ngram_info(&self.layout_gen.data, &n.ngram)),
             Reload(_) => {
                 let config = Config::with_loaded_weights("config.toml");
 
