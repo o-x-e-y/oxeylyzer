@@ -13,10 +13,6 @@ impl LayoutGeneration {
         layout: &FastLayout,
         trigram_precision: usize,
     ) -> i64 {
-        // let effort = (0..layout.matrix.len())
-        //     .map(|i| self.char_effort(layout, i))
-        //     .sum::<f64>();
-
         let fspeed_usage = Finger::FINGERS
             .into_iter()
             .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
@@ -141,13 +137,6 @@ impl LayoutGeneration {
 
         layout
     }
-
-    // #[allow(dead_code)]
-    // pub(crate) fn effort_score(&self, layout: &FastLayout) -> f64 {
-    //     (0..layout.matrix.len())
-    //         .map(|i| self.char_effort(layout, i))
-    //         .sum()
-    // }
 
     #[allow(dead_code)]
     pub(crate) fn usage_score(&self, layout: &FastLayout) -> i64 {

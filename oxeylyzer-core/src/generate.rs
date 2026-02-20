@@ -859,26 +859,11 @@ impl LayoutGeneration {
             .unwrap_or_default()
     }
 
-    // #[inline]
-    // fn char_effort(&self, layout: &FastLayout, i: usize) -> f64 {
-    //     let c = layout.char(i).unwrap();
-
-    //     match self.data.characters.get(c as usize) {
-    //         Some(&v) => v * self.effort_map.get(i).unwrap(),
-    //         None => 0.0,
-    //     }
-    // }
-
     pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
         #[cfg(test)]
         ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         let mut res = LayoutCache::default();
-
-        // for i in 0..layout.matrix.len() {
-        //     res.effort[i] = self.char_effort(layout, i);
-        // }
-        // res.effort_total = res.effort.iter().sum();
 
         for finger in Finger::FINGERS {
             res.usage[finger as usize] = self.finger_usage(layout, finger);
@@ -951,11 +936,6 @@ impl LayoutGeneration {
                 + usage1
                 + usage2
         };
-
-        // let effort1 = self.char_effort(layout, i1);
-        // let effort2 = self.char_effort(layout, i2);
-        // let effort_score =
-        //     cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
 
         let scissors_score = if swap.affects_scissor() {
             self.scissor_score(layout)
@@ -1058,14 +1038,6 @@ impl LayoutGeneration {
 
             total
         };
-
-        // let effort1 = self.char_effort(layout, i1);
-        // let effort2 = self.char_effort(layout, i2);
-        // cache.effort_total =
-        //     cache.effort_total - cache.effort[i1] - cache.effort[i2] + effort1 + effort2;
-
-        // cache.effort[i1] = effort1;
-        // cache.effort[i2] = effort2;
 
         let stretch_end = self.pair_stretch(layout, swap);
         let trigrams_end = self.trigram_char_score(layout, swap);
@@ -1290,11 +1262,6 @@ mod tests {
             GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
             assert_eq!(cache.scissors, GEN.scissor_score(&qwerty));
-            // assert!(
-            //     cache
-            //         .effort_total
-            //         .approx_eq_dbg(GEN.effort_score(&qwerty), 7)
-            // );
             assert_eq!(cache.usage_total, GEN.usage_score(&qwerty));
             assert_eq!(cache.fspeed_total, GEN.fspeed_score(&qwerty));
             assert_eq!(
