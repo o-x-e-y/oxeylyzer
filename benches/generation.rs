@@ -32,7 +32,8 @@ fn main() -> std::io::Result<()> {
     bench.register(score_swap, swaps);
     bench.register(score_layout, layout_names.clone());
     bench.register(generate, languages);
-    bench.register(best_swap_cached, layout_names);
+    bench.register(best_swap_cached, layout_names.clone());
+    bench.register(best_swap, layout_names);
     bench.register(language_data, corpora);
 
     bench.run()?;
@@ -57,6 +58,16 @@ fn score_layout(bencher: Bencher, name: String) {
 
     bencher.bench(|| {
         g.score(layout);
+    })
+}
+
+fn best_swap(bencher: Bencher, name: String) {
+    let mut g = black_box(LayoutGeneration::new("english", "./static/", None).unwrap());
+    let saved = g.load_layouts("./static/layouts", "english").unwrap();
+    let mut layout = saved.get(&name).cloned().unwrap();
+
+    bencher.bench(|| {
+        black_box(g.best_swap(&mut layout, None, &POSSIBLE_SWAPS));
     })
 }
 
