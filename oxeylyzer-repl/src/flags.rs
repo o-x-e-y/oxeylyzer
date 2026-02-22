@@ -11,6 +11,14 @@ xflags::xflags! {
             required name1: String
             required name2: String
         }
+        /// Swaps a number of keys on a certain layout. Cycles between one key and the next:
+        /// swap sturdy ab -> swaps ab
+        /// swap sturdy abc -> swaps a -> b -> c
+        /// swap sturdy ab abc swap -> swaps a -> b and then a -> b -> c
+        cmd swap {
+            required name: String
+            repeated swaps: String
+        }
         /// Rank all layouts for the currently specified language. A higher score is better.
         cmd rank list {}
         /// Generate a number of layouts and displays the best 10. Note: layouts may not be correct after changing language.
@@ -20,7 +28,8 @@ xflags::xflags! {
         /// Improves the the given layout by pinning keys specified in the `config.toml` and reordering everything else.
         cmd improve i optimize {
             required name: String
-            required count: usize
+            optional count: usize
+            optional -p, --pins pins: String
         }
         /// Saves the nth layout that was generated. Optionally, you can provide a name as `-n <name>`.
         cmd save s {
@@ -32,6 +41,15 @@ xflags::xflags! {
             required name: String
             optional -c, --count count: usize
         }
+        /// Shows the top n fspeed pairs on a layout. 10 by default.
+        cmd fspeed {
+            required name: String
+            optional -c, --count count: usize
+        }
+        cmd stretches {
+            required name: String
+            optional -c, --count count: usize
+            }
         /// Set a language to be used for analysis. Tries to load corpus when not present.
         cmd language l lang {
             optional language: PathBuf

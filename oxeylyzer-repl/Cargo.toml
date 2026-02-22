@@ -12,6 +12,7 @@ ansi_rgb = { git = "https://github.com/O-X-E-Y/ansi_rgb" }
 indexmap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_with = { workspace = true }
 glob = "0.3"
 toml = { workspace = true }
 itertools = { workspace = true }

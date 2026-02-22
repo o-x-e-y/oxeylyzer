@@ -1,5 +1,7 @@
 target
 static/text/*
+!static/text/monkeyracer/
+!static/text/README.md
 static/stats
 static/corpus_configs/custom/*.toml
 static/language_data/reddit.json
