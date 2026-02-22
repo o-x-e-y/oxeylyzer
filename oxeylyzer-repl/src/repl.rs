@@ -25,15 +25,15 @@ impl Repl {
         P: AsRef<Path>,
     {
         let config = Config::with_loaded_weights("config.toml");
-        let language = config.defaults.language.clone();
+        let language = config.language.clone();
 
         let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(config.defaults.max_cores)
+            .num_threads(config.max_cores)
             .build()
             .unwrap();
 
         let mut layout_gen = LayoutGeneration::new(
-            config.defaults.language.clone().as_str(),
+            config.language.clone().as_str(),
             generator_base_path.as_ref(),
             Some(config),
         )

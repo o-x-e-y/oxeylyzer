@@ -1,14 +1,8 @@
-use serde::Deserialize;
+use libdof::prelude::Finger;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-
-#[derive(Deserialize, Debug, Clone, Default)]
-pub struct WeightDefaults {
-    pub language: String,
-    pub trigram_precision: usize,
-    pub max_cores: usize,
-}
 
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct MaxFingerUse {
@@ -43,6 +37,7 @@ pub struct Weights {
     pub bad_redirects: f64,
     pub bad_redirects_sfs: f64,
     pub max_finger_use: MaxFingerUse,
+    pub finger_weights: FingerWeights,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -77,6 +72,7 @@ pub struct AnalyzerWeights {
     pub redirects_sfs: i64,
     pub bad_redirects: i64,
     pub bad_redirects_sfs: i64,
+    pub finger_weights: FingerWeights,
     pub max_finger_use: AnalyzerMaxFingerUse,
 }
 
@@ -85,6 +81,7 @@ impl From<Weights> for AnalyzerWeights {
         let scale = |float| (float * 100.0) as i64;
 
         let max_finger_use = AnalyzerMaxFingerUse {
+            // TODO: this is probably wrong
             penalty: scale(weights.max_finger_use.penalty),
             pinky: scale(weights.max_finger_use.pinky),
             ring: scale(weights.max_finger_use.ring),
@@ -112,6 +109,7 @@ impl From<Weights> for AnalyzerWeights {
             redirects_sfs: scale(weights.redirects_sfs),
             bad_redirects: scale(weights.bad_redirects),
             bad_redirects_sfs: scale(weights.bad_redirects_sfs),
+            finger_weights: weights.finger_weights,
             max_finger_use,
         }
     }
@@ -119,7 +117,9 @@ impl From<Weights> for AnalyzerWeights {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
-    pub defaults: WeightDefaults,
+    pub language: String,
+    pub trigram_precision: usize,
+    pub max_cores: usize,
     pub weights: Weights,
 }
 
@@ -134,6 +134,7 @@ impl Config {
         let mut load = toml::from_str::<Self>(&buf)
             .expect("Failed to parse config.toml. Values might be missing.");
 
+        // TODO: figure out how this should even work
         load.weights.max_finger_use = MaxFingerUse {
             penalty: load.weights.max_finger_use.penalty,
             pinky: load.weights.max_finger_use.pinky / 100.0,
@@ -144,24 +145,20 @@ impl Config {
 
         load.weights.dsfb_ratio2 = load.weights.dsfb_ratio.powi(2);
         load.weights.dsfb_ratio3 = load.weights.dsfb_ratio.powi(3);
+
         Self {
-            defaults: WeightDefaults {
-                language: load.defaults.language,
-                trigram_precision: load.defaults.trigram_precision,
-                max_cores: load.defaults.max_cores,
-            },
+            language: load.language,
+            trigram_precision: load.trigram_precision,
+            max_cores: load.max_cores,
             weights: load.weights,
         }
     }
 
     pub fn with_defaults() -> Self {
         Self {
-            defaults: WeightDefaults {
-                language: "english".to_string(),
-                // keyboard_type: KeyboardType::AnsiAngle,
-                trigram_precision: 100000,
-                max_cores: 128,
-            },
+            language: "english".to_string(),
+            trigram_precision: 100000,
+            max_cores: 128,
             weights: Weights {
                 heatmap: 0.85,
                 lateral_penalty: 1.3,
@@ -182,6 +179,7 @@ impl Config {
                 redirects_sfs: 2.75,
                 bad_redirects: 4.0,
                 bad_redirects_sfs: 6.0,
+                finger_weights: FingerWeights::default(),
                 max_finger_use: MaxFingerUse {
                     penalty: 2.5,
                     pinky: 9.0,
@@ -194,6 +192,57 @@ impl Config {
     }
 
     pub fn trigram_precision(&self) -> usize {
-        self.defaults.trigram_precision
+        self.trigram_precision
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FingerWeights {
+    pub lp: f64,
+    pub lr: f64,
+    pub lm: f64,
+    pub li: f64,
+    pub lt: f64,
+    pub rt: f64,
+    pub ri: f64,
+    pub rm: f64,
+    pub rr: f64,
+    pub rp: f64,
+}
+
+impl FingerWeights {
+    #[inline]
+    pub const fn get(&self, f: Finger) -> f64 {
+        use Finger::*;
+
+        match f {
+            LP => self.lp,
+            LR => self.lr,
+            LM => self.lm,
+            LI => self.li,
+            LT => self.lt,
+            RT => self.rt,
+            RI => self.ri,
+            RM => self.rm,
+            RR => self.rr,
+            RP => self.rp,
+        }
+    }
+}
+
+impl Default for FingerWeights {
+    fn default() -> Self {
+        Self {
+            lp: 1.0,
+            lr: 1.0,
+            lm: 1.0,
+            li: 1.0,
+            lt: 1.0,
+            rt: 1.0,
+            ri: 1.0,
+            rm: 1.0,
+            rr: 1.0,
+            rp: 1.0,
+        }
     }
 }
