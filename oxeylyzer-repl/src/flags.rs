@@ -41,6 +41,11 @@ xflags::xflags! {
             required name: String
             optional -c, --count count: usize
         }
+        /// Shows the top n fspeed pairs on a layout. 10 by default.
+        cmd fspeed {
+            required name: String
+            optional -c, --count count: usize
+        }
         /// Set a language to be used for analysis. Tries to load corpus when not present.
         cmd language l lang {
             optional language: PathBuf

@@ -3,6 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
 use oxeylyzer_core::{generate::LayoutGeneration, layout::*, rayon, weights::Config};
@@ -377,6 +378,53 @@ impl Repl {
         }
     }
 
+    fn fspeed(&self, name: &str, top_n: usize) {
+        let layout = if let Some(layout) = self.layout_by_name(name) {
+            layout
+        } else {
+            println!("layout {name} does not exist!");
+            return;
+        };
+
+        println!("top {} fspeed pairs for {name}:", top_n.min(48));
+
+        let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
+
+        let fspeed = layout
+            .fspeed_indices
+            .all
+            .iter()
+            .map(|pair| {
+                let u1 = layout.char(pair.pair.0).unwrap();
+                let u2 = layout.char(pair.pair.1).unwrap();
+
+                let bigram = self
+                    .layout_gen
+                    .mapping
+                    .map_us(&[u1, u2])
+                    .collect::<String>();
+
+                let bigram2 = self
+                    .layout_gen
+                    .mapping
+                    .map_us(&[u2, u1])
+                    .collect::<String>();
+
+                let fmt = format!("{bigram}/{bigram2}");
+
+                let freq = self.layout_gen.pair_fspeed(layout, pair);
+
+                (fmt, freq)
+            })
+            .sorted_by(|(_, a), (_, b)| a.cmp(b))
+            .take(top_n)
+            .collect::<Vec<_>>();
+
+        for (bigrams, freq) in fspeed {
+            println!("{bigrams}: {:.3}", fmt_freq(freq))
+        }
+    }
+
     fn respond(&mut self, line: &str) -> Result<bool, String> {
         use crate::flags::{Repl, ReplCmd::*};
 
@@ -403,6 +451,7 @@ impl Repl {
                 Err(_) => self.analyze_name(&a.name_or_nr),
             },
             Compare(c) => self.compare_name(&c.name1, &c.name2),
+            Swap(s) => self.swap(&s.name, &s.swaps),
             Rank(_) => self.rank(),
             Generate(g) => {
                 println!("generating {} layouts...", g.count);
@@ -424,6 +473,10 @@ impl Repl {
             Sfbs(s) => match s.count {
                 Some(count) => self.sfbs(&s.name, count),
                 None => self.sfbs(&s.name, 10),
+            },
+            Fspeed(s) => match s.count {
+                Some(count) => self.fspeed(&s.name, count),
+                None => self.fspeed(&s.name, 10),
             },
             Language(l) => match l.language {
                 Some(l) => {

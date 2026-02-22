@@ -126,7 +126,7 @@ impl std::fmt::Display for TrigramStats {
     }
 }
 
-fn format_fspeed(finger_speed: &[f64]) -> String {
+pub fn format_fspeed(finger_speed: &[f64]) -> String {
     let f = |v| format!("{:.3}", v * 10.0);
 
     let mut left_hand = Vec::new();
@@ -781,7 +781,7 @@ impl LayoutGeneration {
     }
 
     #[inline]
-    fn pair_fspeed(&self, layout: &FastLayout, bigram_pair: &BigramPair) -> i64 {
+    pub fn pair_fspeed(&self, layout: &FastLayout, bigram_pair: &BigramPair) -> i64 {
         let BigramPair {
             pair: PosPair(p1, p2),
             dist,
