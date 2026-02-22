@@ -46,6 +46,10 @@ xflags::xflags! {
             required name: String
             optional -c, --count count: usize
         }
+        cmd stretches {
+            required name: String
+            optional -c, --count count: usize
+            }
         /// Set a language to be used for analysis. Tries to load corpus when not present.
         cmd language l lang {
             optional language: PathBuf

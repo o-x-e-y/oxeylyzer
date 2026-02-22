@@ -425,6 +425,60 @@ impl Repl {
         }
     }
 
+    fn stretches(&self, name: &str, top_n: usize) {
+        let layout = if let Some(layout) = self.layout_by_name(name) {
+            layout
+        } else {
+            println!("layout {name} does not exist!");
+            return;
+        };
+
+        println!("top {} stretch pairs for {name}:", top_n.min(48));
+
+        let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
+
+        let fspeed = layout
+            .stretch_indices
+            .all_pairs
+            .iter()
+            .map(|pair| {
+                let u1 = layout.char(pair.pair.0).unwrap();
+                let u2 = layout.char(pair.pair.1).unwrap();
+
+                let bigram = self
+                    .layout_gen
+                    .mapping
+                    .map_us(&[u1, u2])
+                    .collect::<String>();
+
+                let bigram2 = self
+                    .layout_gen
+                    .mapping
+                    .map_us(&[u2, u1])
+                    .collect::<String>();
+
+                let fmt = format!("{bigram}/{bigram2}");
+
+                let freq = {
+                    let u1 = layout.matrix[pair.pair.0];
+                    let u2 = layout.matrix[pair.pair.1];
+
+                    (self.layout_gen.data.get_stretch_weighted_bigram_u([u1, u2])
+                        + self.layout_gen.data.get_stretch_weighted_bigram_u([u2, u1]))
+                        * pair.dist
+                };
+
+                (fmt, freq)
+            })
+            .sorted_by(|(_, a), (_, b)| a.cmp(b))
+            .take(top_n)
+            .collect::<Vec<_>>();
+
+        for (bigrams, freq) in fspeed {
+            println!("{bigrams}: {:.3}", fmt_freq(freq))
+        }
+    }
+
     fn respond(&mut self, line: &str) -> Result<bool, String> {
         use crate::flags::{Repl, ReplCmd::*};
 
@@ -477,6 +531,10 @@ impl Repl {
             Fspeed(s) => match s.count {
                 Some(count) => self.fspeed(&s.name, count),
                 None => self.fspeed(&s.name, 10),
+            },
+            Stretches(s) => match s.count {
+                Some(count) => self.stretches(&s.name, count),
+                None => self.stretches(&s.name, 10),
             },
             Language(l) => match l.language {
                 Some(l) => {
