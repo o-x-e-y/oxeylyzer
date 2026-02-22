@@ -117,6 +117,8 @@ impl AnalyzerData {
             })
             .collect::<Box<_>>();
 
+        let dsfb_ratio = weights.sfs / weights.sfbs;
+
         let same_finger_weighted_bigrams = bigrams
             .iter()
             .zip(&skipgrams)
@@ -124,10 +126,10 @@ impl AnalyzerData {
             .zip(&skipgrams3)
             .map(|(((&b, &s), &s2), &s3)| {
                 let sfb = b as f64;
-                let sfs = (s as f64) * weights.dsfb_ratio;
-                let sfs2 = (s2 as f64) * weights.dsfb_ratio2;
-                let sfs3 = (s3 as f64) * weights.dsfb_ratio3;
-                ((sfb + sfs + sfs2 + sfs3) * weights.fspeed) as i64
+                let sfs = (s as f64) * dsfb_ratio;
+                let sfs2 = (s2 as f64) * dsfb_ratio.powi(2);
+                let sfs3 = (s3 as f64) * dsfb_ratio.powi(3);
+                ((sfb + sfs + sfs2 + sfs3) * weights.sfbs) as i64
             })
             .collect::<Box<_>>();
 
@@ -138,9 +140,9 @@ impl AnalyzerData {
             .zip(&skipgrams3)
             .map(|(((&b, &s), &s2), &s3)| {
                 let sfb = b as f64;
-                let sfs = (s as f64) * weights.dsfb_ratio;
-                let sfs2 = (s2 as f64) * weights.dsfb_ratio2;
-                let sfs3 = (s3 as f64) * weights.dsfb_ratio3;
+                let sfs = (s as f64) * dsfb_ratio;
+                let sfs2 = (s2 as f64) * dsfb_ratio.powi(2);
+                let sfs3 = (s3 as f64) * dsfb_ratio.powi(3);
                 ((sfb + sfs + sfs2 + sfs3) * weights.stretches) as i64
             })
             .collect::<Box<_>>();

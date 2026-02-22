@@ -15,14 +15,9 @@ pub struct MaxFingerUse {
 
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct Weights {
-    pub heatmap: f64,
     pub lateral_penalty: f64,
-    pub fspeed: f64,
-    pub dsfb_ratio: f64,
-    #[serde(default)]
-    pub dsfb_ratio2: f64,
-    #[serde(default)]
-    pub dsfb_ratio3: f64,
+    pub sfbs: f64,
+    pub sfs: f64,
     pub scissors: f64,
     pub stretches: f64,
     pub lsbs: f64,
@@ -51,14 +46,9 @@ pub struct AnalyzerMaxFingerUse {
 
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct AnalyzerWeights {
-    pub heatmap: i64,
     pub lateral_penalty: i64,
-    pub fspeed: i64,
-    pub dsfb_ratio: i64,
-    #[serde(default)]
-    pub dsfb_ratio2: i64,
-    #[serde(default)]
-    pub dsfb_ratio3: i64,
+    pub sfbs: i64,
+    pub sfs: i64,
     pub scissors: i64,
     pub stretches: i64,
     pub lsbs: i64,
@@ -90,12 +80,9 @@ impl From<Weights> for AnalyzerWeights {
         };
 
         Self {
-            heatmap: scale(weights.heatmap),
             lateral_penalty: scale(weights.lateral_penalty),
-            fspeed: scale(weights.fspeed),
-            dsfb_ratio: scale(weights.dsfb_ratio),
-            dsfb_ratio2: scale(weights.dsfb_ratio2),
-            dsfb_ratio3: scale(weights.dsfb_ratio3),
+            sfbs: scale(weights.sfbs),
+            sfs: scale(weights.sfs),
             scissors: scale(weights.scissors),
             stretches: scale(weights.stretches),
             lsbs: scale(weights.lsbs),
@@ -143,9 +130,6 @@ impl Config {
             index: load.weights.max_finger_use.index / 100.0,
         };
 
-        load.weights.dsfb_ratio2 = load.weights.dsfb_ratio.powi(2);
-        load.weights.dsfb_ratio3 = load.weights.dsfb_ratio.powi(3);
-
         Self {
             language: load.language,
             trigram_precision: load.trigram_precision,
@@ -160,25 +144,22 @@ impl Config {
             trigram_precision: 100000,
             max_cores: 128,
             weights: Weights {
-                heatmap: 0.85,
                 lateral_penalty: 1.3,
-                fspeed: 8.0,
-                dsfb_ratio: 0.12,
-                dsfb_ratio2: (0.10 * 6.0f64).powi(2),
-                dsfb_ratio3: (0.08 * 6.0f64).powi(3),
-                scissors: 5.0,
-                stretches: 3.0,
-                lsbs: 2.0,
-                pinky_ring_bigrams: 0.0,
+                sfbs: -8.0,
+                sfs: -1.0,
+                scissors: -5.0,
+                stretches: -0.3,
+                lsbs: -2.0,
+                pinky_ring_bigrams: -0.0,
                 inrolls: 1.6,
                 outrolls: 1.3,
                 onehands: 0.8,
                 alternates: 0.7,
                 alternates_sfs: 0.35,
-                redirects: 1.5,
-                redirects_sfs: 2.75,
-                bad_redirects: 4.0,
-                bad_redirects_sfs: 6.0,
+                redirects: -1.5,
+                redirects_sfs: -2.75,
+                bad_redirects: -4.0,
+                bad_redirects_sfs: -6.0,
                 finger_weights: FingerWeights::default(),
                 max_finger_use: MaxFingerUse {
                     penalty: 2.5,

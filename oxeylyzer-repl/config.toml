@@ -4,10 +4,9 @@ keyboard_type = "ansi"
 max_cores = 32
 
 [weights]
-heatmap = -1.70
-fspeed = -28.0
+sfbs = -8.0
+sfs = -1.0
 lateral_penalty = -1.0
-dsfb_ratio = 0.20
 scissors = -2.5
 lsbs = -2.0
 stretches = -0.3

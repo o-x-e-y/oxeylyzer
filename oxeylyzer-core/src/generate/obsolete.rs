@@ -31,9 +31,7 @@ impl LayoutGeneration {
 
     #[allow(dead_code)]
     fn col_fspeed_before(&self, layout: &FastLayout, finger: Finger) -> i64 {
-        let dsfb_ratio = self.weights.dsfb_ratio;
-        let dsfb_ratio2 = self.weights.dsfb_ratio2;
-        let dsfb_ratio3 = self.weights.dsfb_ratio3;
+        let dsfb_ratio = (self.weights.sfs as f64) / (self.weights.sfbs as f64);
 
         let fspeed = if let Some(indices) = layout.fspeed_indices.fingers.get(finger as usize) {
             indices
@@ -62,21 +60,12 @@ impl LayoutGeneration {
                             let s3p = self.data.skipgrams3().get(idx).copied().unwrap_or_default();
                             let s3r = self.data.skipgrams3().get(rev).copied().unwrap_or_default();
 
-                            let mut res = 0;
+                            let sfbs = (bp + br) as f64;
+                            let sfs = (sp + sr) as f64 * dsfb_ratio;
+                            let sfs2 = (s2p + s2r) as f64 * dsfb_ratio.powi(2);
+                            let sfs3 = (s3p + s3r) as f64 * dsfb_ratio.powi(3);
 
-                            res += bp * dist;
-                            res += br * dist;
-
-                            res += sp * dsfb_ratio * dist;
-                            res += sr * dsfb_ratio * dist;
-
-                            res += s2p * dsfb_ratio2 * dist;
-                            res += s2r * dsfb_ratio2 * dist;
-
-                            res += s3p * dsfb_ratio3 * dist;
-                            res += s3r * dsfb_ratio3 * dist;
-
-                            res
+                            (sfbs + sfs + sfs2 + sfs3) as i64 * dist
                         } else {
                             0
                         }
@@ -87,7 +76,7 @@ impl LayoutGeneration {
             0
         };
 
-        fspeed * self.weights.fspeed
+        fspeed * self.weights.sfbs
     }
 
     #[allow(dead_code)]
