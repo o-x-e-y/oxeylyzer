@@ -317,6 +317,42 @@ impl Repl {
         );
     }
 
+    fn swap(&self, name: &str, swaps: &[String]) {
+        if let Some(mut layout) = self.layout_by_name(name).cloned() {
+            swaps
+                .iter()
+                .filter(|swap| swap.len() >= 2)
+                .flat_map(|swap| swap.chars().zip(swap.chars().skip(1)).collect::<Vec<_>>())
+                .for_each(|(c1, c2)| {
+                    let p1 = layout
+                        .matrix
+                        .iter()
+                        .position(|&k| k == self.layout_gen.mapping.get_u(c1));
+                    let p2 = layout
+                        .matrix
+                        .iter()
+                        .position(|&k| k == self.layout_gen.mapping.get_u(c2));
+
+                    match (p1, p2) {
+                        (Some(p1), Some(p2)) => assert!(layout.swap(p1, p2).is_some()),
+                        (Some(_), None) => {
+                            println!("Couldn't swap {c1}{c2} because {c1} is not on the layout.")
+                        }
+                        (None, Some(_)) => {
+                            println!("Couldn't swap {c1}{c2} because {c2} is not on the layout.")
+                        }
+                        (None, None) => {
+                            println!("Couldn't swap {c1}{c2} because neither key is on the layout.")
+                        }
+                    }
+                });
+
+            self.analyze(&layout);
+        } else {
+            println!("layout {name} does not exist!")
+        }
+    }
+
     fn get_nth(&self, nr: usize) -> Option<&FastLayout> {
         self.temp_generated.get(nr)
     }

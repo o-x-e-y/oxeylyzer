@@ -11,6 +11,14 @@ xflags::xflags! {
             required name1: String
             required name2: String
         }
+        /// Swaps a number of keys on a certain layout. Cycles between one key and the next:
+        /// swap sturdy ab -> swaps ab
+        /// swap sturdy abc -> swaps a -> b -> c
+        /// swap sturdy ab abc swap -> swaps a -> b and then a -> b -> c
+        cmd swap {
+            required name: String
+            repeated swaps: String
+        }
         /// Rank all layouts for the currently specified language. A higher score is better.
         cmd rank list {}
         /// Generate a number of layouts and displays the best 10. Note: layouts may not be correct after changing language.
