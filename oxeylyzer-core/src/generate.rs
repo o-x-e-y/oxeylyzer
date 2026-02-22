@@ -792,8 +792,10 @@ impl LayoutGeneration {
             && let Some(c2) = layout.char(*p2)
         {
             // TODO: rework with duplicate bigram logic
-            self.data.get_same_finger_weighted_bigram_u([c1, c2]) * dist
-                + self.data.get_same_finger_weighted_bigram_u([c2, c2]) * dist
+            let freq = self.data.get_same_finger_weighted_bigram_u([c1, c2])
+                + self.data.get_same_finger_weighted_bigram_u([c2, c1]);
+
+            freq * dist
         } else {
             0
         }

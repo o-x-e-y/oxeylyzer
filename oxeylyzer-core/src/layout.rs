@@ -310,7 +310,7 @@ impl FSpeedIndices {
                     .zip(0usize..)
                     .filter_map(|((f, k), i)| (f == &finger).then_some((k, i)))
                     .tuple_combinations::<(_, _)>()
-                    .map(|((k1, i1), (k2, i2))| {                        
+                    .map(|((k1, i1), (k2, i2))| {
                         let pair = PosPair(i1, i2);
                         let dist = (dist(k1, k2, finger, finger)
                             * 100.0
