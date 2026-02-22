@@ -388,8 +388,7 @@ impl LayoutGeneration {
             .fspeed
             .map(|v| v as f64 / self.data.bigram_total as f64 / 100.0);
 
-        let stretches = (self.stretch_score(layout) as f64 / self.weights.stretches as f64)
-            / self.data.bigram_total as f64;
+        let stretches = self.stretch_score(layout) as f64 / self.data.bigram_total as f64;
         let scissors = (self.scissor_score(layout) as f64 / self.weights.scissors as f64)
             / self.data.bigram_total as f64;
         let lsbs = (self.lsb_score(layout) as f64 / self.weights.lsbs as f64)

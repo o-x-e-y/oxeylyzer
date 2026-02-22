@@ -141,7 +141,7 @@ pub fn get_ngram_info(data: &AnalyzerData, ngram: &str) -> String {
         1 => {
             let c = ngram.chars().next().unwrap();
             let u = data.mapping.get_u(c);
-            let occ = (data.get_char_u(u) as f64) * 100.0;
+            let occ = (data.get_char_u(u) as f64 / data.char_total as f64) * 100.0;
             format!("{ngram}: {occ:.3}%")
         }
         2 => {
@@ -149,15 +149,14 @@ pub fn get_ngram_info(data: &AnalyzerData, ngram: &str) -> String {
             let c1 = data.mapping.get_u(bigram[0]);
             let c2 = data.mapping.get_u(bigram[1]);
 
-            // let b1 = c1 * data.characters.len() + c2;
-            // let b2 = c2 * data.characters.len() + c1;
-
             let rev = bigram.into_iter().rev().collect::<String>();
 
-            let occ_b1 = (data.get_bigram_u([c1, c2]) as f64) * 100.0;
-            let occ_b2 = (data.get_bigram_u([c2, c1]) as f64) * 100.0;
-            let occ_s1 = (data.get_skipgram_u([c1, c2]) as f64) * 100.0;
-            let occ_s2 = (data.get_skipgram_u([c2, c1]) as f64) * 100.0;
+            let occ_b1 = (data.get_bigram_u([c1, c2]) as f64 / data.bigram_total as f64) * 100.0;
+            let occ_b2 = (data.get_bigram_u([c2, c1]) as f64 / data.bigram_total as f64) * 100.0;
+            let occ_s1 =
+                (data.get_skipgram_u([c1, c2]) as f64 / data.skipgram_total as f64) * 100.0;
+            let occ_s2 =
+                (data.get_skipgram_u([c2, c1]) as f64 / data.skipgram_total as f64) * 100.0;
 
             format!(
                 "{ngram} + {rev}: {:.3}%,\n  {ngram}: {occ_b1:.3}%\n  {rev}: {occ_b2:.3}%\n\

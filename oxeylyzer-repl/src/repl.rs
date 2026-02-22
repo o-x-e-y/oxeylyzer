@@ -239,11 +239,14 @@ impl Repl {
         let ts1 = s1.trigram_stats;
         let ts2 = s2.trigram_stats;
 
+        let fmt_score = |base| (base as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
+
         println!(
             concat!(
                 "Sfb:                {: <11} Sfb:                {:.3}%\n",
                 "Dsfb:               {: <11} Dsfb:               {:.3}%\n",
                 "Finger Speed:       {: <11} Finger Speed:       {:.3}\n",
+                "Stretches:          {: <11} Stretches:          {:.3}\n",
                 "Scissors:           {: <11} Scissors:           {:.3}%\n",
                 "Lsbs:               {: <11} Lsbs:               {:.3}%\n",
                 "Pinky Ring Bigrams: {: <11} Pinky Ring Bigrams: {:.3}%\n\n",
@@ -269,6 +272,8 @@ impl Repl {
             s2.dsfb * 100.0,
             format!("{:.3}", s1.fspeed * 10.0),
             s2.fspeed * 10.0,
+            format!("{:.3}", s1.stretches * 10.0),
+            s2.stretches * 10.0,
             format!("{:.3}%", s1.scissors * 100.0),
             s2.scissors * 100.0,
             format!("{:.3}%", s1.lsbs * 100.0),
@@ -307,8 +312,8 @@ impl Repl {
             ts2.bad_sfbs * 100.0,
             format!("{:.3}%", ts1.sfts * 100.0),
             ts2.sfts * 100.0,
-            format!("{:.3}", l1.score),
-            l2.score
+            format!("{:.3}", fmt_score(l1.score)),
+            fmt_score(l2.score)
         );
     }
 
