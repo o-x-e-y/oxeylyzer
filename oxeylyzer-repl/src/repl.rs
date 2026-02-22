@@ -77,7 +77,7 @@ impl Repl {
 
     pub fn rank(&self) {
         for (name, layout) in self.saved.iter() {
-            let score = (layout.score as f64) / (self.layout_gen.data.char_total as f64);
+            let score = (layout.score as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
             println!("{:10}{}", format!("{:.3}:", score), name);
         }
     }
@@ -187,6 +187,8 @@ impl Repl {
     }
 
     pub fn analyze(&self, layout: &FastLayout) {
+        let fmt_score = |base| (base as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
+
         let stats = self.layout_gen.get_layout_stats(layout);
         let score = if layout.score == 0 {
             self.layout_gen.score(layout)
@@ -196,7 +198,7 @@ impl Repl {
 
         let layout_str = heatmap_string(&self.layout_gen.data, layout);
 
-        println!("{}\n{}\nScore: {:.3}", layout_str, stats, score);
+        println!("{}\n{}\nScore: {:.3}", layout_str, stats, fmt_score(score));
     }
 
     pub fn compare_name(&self, name1: &str, name2: &str) {

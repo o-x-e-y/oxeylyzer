@@ -48,24 +48,24 @@ pub struct TrigramAccumulator {
 
 impl TrigramAccumulator {
     fn to_stats(&self, trigram_total: i64) -> TrigramStats {
-        let total = trigram_total as f64;
+        let div_total = |stat| (stat as f64) / (trigram_total as f64);
 
         TrigramStats {
-            alternates: (self.alternates as f64) / total,
-            alternates_sfs: (self.alternates_sfs as f64) / total,
-            inrolls: (self.inrolls as f64) / total,
-            outrolls: (self.outrolls as f64) / total,
-            onehands: (self.onehands as f64) / total,
-            redirects: (self.redirects as f64) / total,
-            redirects_sfs: (self.redirects_sfs as f64) / total,
-            bad_redirects: (self.bad_redirects as f64) / total,
-            bad_redirects_sfs: (self.bad_redirects_sfs as f64) / total,
-            sfbs: (self.sfbs as f64) / total,
-            bad_sfbs: (self.bad_sfbs as f64) / total,
-            sfts: (self.sfts as f64) / total,
-            thumbs: (self.thumbs as f64) / total,
-            other: (self.other as f64) / total,
-            invalid: (self.invalid as f64) / total,
+            alternates: div_total(self.alternates),
+            alternates_sfs: div_total(self.alternates_sfs),
+            inrolls: div_total(self.inrolls),
+            outrolls: div_total(self.outrolls),
+            onehands: div_total(self.onehands),
+            redirects: div_total(self.redirects),
+            redirects_sfs: div_total(self.redirects_sfs),
+            bad_redirects: div_total(self.bad_redirects),
+            bad_redirects_sfs: div_total(self.bad_redirects_sfs),
+            sfbs: div_total(self.sfbs),
+            bad_sfbs: div_total(self.bad_sfbs),
+            sfts: div_total(self.sfts),
+            thumbs: div_total(self.thumbs),
+            other: div_total(self.other),
+            invalid: div_total(self.invalid),
         }
     }
 }
@@ -139,7 +139,7 @@ fn format_fspeed(finger_speed: &[f64]) -> String {
         right_hand.push(f(v))
     }
 
-    let legend = "   Pinky  Ring   Middle Index  Thumb\n";
+    let legend = "   Pinky   Ring    Middle  Index   Thumb\n";
     let left_hand = format!("L: {}\n", left_hand.join(", "));
     let right_hand = format!("R: {}\n", right_hand.join(", "));
 
@@ -167,7 +167,7 @@ impl std::fmt::Display for LayoutStats {
             f,
             concat!(
                 "Sfb:  {:.3}%\nDsfb: {:.3}%\n\nFinger Speed: {:.3}\n",
-                "{}\nStretches: {:.3}\nScissors: {:.3}%\nLsbs: {:.3}%\n",
+                "{}\nStretches: {:.3}%\nScissors: {:.3}%\nLsbs: {:.3}%\n",
                 "Pinky Ring Bigrams: {:.3}%\n\n{}"
             ),
             self.sfb * 100.0,
@@ -383,14 +383,20 @@ impl LayoutGeneration {
 
         // TODO: rework conversion to f64
         let cache = self.initialize_cache(layout);
-        let fspeed = cache.fspeed_total as f64;
-        let finger_speed = cache.fspeed.map(|v| v as f64);
+        let fspeed = cache.fspeed_total as f64 / self.data.bigram_total as f64 / 100.0;
+        let finger_speed = cache
+            .fspeed
+            .map(|v| v as f64 / self.data.bigram_total as f64 / 100.0);
 
-        let stretches = self.stretch_score(layout) as f64;
-        let scissors = self.scissor_score(layout) as f64 / self.weights.scissors as f64;
-        let lsbs = self.lsb_score(layout) as f64 / self.weights.lsbs as f64;
-        let pinky_ring =
-            self.pinky_ring_score(layout) as f64 / self.weights.pinky_ring_bigrams as f64;
+        let stretches = (self.stretch_score(layout) as f64 / self.weights.stretches as f64)
+            / self.data.bigram_total as f64;
+        let scissors = (self.scissor_score(layout) as f64 / self.weights.scissors as f64)
+            / self.data.bigram_total as f64;
+        let lsbs = (self.lsb_score(layout) as f64 / self.weights.lsbs as f64)
+            / self.data.bigram_total as f64;
+        let pinky_ring = (self.pinky_ring_score(layout) as f64
+            / self.weights.pinky_ring_bigrams as f64)
+            / self.data.bigram_total as f64;
         let trigram_stats = self
             .trigram_stats(layout, usize::MAX)
             .to_stats(self.data.trigram_total);
@@ -417,14 +423,6 @@ impl LayoutGeneration {
         for BigramPair { pair, .. } in &layout.fspeed_indices.all {
             let c1 = layout.char(pair.0).unwrap() as usize;
             let c2 = layout.char(pair.1).unwrap() as usize;
-
-            // if c1 != self.repeat_key && c2 != self.repeat_key {
-            // 	res += data.get(c1 * len + c2).unwrap_or(&0.0);
-            // 	res += data.get(c2 * len + c1).unwrap_or(&0.0);
-            // } else {
-            // 	res += data.get(c1 * len + c2).unwrap_or(&0.0);
-            // 	res += data.get(c2 * len + c1).unwrap_or(&0.0);
-            // }
 
             res += data.get(c1 * len + c2).copied().unwrap_or_default();
             res += data.get(c2 * len + c1).copied().unwrap_or_default();

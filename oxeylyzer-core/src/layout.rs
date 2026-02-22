@@ -308,16 +308,16 @@ impl FSpeedIndices {
                     .iter()
                     .zip(keyboard)
                     .zip(0usize..)
-                    .filter_map(|((f, k), i)| (f == &finger).then_some((*f, k, i)))
+                    .filter_map(|((f, k), i)| (f == &finger).then_some((k, i)))
                     .tuple_combinations::<(_, _)>()
-                    .map(|((f1, k1, i1), (_, k2, i2))| BigramPair {
-                        pair: PosPair(i1, i2),
-                        // TODO: think about scaling differently
-                        dist: (dist(k1, k2, finger, finger).powf(1.3)
+                    .map(|((k1, i1), (k2, i2))| {                        
+                        let pair = PosPair(i1, i2);
+                        let dist = (dist(k1, k2, finger, finger)
                             * 100.0
-                            * (max_finger_weight / finger_weights.get(f1)))
-                            as i64,
-                        // * finger_weights.get(finger),
+                            * (max_finger_weight / finger_weights.get(finger)))
+                            as i64;
+
+                        BigramPair { pair, dist }
                     })
                     .collect::<Box<_>>()
             })

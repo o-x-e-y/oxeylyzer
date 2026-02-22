@@ -25,14 +25,14 @@ pub struct AnalyzerData {
 
 impl AnalyzerData {
     pub fn new(data: Data, weights: &Weights) -> Self {
-        let convert_total = |total| total as f64 / 10.0;
+        let convert_f = |f| f / 100.0;
 
-        let char_total = data.char_total; // as f64 / 10.0;
-        let bigram_total = data.bigram_total; // as f64 / 10.0;
-        let skipgram_total = data.skipgram_total; // as f64 / 10.0;
-        let skipgram2_total = data.skipgram2_total; // as f64 / 10.0;
-        let skipgram3_total = data.skipgram3_total; // as f64 / 10.0;
-        let trigram_total = data.trigram_total; // as f64 / 10.0;
+        let char_total = data.char_total;
+        let bigram_total = data.bigram_total;
+        let skipgram_total = data.skipgram_total;
+        let skipgram2_total = data.skipgram2_total;
+        let skipgram3_total = data.skipgram3_total;
+        let trigram_total = data.trigram_total;
 
         let mut chars = vec![0; data.chars.len() + 3];
         let mut mapping = CharMapping::new();
@@ -41,7 +41,7 @@ impl AnalyzerData {
             mapping.push(c);
 
             let i = mapping.get_u(c) as usize;
-            chars[i] = (f * convert_total(data.char_total)) as i64;
+            chars[i] = (convert_f(f) * data.char_total as f64) as i64;
         }
 
         debug_assert!(chars.len() >= mapping.len());
@@ -58,7 +58,7 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(bigrams[i], 0);
-            bigrams[i] = (f * convert_total(bigram_total)) as i64;
+            bigrams[i] = (convert_f(f) * bigram_total as f64) as i64;
         }
 
         let mut skipgrams = vec![0; len.pow(2)];
@@ -69,7 +69,7 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(skipgrams[i], 0);
-            skipgrams[i] = (f * convert_total(skipgram_total)) as i64;
+            skipgrams[i] = (convert_f(f) * skipgram_total as f64) as i64;
         }
 
         let mut skipgrams2 = vec![0; len.pow(2)];
@@ -80,7 +80,7 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(skipgrams2[i], 0);
-            skipgrams2[i] = (f * convert_total(skipgram2_total)) as i64;
+            skipgrams2[i] = (convert_f(f) * skipgram2_total as f64) as i64;
         }
 
         let mut skipgrams3 = vec![0; len.pow(2)];
@@ -91,19 +91,19 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(skipgrams3[i], 0);
-            skipgrams3[i] = (f * convert_total(skipgram3_total)) as i64;
+            skipgrams3[i] = (convert_f(f) * skipgram3_total as f64) as i64;
         }
 
         let mut trigrams = vec![0; len.pow(3)];
 
-        for (&[c1, c2, c3], f) in data.trigrams.iter() {
+        for (&[c1, c2, c3], &f) in data.trigrams.iter() {
             let u1 = mapping.get_u(c1) as usize;
             let u2 = mapping.get_u(c2) as usize;
             let u3 = mapping.get_u(c3) as usize;
 
             let i = u1 * len.pow(2) + u2 * len + u3;
             debug_assert_eq!(trigrams[i], 0);
-            trigrams[i] = (f * convert_total(trigram_total)) as i64;
+            trigrams[i] = (convert_f(f) * trigram_total as f64) as i64;
         }
 
         let gen_trigrams = data
@@ -113,7 +113,7 @@ impl AnalyzerData {
                 let u1 = mapping.get_u(c1);
                 let u2 = mapping.get_u(c2);
                 let u3 = mapping.get_u(c3);
-                ([u1, u2, u3], (f * convert_total(trigram_total)) as i64)
+                ([u1, u2, u3], (convert_f(f) * trigram_total as f64) as i64)
             })
             .collect::<Box<_>>();
 
