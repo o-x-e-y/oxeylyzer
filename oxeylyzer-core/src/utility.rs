@@ -1,4 +1,4 @@
-use crate::languages_cfg::read_cfg;
+use crate::{languages_cfg::read_cfg, weights::FingerWeights};
 
 use arrayvec::ArrayVec;
 use libdof::prelude::{
@@ -37,6 +37,19 @@ pub static DEFAULT_FINGERMAP: [Finger; 30] = [
     LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
     LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
 ];
+
+pub static DEFAULT_FINGER_WEIGHTS: FingerWeights = FingerWeights {
+    lp: 1.4,
+    lr: 3.6,
+    lm: 4.8,
+    li: 5.5,
+    lt: 3.3,
+    rt: 3.3,
+    ri: 5.5,
+    rm: 4.8,
+    rr: 3.6,
+    rp: 1.4,
+};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PosPair(pub usize, pub usize);

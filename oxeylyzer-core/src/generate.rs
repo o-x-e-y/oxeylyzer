@@ -358,7 +358,7 @@ impl LayoutGeneration {
                     serde_json::from_str::<Dof>(&s).with_context(|| path.display().to_string())?;
                 let name = dof.name().to_string();
 
-                match FastLayout::from_dof(dof, &self.mapping) {
+                match FastLayout::from_dof(dof, &self.mapping, &self.weights) {
                     Ok(mut layout) => {
                         layout.score = self.score(&layout);
                         res.insert(name.to_lowercase(), layout);

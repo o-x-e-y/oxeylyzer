@@ -3,7 +3,12 @@ use anyhow::Result;
 use itertools::Itertools;
 use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
 
-use crate::{char_mapping::CharMapping, utility::*, *};
+use crate::{
+    char_mapping::CharMapping,
+    utility::*,
+    weights::{AnalyzerWeights, FingerWeights},
+    *,
+};
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
@@ -105,7 +110,7 @@ impl FastLayout {
         res
     }
 
-    pub fn from_dof(dof: Dof, convert: &CharMapping) -> Result<Self> {
+    pub fn from_dof(dof: Dof, convert: &CharMapping, weights: &AnalyzerWeights) -> Result<Self> {
         use libdof::prelude::{Key, SpecialKey};
 
         // let key_count = dof.main_layer().shape().inner().iter().sum::<usize>();
@@ -138,7 +143,8 @@ impl FastLayout {
             .enumerate()
             .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
 
-        let fspeed_indices = FSpeedIndices::new(&matrix_fingers, &matrix_physical);
+        let fspeed_indices =
+            FSpeedIndices::new(&matrix_fingers, &matrix_physical, &weights.finger_weights);
         let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
         let shape = dof.shape();
 
@@ -167,7 +173,11 @@ impl Layout<u8> for FastLayout {
         let matrix_fingers = Box::new(DEFAULT_FINGERMAP);
         let matrix_physical = default_physical_map();
         let char_to_finger = Box::new([None; 64]);
-        let fspeed_indices = FSpeedIndices::new(matrix_fingers.as_slice(), &matrix_physical);
+        let fspeed_indices = FSpeedIndices::new(
+            matrix_fingers.as_slice(),
+            &matrix_physical,
+            &DEFAULT_FINGER_WEIGHTS,
+        );
         let stretch_indices = StretchCache::new(
             matrix.as_slice(),
             matrix_fingers.as_slice(),
@@ -277,7 +287,7 @@ impl FSpeedIndices {
     pub fn new(
         fingers: &[Finger],
         keyboard: &[PhysicalKey],
-        // finger_weights: &FingerWeights,
+        finger_weights: &FingerWeights,
     ) -> Self {
         assert!(
             fingers.len() <= u8::MAX as usize,
@@ -290,8 +300,7 @@ impl FSpeedIndices {
             "finger len is not the same as keyboard len: "
         );
 
-        // TODO: move this to weights
-        static F_WEIGHTS: [f64; 10] = [1.4, 3.6, 4.8, 5.5, 3.3, 3.3, 5.5, 4.8, 3.6, 1.4];
+        let max_finger_weight = finger_weights.max();
 
         let fingers: Box<[_; 10]> = Finger::FINGERS
             .map(|finger| {
@@ -306,7 +315,8 @@ impl FSpeedIndices {
                         // TODO: think about scaling differently
                         dist: (dist(k1, k2, finger, finger).powf(1.3)
                             * 100.0
-                            * (5.5 / F_WEIGHTS[f1 as usize])) as i64,
+                            * (max_finger_weight / finger_weights.get(f1)))
+                            as i64,
                         // * finger_weights.get(finger),
                     })
                     .collect::<Box<_>>()

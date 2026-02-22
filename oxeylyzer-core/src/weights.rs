@@ -228,6 +228,15 @@ impl FingerWeights {
             RP => self.rp,
         }
     }
+
+    #[inline]
+    pub fn max(&self) -> f64 {
+        Finger::FINGERS
+            .into_iter()
+            .map(|f| self.get(f))
+            .max_by(|a, b| a.total_cmp(b))
+            .unwrap_or_default()
+    }
 }
 
 impl Default for FingerWeights {
