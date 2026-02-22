@@ -20,7 +20,8 @@ xflags::xflags! {
         /// Improves the the given layout by pinning keys specified in the `config.toml` and reordering everything else.
         cmd improve i optimize {
             required name: String
-            required count: usize
+            optional count: usize
+            optional -p, --pins pins: String
         }
         /// Saves the nth layout that was generated. Optionally, you can provide a name as `-n <name>`.
         cmd save s {
