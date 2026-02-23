@@ -1,0 +1,14 @@
+{
+    "name": "Gallium Colstag",
+    "authors": [ "GalileoBlues" ],
+    "year": 2023,
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "b l d c v  j f o u ,",
+            "n r t s g  y h a e i",
+            "x q m w z  k p ' ; ."
+        ]
+    },
+    "fingering": "traditional"
+}
