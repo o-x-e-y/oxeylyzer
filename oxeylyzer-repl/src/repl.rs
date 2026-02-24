@@ -9,9 +9,12 @@ use oxeylyzer_core::data::Data;
 use oxeylyzer_core::{generate::LayoutGeneration, layout::*, rayon, weights::Config};
 use rustyline::DefaultEditor;
 use rustyline::config::Configurer;
+use rustyline::error::ReadlineError;
 
 use crate::corpus_transposition::CorpusConfig;
 use crate::tui::*;
+
+const EXIT_MESSAGE: &str = "Exiting analyzer...";
 
 pub struct Repl {
     language: String,
@@ -83,6 +86,10 @@ impl Repl {
                             println!("{err}");
                         }
                     }
+                }
+                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                    println!("{EXIT_MESSAGE}");
+                    break;
                 }
                 Err(err) => {
                     println!("Error: {:?}", err);
@@ -703,7 +710,7 @@ impl Repl {
                 }
             }
             Quit(_) => {
-                println!("Exiting analyzer...");
+                println!("{EXIT_MESSAGE}");
                 return Ok(true);
             }
         };
