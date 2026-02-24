@@ -632,7 +632,7 @@ impl Repl {
                         let language = language.trim_end_matches(".toml");
                         println!("loading data for language: {language}...");
 
-                        match Data::from_path(base_path.join(&language), &language, &config.into())
+                        match Data::from_path(base_path.join(language), language, &config.into())
                         {
                             Ok(data) => match data.save("./static/language_data") {
                                 Ok(_) => println!("Saved data for {language}!"),
