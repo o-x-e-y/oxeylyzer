@@ -625,10 +625,11 @@ impl Repl {
                 (true, true) => {
                     return Err("You can't currently generate all corpora as raw".into());
                 }
-                (true, _) => {
+                (true, false) => {
                     let base_path = PathBuf::from("./static/text");
 
                     for (language, config) in CorpusConfig::all("./") {
+                        let language = language.trim_end_matches(".toml");
                         println!("loading data for language: {language}...");
 
                         match Data::from_path(base_path.join(&language), &language, &config.into())
