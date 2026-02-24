@@ -18,3 +18,4 @@ toml = { workspace = true }
 itertools = { workspace = true }
 xflags = { git = "https://github.com/O-X-E-Y/xflags/" }
 libdof = { workspace = true }
+rustyline = "17.0.2"

@@ -7,6 +7,8 @@ use itertools::Itertools;
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
 use oxeylyzer_core::{generate::LayoutGeneration, layout::*, rayon, weights::Config};
+use rustyline::DefaultEditor;
+use rustyline::config::Configurer;
 
 use crate::corpus_transposition::CorpusConfig;
 use crate::tui::*;
@@ -57,20 +59,42 @@ impl Repl {
     pub fn run() -> Result<(), String> {
         let mut env = Self::new("static")?;
 
-        loop {
-            let line = readline().map_err(|e| e.to_string())?;
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
+        let mut rl = DefaultEditor::new().map_err(|e| e.to_string())?;
 
-            match env.respond(line) {
-                Ok(true) => break,
-                Ok(false) => continue,
+        rl.set_history_ignore_space(true);
+
+        if rl.load_history("./static/history.txt").is_err() {
+            println!("Welcome to Oxeylyzer!");
+        }
+
+        loop {
+            let readline = rl.readline("> ");
+
+            match readline {
+                Ok(line) => {
+                    if !matches!(line.as_str(), "quit" | "q" | "exit") {
+                        rl.add_history_entry(&line).map_err(|e| e.to_string())?;
+                    }
+
+                    match env.respond(&line) {
+                        Ok(true) => break,
+                        Ok(false) => continue,
+                        Err(err) => {
+                            println!("{err}");
+                        }
+                    }
+                }
                 Err(err) => {
-                    println!("{err}");
+                    println!("Error: {:?}", err);
+                    break;
                 }
             }
+        }
+
+        if let Err(e) = rl.save_history("./static/history.txt") {
+            rl.history().iter().for_each(|line| println!("{line}"));
+
+            println!("Could not save history: {e}");
         }
 
         Ok(())
