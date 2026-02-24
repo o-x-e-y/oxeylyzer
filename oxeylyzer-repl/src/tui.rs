@@ -1,20 +1,9 @@
-use std::io::Write;
-
-use oxeylyzer_core::{analyzer_data::AnalyzerData, generate::LayoutGeneration};
-// use oxeylyzer_core::language_data::LanguageData;
 use oxeylyzer_core::layout::*;
 use oxeylyzer_core::rayon::iter::ParallelIterator;
+use oxeylyzer_core::{analyzer_data::AnalyzerData, generate::LayoutGeneration};
 
 use ansi_rgb::{Colorable, rgb};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
-
-pub fn readline() -> std::io::Result<String> {
-    write!(std::io::stdout(), "> ")?;
-    std::io::stdout().flush()?;
-    let mut buf = String::new();
-    std::io::stdin().read_line(&mut buf)?;
-    Ok(buf)
-}
 
 pub fn heatmap_heat(data: &AnalyzerData, u: u8) -> String {
     let complement = 225.0 - (data.get_char_u(u) as f64 / data.char_total as f64) * 1720.0;
