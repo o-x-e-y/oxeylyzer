@@ -1,4 +1,4 @@
-use crate::languages_cfg::read_cfg;
+use crate::{languages_cfg::read_cfg, weights::FingerWeights};
 
 use arrayvec::ArrayVec;
 use libdof::prelude::{
@@ -37,6 +37,19 @@ pub static DEFAULT_FINGERMAP: [Finger; 30] = [
     LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
     LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
 ];
+
+pub static DEFAULT_FINGER_WEIGHTS: FingerWeights = FingerWeights {
+    lp: 1.4,
+    lr: 3.6,
+    lm: 4.8,
+    li: 5.5,
+    lt: 3.3,
+    rt: 3.3,
+    ri: 5.5,
+    rm: 4.8,
+    rr: 3.6,
+    rp: 1.4,
+};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PosPair(pub usize, pub usize);
@@ -93,6 +106,7 @@ impl std::fmt::Display for PosPair {
     }
 }
 
+// TODO: create this on a by-layout basis
 pub const POSSIBLE_SWAPS: [PosPair; 435] = get_possible_swaps();
 
 const fn get_possible_swaps() -> [PosPair; 435] {
@@ -146,157 +160,6 @@ impl TryFrom<String> for KeyboardType {
             Err("Couldn't parse keyboard type!")
         }
     }
-}
-
-pub fn get_effort_map(heatmap_weight: f64, ktype: KeyboardType) -> [f64; 30] {
-    use KeyboardType::*;
-
-    #[rustfmt::skip]
-    let mut res = match ktype {
-        IsoAngle => [
-            3.0, 2.4, 2.0, 2.2, 2.4,  3.3, 2.2, 2.0, 2.4, 3.0,
-            1.8, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.8,
-            3.3, 2.8, 2.4, 1.8, 2.2,  2.2, 1.8, 2.4, 2.8, 3.3,
-        ],
-        AnsiAngle => [
-            3.0, 2.4, 2.0, 2.2, 2.4,  3.3, 2.2, 2.0, 2.4, 3.0,
-            1.8, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.8,
-            3.7, 2.8, 2.4, 1.8, 2.2,  2.2, 1.8, 2.4, 2.8, 3.3,
-        ],
-        RowstagDefault => [
-            3.0, 2.4, 2.0, 2.2, 2.4,  3.3, 2.2, 2.0, 2.4, 3.0,
-            1.8, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.8,
-            3.5, 3.0, 2.7, 2.3, 3.7,  2.2, 1.8, 2.4, 2.8, 3.3,
-        ],
-        Ortho => [
-            3.0, 2.4, 2.0, 2.2, 3.1,  3.1, 2.2, 2.0, 2.4, 3.0,
-            1.7, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.7,
-            3.2, 2.6, 2.3, 1.6, 3.0,  3.0, 1.6, 2.3, 2.6, 3.2,
-        ],
-        Colstag => [
-            3.0, 2.4, 2.0, 2.2, 3.1,  3.1, 2.2, 2.0, 2.4, 3.0,
-            1.7, 1.3, 1.1, 1.0, 2.6,  2.6, 1.0, 1.1, 1.3, 1.7,
-            3.4, 2.6, 2.2, 1.8, 3.2,  3.2, 1.8, 2.2, 2.6, 3.4,
-        ],
-    };
-
-    for r in &mut res {
-        *r -= 0.2;
-        *r /= 4.5;
-        *r *= heatmap_weight;
-    }
-
-    res
-}
-
-pub fn get_fspeed(lat_multiplier: f64) -> [(PosPair, f64); 48] {
-    let mut res = Vec::new();
-    for (b, dist) in get_sfb_indices().iter().zip(get_distances(lat_multiplier)) {
-        res.push((*b, dist));
-    }
-    res.try_into().unwrap()
-}
-
-pub fn get_distances(lat_multiplier: f64) -> [f64; 48] {
-    let mut res = [0.0; 48];
-    let mut i = 0;
-    let help = |f: f64, r: f64| f.powi(2).powf(0.65) * r;
-
-    let fweights = [1.4, 3.6, 4.8, 4.8, 3.6, 1.4];
-    let mut fweight_i = 0;
-
-    while fweight_i < 6 {
-        let fweight = fweights[fweight_i];
-        let ratio = 5.5 / fweight;
-
-        res[i] = help(1.0, ratio);
-        res[i + 1] = help(2.0, ratio);
-        res[i + 2] = help(1.0, ratio);
-
-        fweight_i += 1;
-        i += 3;
-    }
-
-    let mut c = 0;
-    while c <= 2 {
-        let index = [
-            ((0, 0), (0, 1)),
-            ((0, 0), (0, 2)),
-            ((0, 0), (1, 0)),
-            ((0, 0), (1, 1)),
-            ((0, 0), (1, 2)),
-            ((0, 1), (0, 2)),
-            ((0, 1), (1, 0)),
-            ((0, 1), (1, 1)),
-            ((0, 1), (1, 2)),
-            ((0, 2), (1, 0)),
-            ((0, 2), (1, 1)),
-            ((0, 2), (1, 2)),
-            ((1, 0), (1, 1)),
-            ((1, 0), (1, 2)),
-            ((1, 1), (1, 2)),
-        ];
-        let mut pair_i = 0;
-        while pair_i < 15 {
-            let ((x1, y1), (x2, y2)) = index[pair_i];
-
-            let x_dist = (x1 - x2) as f64;
-            let y_dist = (y1 - y2) as f64;
-            let distance = (x_dist.powi(2) * lat_multiplier + y_dist.powi(2)).powf(0.65);
-            res[i] = distance;
-
-            i += 1;
-            pair_i += 1;
-        }
-        c += 2;
-    }
-    res
-}
-
-pub const fn get_sfb_indices() -> [PosPair; 48] {
-    let mut res = [PosPair::default(); 48];
-    let mut i = 0;
-
-    let mut col_i = 0;
-    let cols = [0, 1, 2, 7, 8, 9];
-    while col_i < cols.len() {
-        let col = cols[col_i];
-        res[i] = PosPair(col, col + 10);
-        res[i + 1] = PosPair(col, col + 20);
-        res[i + 2] = PosPair(col + 10, col + 20);
-
-        col_i += 1;
-        i += 3;
-    }
-
-    let mut c = 0;
-    while c <= 2 {
-        let index = [
-            (3 + c, 13 + c),
-            (3 + c, 23 + c),
-            (3 + c, 4 + c),
-            (3 + c, 14 + c),
-            (3 + c, 24 + c),
-            (13 + c, 23 + c),
-            (13 + c, 4 + c),
-            (13 + c, 14 + c),
-            (13 + c, 24 + c),
-            (23 + c, 4 + c),
-            (23 + c, 14 + c),
-            (23 + c, 24 + c),
-            (4 + c, 14 + c),
-            (4 + c, 24 + c),
-            (14 + c, 24 + c),
-        ];
-        let mut pair_i = 0;
-        while pair_i < 15 {
-            res[i] = PosPair(index[pair_i].0, index[pair_i].1);
-            i += 1;
-            pair_i += 1;
-        }
-        c += 2;
-    }
-    res
 }
 
 pub const fn get_lsb_indices() -> [PosPair; 16] {

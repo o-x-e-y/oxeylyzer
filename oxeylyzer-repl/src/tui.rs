@@ -1,30 +1,19 @@
-use std::io::Write;
-
-use oxeylyzer_core::generate::LayoutGeneration;
-use oxeylyzer_core::language_data::LanguageData;
 use oxeylyzer_core::layout::*;
 use oxeylyzer_core::rayon::iter::ParallelIterator;
+use oxeylyzer_core::{analyzer_data::AnalyzerData, generate::LayoutGeneration};
 
 use ansi_rgb::{Colorable, rgb};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 
-pub fn readline() -> std::io::Result<String> {
-    write!(std::io::stdout(), "> ")?;
-    std::io::stdout().flush()?;
-    let mut buf = String::new();
-    std::io::stdin().read_line(&mut buf)?;
-    Ok(buf)
-}
-
-pub fn heatmap_heat(data: &LanguageData, u: u8) -> String {
-    let complement = 215.0 - *data.characters.get(u as usize).unwrap_or(&0.0) * 1720.0;
+pub fn heatmap_heat(data: &AnalyzerData, u: u8) -> String {
+    let complement = 225.0 - (data.get_char_u(u) as f64 / data.char_total as f64) * 1720.0;
     let complement = complement.max(0.0) as u8;
-    let heat = rgb(215, complement, complement);
-    let c = data.char_mapping.from_single(u);
+    let heat = rgb(225, complement, complement);
+    let c = data.mapping.get_c(u);
     format!("{}", c.to_string().fg(heat))
 }
 
-pub fn heatmap_string(data: &LanguageData, layout: &FastLayout) -> String {
+pub fn heatmap_string(data: &AnalyzerData, layout: &FastLayout) -> String {
     let mut res = String::new();
 
     let mut iter = layout.matrix.iter();
@@ -59,6 +48,8 @@ pub fn generate_n_with_pins(
         return Vec::new();
     }
 
+    let fmt_score = |base| (base as f64) / (layout_gen.data.char_total as f64) / 100.0;
+
     let start = std::time::Instant::now();
 
     let pb = ProgressBar::new(amount as u64);
@@ -68,7 +59,7 @@ pub fn generate_n_with_pins(
         .progress_chars("=>-"));
 
     let mut layouts = layout_gen
-        .generate_n_with_pins_iter(amount, based_on, pins)
+        .generate_n_with_pins_iter(amount, based_on.clone(), pins)
         .progress_with(pb)
         .collect::<Vec<_>>();
 
@@ -82,7 +73,12 @@ pub fn generate_n_with_pins(
 
     for (i, layout) in layouts.iter().enumerate().take(10) {
         let printable = heatmap_string(&layout_gen.data, layout);
-        println!("#{}, score: {:.5}\n{}", i, layout.score, printable);
+        println!(
+            "#{}, score: {:.5}\n{}",
+            i,
+            fmt_score(layout.score),
+            printable
+        );
     }
 
     layouts
@@ -92,6 +88,8 @@ pub fn generate_n(layout_gen: &LayoutGeneration, amount: usize) -> Vec<FastLayou
     if amount == 0 {
         return Vec::new();
     }
+
+    let fmt_score = |base| (base as f64) / (layout_gen.data.char_total as f64) / 100.0;
 
     let start = std::time::Instant::now();
 
@@ -116,55 +114,62 @@ pub fn generate_n(layout_gen: &LayoutGeneration, amount: usize) -> Vec<FastLayou
 
     for (i, layout) in layouts.iter().enumerate().take(10) {
         let printable = heatmap_string(&layout_gen.data, layout);
-        println!("#{}, score: {:.5}\n{}", i, layout.score, printable);
+        println!(
+            "#{}, score: {:.5}\n{}",
+            i,
+            fmt_score(layout.score),
+            printable
+        );
     }
 
     layouts
 }
 
-pub fn get_ngram_info(data: &mut LanguageData, ngram: &str) -> String {
+pub fn get_ngram_info(data: &AnalyzerData, ngram: &str) -> String {
     match ngram.chars().count() {
         1 => {
             let c = ngram.chars().next().unwrap();
-            let u = data.char_mapping.to_single(c);
-            let occ = data.characters.get(u as usize).unwrap_or(&0.0) * 100.0;
+            let u = data.mapping.get_u(c);
+            let occ = (data.get_char_u(u) as f64 / data.char_total as f64) * 100.0;
             format!("{ngram}: {occ:.3}%")
         }
         2 => {
             let bigram: [char; 2] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
-            let c1 = data.char_mapping.to_single(bigram[0]) as usize;
-            let c2 = data.char_mapping.to_single(bigram[1]) as usize;
-
-            let b1 = c1 * data.characters.len() + c2;
-            let b2 = c2 * data.characters.len() + c1;
+            let c1 = data.mapping.get_u(bigram[0]);
+            let c2 = data.mapping.get_u(bigram[1]);
 
             let rev = bigram.into_iter().rev().collect::<String>();
 
-            let occ_b1 = data.bigrams.get(b1).unwrap_or(&0.0) * 100.0;
-            let occ_b2 = data.bigrams.get(b2).unwrap_or(&0.0) * 100.0;
-            let occ_s = data.skipgrams.get(b1).unwrap_or(&0.0) * 100.0;
-            let occ_s2 = data.skipgrams.get(b2).unwrap_or(&0.0) * 100.0;
+            let occ_b1 = (data.get_bigram_u([c1, c2]) as f64 / data.bigram_total as f64) * 100.0;
+            let occ_b2 = (data.get_bigram_u([c2, c1]) as f64 / data.bigram_total as f64) * 100.0;
+            let occ_s1 =
+                (data.get_skipgram_u([c1, c2]) as f64 / data.skipgram_total as f64) * 100.0;
+            let occ_s2 =
+                (data.get_skipgram_u([c2, c1]) as f64 / data.skipgram_total as f64) * 100.0;
 
             format!(
                 "{ngram} + {rev}: {:.3}%,\n  {ngram}: {occ_b1:.3}%\n  {rev}: {occ_b2:.3}%\n\
-                {ngram} + {rev} (skipgram): {:.3}%,\n  {ngram}: {occ_s:.3}%\n  {rev}: {occ_s2:.3}%",
+                {ngram} + {rev} (skipgram): {:.3}%,\n  {ngram}: {occ_s1:.3}%\n  {rev}: {occ_s2:.3}%",
                 occ_b1 + occ_b2,
-                occ_s + occ_s2
+                occ_s1 + occ_s2
             )
         }
         3 => {
             let trigram: [char; 3] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
             let t = [
-                data.char_mapping.to_single(trigram[0]),
-                data.char_mapping.to_single(trigram[1]),
-                data.char_mapping.to_single(trigram[2]),
+                data.mapping.get_u(trigram[0]),
+                data.mapping.get_u(trigram[1]),
+                data.mapping.get_u(trigram[2]),
             ];
             let &(_, occ) = data
-                .trigrams
+                .gen_trigrams()
                 .iter()
                 .find(|&&(tf, _)| tf == t)
-                .unwrap_or(&(t, 0.0));
-            format!("{ngram}: {:.3}%", occ * 100.0)
+                .unwrap_or(&(t, 0));
+            format!(
+                "{ngram}: {:.3}%",
+                (occ as f64) / (data.trigram_total as f64) * 100.0
+            )
         }
         _ => "Invalid ngram! It must be 1, 2 or 3 chars long.".to_string(),
     }

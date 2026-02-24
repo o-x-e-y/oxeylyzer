@@ -1,11 +1,14 @@
 #![allow(dead_code)]
 
+mod data;
 mod languages;
 
 use std::hint::black_box;
 
 use diol::prelude::*;
 use oxeylyzer_core::{
+    corpus_cleaner::CorpusCleaner,
+    data::Data,
     generate::*,
     utility::{POSSIBLE_SWAPS, PosPair},
 };
@@ -21,14 +24,17 @@ fn main() -> std::io::Result<()> {
         .filter_map(|(i, swap)| ((i + 17) % 50 == 0).then_some(swap))
         .collect::<Vec<_>>();
 
-    let languages = ["english", "bokmal", "german", "hebrew", "russian", "tr"];
+    let languages = ["english", "bokmal"];
+    let corpora = ["bokmal", "hebrew", "shai"];
 
     let mut bench = Bench::new(BenchConfig::from_args()?);
 
     bench.register(score_swap, swaps);
     bench.register(score_layout, layout_names.clone());
     bench.register(generate, languages);
-    bench.register(best_swap_cached, layout_names);
+    bench.register(best_swap_cached, layout_names.clone());
+    bench.register(best_swap, layout_names);
+    bench.register(language_data, corpora);
 
     bench.run()?;
     Ok(())
@@ -55,6 +61,16 @@ fn score_layout(bencher: Bencher, name: String) {
     })
 }
 
+fn best_swap(bencher: Bencher, name: String) {
+    let mut g = black_box(LayoutGeneration::new("english", "./static/", None).unwrap());
+    let saved = g.load_layouts("./static/layouts", "english").unwrap();
+    let mut layout = saved.get(&name).cloned().unwrap();
+
+    bencher.bench(|| {
+        black_box(g.best_swap(&mut layout, None, &POSSIBLE_SWAPS));
+    })
+}
+
 fn best_swap_cached(bencher: Bencher, name: String) {
     let mut g = black_box(LayoutGeneration::new("english", "./static/", None).unwrap());
     let saved = g.load_layouts("./static/layouts", "english").unwrap();
@@ -72,5 +88,14 @@ fn generate(bencher: Bencher, language: &str) {
 
     bencher.bench(|| {
         g.generate();
+    })
+}
+
+fn language_data(bencher: Bencher, language: &str) {
+    let cleaner = CorpusCleaner::raw();
+
+    bencher.bench(|| {
+        Data::from_path(format!("./static/text/{language}"), language, &cleaner)
+            .expect("couldn't create data:");
     })
 }

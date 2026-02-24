@@ -1,36 +1,40 @@
-pins = """
-..... ..xx.
-...x. .xxxx
-..... ..x..
-"""
-
-[defaults]
-language = "english"
+language = "shai"
 trigram_precision = 1000
 keyboard_type = "ansi"
 max_cores = 32
 
 [weights]
-heatmap = 1.70
-fspeed = 28.0
-lateral_penalty = 1.0
-dsfb_ratio = 0.40
-scissors = 2.5
-stretches = 3.0
-lsbs = 2.0
+sfbs = -8.0
+sfs = -1.0
+lateral_penalty = -1.0
+scissors = -2.5
+lsbs = -2.0
+stretches = -0.3
 pinky_ring_bigrams = 0.2
 inrolls = 2.5
 outrolls = 2.4
 onehands = 0.9
 alternates = 0.4
-alternates_sfs = 0.6
-redirects = 5.4
-redirects_sfs = 7.2
-bad_redirects = 6.9
-bad_redirects_sfs = 9.5
+alternates_sfs = 0.1
+redirects = -5.4
+redirects_sfs = -7.2
+bad_redirects = -6.9
+bad_redirects_sfs = -9.5
+
+[weights.finger_weights]
+lp = 1.4
+lr = 3.6
+lm = 4.8
+li = 5.5
+lt = 3.3
+rt = 3.3
+ri = 5.5
+rm = 4.8
+rr = 3.6
+rp = 1.4
 
 [weights.max_finger_use]
-penalty = 2.5
+penalty = 0
 pinky = 9.0
 ring = 14.0
 middle = 20.0

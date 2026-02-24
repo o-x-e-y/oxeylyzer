@@ -1,6 +1,6 @@
 inherits = ["default"]
 
-keep = "āīēš"
+letters_to_lowercase = "āīēš"
 
 [multiple]
 uppercase_versions = true # this tries to create a transposition for Č, Ķ etc as well.
