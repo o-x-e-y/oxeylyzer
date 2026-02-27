@@ -150,6 +150,27 @@ impl Repl {
             .ok_or(ReplError::UnknownLayout(name.into()))
     }
 
+    pub fn nth_layout(&self, index: usize) -> Result<&FastLayout> {
+        self.temp_generated
+            .get(index)
+            .ok_or(ReplError::IndexOutOfBounds(
+                index,
+                self.temp_generated.len(),
+            ))
+    }
+
+    pub fn analyze(&self, name_or_nr: &str) -> Result<()> {
+        let layout = match name_or_nr.parse::<usize>() {
+            Ok(nr) => self.nth_layout(nr)?,
+            Err(_) => self.layout(name_or_nr)?,
+        };
+
+        println!("{}", name_or_nr);
+        self.analyze_layout(layout);
+
+        Ok(())
+    }
+
     pub fn rank(&self) {
         for (name, layout) in self.saved.iter() {
             let score = (layout.score as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
@@ -209,18 +230,20 @@ impl Repl {
         Err(ReplError::FailedToFindPlaceholderName)
     }
 
-    pub fn save(&mut self, mut layout: FastLayout, name: Option<String>) -> Result<()> {
-        let new_name = if let Some(n) = name {
-            n.replace(' ', "_")
-        } else {
-            self.placeholder_name(&layout).unwrap()
+    pub fn save(&mut self, n: usize, name: Option<String>) -> Result<()> {
+        let mut layout = self.nth_layout(n)?.clone();
+        let new_name = match name {
+            Some(name) => name,
+            None => self.placeholder_name(&layout)?,
         };
+
+        let name_path = new_name.replace(' ', "_").to_lowercase();
 
         let mut f = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("static/layouts/{}/{}.kb", self.language, new_name))?;
+            .open(format!("static/layouts/{}/{}.kb", self.language, name_path))?;
 
         let layout_formatted = layout.formatted_string(&self.layout_gen.data.mapping);
         println!("saved {}\n{}", new_name, layout_formatted);
@@ -234,7 +257,7 @@ impl Repl {
         Ok(())
     }
 
-    pub fn analyze(&self, layout: &FastLayout) {
+    pub fn analyze_layout(&self, layout: &FastLayout) {
         let fmt_score = |base| (base as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
 
         let stats = self.layout_gen.get_layout_stats(layout);
@@ -387,13 +410,9 @@ impl Repl {
                 }
             });
 
-        self.analyze(&layout);
+        self.analyze_layout(&layout);
 
         Ok(())
-    }
-
-    fn get_nth(&self, nr: usize) -> Option<&FastLayout> {
-        self.temp_generated.get(nr)
     }
 
     pub fn sfr_freq(&self) -> f64 {
@@ -523,20 +542,7 @@ impl Repl {
         let flags = Repl::from_vec(args)?;
 
         match flags.subcommand {
-            Analyze(a) => match a.name_or_nr.parse::<usize>() {
-                Ok(nr) => match self.get_nth(nr) {
-                    Some(layout) => self.analyze(layout),
-                    None => {
-                        return Err(ReplError::IndexOutOfBounds(nr, self.temp_generated.len()));
-                    }
-                },
-                Err(_) => {
-                    let layout = self.layout(&a.name_or_nr)?;
-
-                    println!("{}", a.name_or_nr);
-                    self.analyze(layout);
-                }
-            },
+            Analyze(a) => self.analyze(&a.name_or_nr)?,
             Compare(c) => self.compare_name(&c.name1, &c.name2)?,
             Swap(s) => self.swap(&s.name, &s.swaps)?,
             Rank(_) => self.rank(),
@@ -547,12 +553,7 @@ impl Repl {
                 });
             }
             Improve(i) => self.improve(&i.name, i.count, i.pins)?,
-            Save(s) => match (self.get_nth(s.n), s.name) {
-                (Some(layout), name) => self.save(layout.clone(), name)?,
-                (None, _) => {
-                    return Err(ReplError::IndexOutOfBounds(s.n, self.temp_generated.len()));
-                }
-            },
+            Save(s) => self.save(s.n, s.name)?,
             Sfbs(s) => match s.count {
                 Some(count) => self.sfbs(&s.name, count)?,
                 None => self.sfbs(&s.name, 10)?,
