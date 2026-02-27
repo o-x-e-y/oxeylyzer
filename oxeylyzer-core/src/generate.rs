@@ -267,9 +267,8 @@ impl LayoutGeneration {
             .join(language)
             .with_extension("json");
 
-        let data = Data::load(&data_path)
-            .with_context(|| data_path.display().to_string())
-            .unwrap();
+        let data = Data::load(&data_path).with_context(|| data_path.display().to_string())?;
+
         let data = AnalyzerData::new(data, &config.weights);
 
         let mut chars_for_generation: [u8; 30] = chars_for_generation(language)
@@ -277,7 +276,7 @@ impl LayoutGeneration {
             .map(|c| data.mapping.get_u(c))
             .collect::<Vec<_>>()
             .try_into()
-            .unwrap();
+            .or_else(|_| Err(anyhow::anyhow!("Failed to convert Vec<u8> to [u8; 30]")))?;
 
         chars_for_generation.sort_by(|&a, &b| {
             let a = data.get_char_u(a);
