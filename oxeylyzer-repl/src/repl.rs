@@ -157,15 +157,6 @@ impl Repl {
         }
     }
 
-    pub fn analyze_name(&self, name: &str) -> Result<()> {
-        let layout = self.layout(name)?;
-
-        println!("{}", name);
-        self.analyze(layout);
-
-        Ok(())
-    }
-
     pub fn pin_positions(&self, layout: &FastLayout, pin_chars: String) -> Vec<usize> {
         let m = HashSet::<char>::from_iter(pin_chars.chars());
 
@@ -539,7 +530,12 @@ impl Repl {
                         return Err(ReplError::IndexOutOfBounds(nr, self.temp_generated.len()));
                     }
                 },
-                Err(_) => self.analyze_name(&a.name_or_nr)?,
+                Err(_) => {
+                    let layout = self.layout(&a.name_or_nr)?;
+
+                    println!("{}", a.name_or_nr);
+                    self.analyze(layout);
+                }
             },
             Compare(c) => self.compare_name(&c.name1, &c.name2)?,
             Swap(s) => self.swap(&s.name, &s.swaps)?,
