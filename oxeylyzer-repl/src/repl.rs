@@ -29,6 +29,8 @@ pub enum ReplError {
     ShlexError,
     #[error("Index '{0}' is out of bounds after generating {1} layouts")]
     IndexOutOfBounds(usize, usize),
+    #[error("Invalid ngram length, found length {0}. Allowed lengths: 1, 2, 3")]
+    InvalidNgramLength(usize),
 
     #[error(transparent)]
     XflagsError(#[from] xflags::Error),
@@ -635,6 +637,62 @@ impl Repl {
         Ok(())
     }
 
+    pub fn ngram(&self, ngram: &str) -> Result<()> {
+        let data = &self.layout_gen.data;
+
+        match ngram.chars().count() {
+            1 => {
+                let c = ngram.chars().next().unwrap();
+                let u = data.mapping.get_u(c);
+                let occ = (data.get_char_u(u) as f64 / data.char_total as f64) * 100.0;
+                println!("{ngram}: {occ:.3}%")
+            }
+            2 => {
+                let bigram: [char; 2] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
+                let c1 = data.mapping.get_u(bigram[0]);
+                let c2 = data.mapping.get_u(bigram[1]);
+
+                let rev = bigram.into_iter().rev().collect::<String>();
+
+                let occ_b1 =
+                    (data.get_bigram_u([c1, c2]) as f64 / data.bigram_total as f64) * 100.0;
+                let occ_b2 =
+                    (data.get_bigram_u([c2, c1]) as f64 / data.bigram_total as f64) * 100.0;
+                let occ_s1 =
+                    (data.get_skipgram_u([c1, c2]) as f64 / data.skipgram_total as f64) * 100.0;
+                let occ_s2 =
+                    (data.get_skipgram_u([c2, c1]) as f64 / data.skipgram_total as f64) * 100.0;
+
+                println!(
+                    "{ngram} + {rev}: {:.3}%,\n  {ngram}: {occ_b1:.3}%\n  {rev}: {occ_b2:.3}%\n\
+                    {ngram} + {rev} (skipgram): {:.3}%,\n  {ngram}: {occ_s1:.3}%\n  {rev}: {occ_s2:.3}%",
+                    occ_b1 + occ_b2,
+                    occ_s1 + occ_s2
+                )
+            }
+            3 => {
+                let trigram: [char; 3] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
+                let t = [
+                    data.mapping.get_u(trigram[0]),
+                    data.mapping.get_u(trigram[1]),
+                    data.mapping.get_u(trigram[2]),
+                ];
+                let &(_, occ) = data
+                    .gen_trigrams()
+                    .iter()
+                    .find(|&&(tf, _)| tf == t)
+                    .unwrap_or(&(t, 0));
+                println!(
+                    "{ngram}: {:.3}%",
+                    (occ as f64) / (data.trigram_total as f64) * 100.0
+                )
+            }
+            n => return Err(ReplError::InvalidNgramLength(n)),
+        };
+
+        Ok(())
+    }
+
     fn respond(&mut self, line: &str) -> Result<ReplStatus> {
         use crate::flags::{Repl, ReplCmd::*};
 
@@ -661,7 +719,7 @@ impl Repl {
             Include(l) => self.include(&l.languages)?,
             Languages(_) => self.languages()?,
             Load(l) => self.load(l.language, l.all, l.raw)?,
-            Ngram(n) => println!("{}", get_ngram_info(&self.layout_gen.data, &n.ngram)),
+            Ngram(n) => self.ngram(&n.ngram)?,
             Reload(_) => {
                 let config = Config::with_loaded_weights("config.toml");
 
