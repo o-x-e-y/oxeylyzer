@@ -657,6 +657,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
+name = "md5"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae960838283323069879657ca3de837e9f7bbb4c7bf6ea7f1b290d5e9476d2e0"
+
+[[package]]
 name = "memchr"
 version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -786,11 +792,13 @@ dependencies = [
  "indicatif",
  "itertools",
  "libdof",
+ "md5",
  "oxeylyzer-core",
  "rustyline",
  "serde",
  "serde_json",
  "serde_with",
+ "sexp",
  "shlex",
  "thiserror",
  "toml 0.9.11+spec-1.1.0",
@@ -1143,6 +1151,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "sexp"
+version = "1.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c8fa7ac9df84000b0238cf497cb2d3056bac2ff2a7d8cf179d2803b4b58571f"
 
 [[package]]
 name = "shlex"

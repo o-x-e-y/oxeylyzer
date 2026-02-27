@@ -21,3 +21,5 @@ libdof = { workspace = true }
 rustyline = "17.0.2"
 thiserror = { workspace = true }
 anyhow = { workspace = true }
+sexp = "1.1.4"
+md5 = "0.8.0"
