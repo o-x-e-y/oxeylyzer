@@ -63,10 +63,10 @@ pub struct Repl {
     layout_gen: LayoutGeneration,
     saved: IndexMap<String, FastLayout>,
     temp_generated: Vec<FastLayout>,
+    temp_command_layouts: IndexMap<String, FastLayout>,
     thread_pool: rayon::ThreadPool,
 }
 
-// TODO: move everything out to its own function
 impl Repl {
     pub fn new<P>(generator_base_path: P) -> Result<Self>
     where
@@ -94,6 +94,7 @@ impl Repl {
             language,
             layout_gen,
             temp_generated: Vec::new(),
+            temp_command_layouts: IndexMap::new(),
             thread_pool,
         })
     }
@@ -152,6 +153,7 @@ impl Repl {
     pub fn layout(&self, name: &str) -> Result<&FastLayout> {
         self.saved
             .get(&name.to_lowercase())
+            .or_else(|| self.temp_command_layouts.get(name))
             .ok_or(ReplError::UnknownLayout(name.into()))
     }
 
@@ -164,7 +166,7 @@ impl Repl {
             ))
     }
 
-    pub fn analyze(&self, name_or_nr: &str) -> Result<()> {
+    pub fn analyze(&self, name_or_nr: &str) -> Result<Option<FastLayout>> {
         let layout = match name_or_nr.parse::<usize>() {
             Ok(nr) => self.nth_layout(nr)?,
             Err(_) => self.layout(name_or_nr)?,
@@ -173,14 +175,16 @@ impl Repl {
         println!("{}", name_or_nr);
         self.analyze_layout(layout);
 
-        Ok(())
+        Ok(Some(layout.clone()))
     }
 
-    pub fn rank(&self) {
+    pub fn rank(&self) -> Option<FastLayout> {
         for (name, layout) in self.saved.iter() {
             let score = (layout.score as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
             println!("{:10}{}", format!("{:.3}:", score), name);
         }
+
+        None
     }
 
     pub fn pin_positions(&self, layout: &FastLayout, pin_chars: String) -> Vec<usize> {
@@ -195,7 +199,7 @@ impl Repl {
             .collect()
     }
 
-    pub fn generate(&mut self, count: Option<usize>) -> Result<()> {
+    pub fn generate(&mut self, count: Option<usize>) -> Result<Option<FastLayout>> {
         let count = count.unwrap_or(2500);
 
         println!("generating {} layouts...", count);
@@ -204,7 +208,7 @@ impl Repl {
             self.temp_generated = generate_n(&self.layout_gen, count);
         });
 
-        Ok(())
+        Ok(None)
     }
 
     fn improve(
@@ -212,7 +216,7 @@ impl Repl {
         name: &str,
         count: Option<usize>,
         pin_chars: Option<String>,
-    ) -> Result<()> {
+    ) -> Result<Option<FastLayout>> {
         let layout = self.layout(name)?.clone();
 
         let count = count.unwrap_or(2500);
@@ -225,7 +229,7 @@ impl Repl {
             self.temp_generated = generate_n_with_pins(&self.layout_gen, count, layout, &pins)
         });
 
-        Ok(())
+        Ok(None)
     }
 
     fn placeholder_name(&self, layout: &FastLayout) -> Result<String> {
@@ -247,7 +251,7 @@ impl Repl {
         Err(ReplError::FailedToFindPlaceholderName)
     }
 
-    pub fn save(&mut self, n: usize, name: Option<String>) -> Result<()> {
+    pub fn save(&mut self, n: usize, name: Option<String>) -> Result<Option<FastLayout>> {
         let mut layout = self.nth_layout(n)?.clone();
         let new_name = match name {
             Some(name) => name,
@@ -267,11 +271,11 @@ impl Repl {
         f.write_all(layout_formatted.as_bytes()).unwrap();
 
         layout.score = self.layout_gen.score(&layout);
-        self.saved.insert(new_name, layout);
+        self.saved.insert(new_name, layout.clone());
         self.saved
             .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
 
-        Ok(())
+        Ok(Some(layout))
     }
 
     pub fn analyze_layout(&self, layout: &FastLayout) {
@@ -289,7 +293,7 @@ impl Repl {
         println!("{}\n{}\nScore: {:.3}", layout_str, stats, fmt_score(score));
     }
 
-    pub fn compare(&self, name1: &str, name2: &str) -> Result<()> {
+    pub fn compare(&self, name1: &str, name2: &str) -> Result<Option<FastLayout>> {
         let l1 = self.layout(name1)?;
         let l2 = self.layout(name2)?;
 
@@ -393,10 +397,10 @@ impl Repl {
             fmt_score(l2.score)
         );
 
-        Ok(())
+        Ok(None)
     }
 
-    fn swap(&self, name: &str, swaps: &[String]) -> Result<()> {
+    fn swap(&self, name: &str, swaps: &[String]) -> Result<Option<FastLayout>> {
         let mut layout = self.layout(name)?.clone();
 
         swaps
@@ -429,7 +433,7 @@ impl Repl {
 
         self.analyze_layout(&layout);
 
-        Ok(())
+        Ok(Some(layout.clone()))
     }
 
     pub fn sfr_freq(&self) -> f64 {
@@ -478,7 +482,7 @@ impl Repl {
             .for_each(|(bigram, freq)| println!("{bigram}: {:.3}", freq));
     }
 
-    fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+    fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10);
 
@@ -491,10 +495,10 @@ impl Repl {
             count,
         );
 
-        Ok(())
+        Ok(None)
     }
 
-    fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+    fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10);
 
@@ -507,10 +511,10 @@ impl Repl {
             count,
         );
 
-        Ok(())
+        Ok(None)
     }
 
-    fn stretches(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+    fn stretches(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10);
 
@@ -523,15 +527,15 @@ impl Repl {
             count,
         );
 
-        Ok(())
+        Ok(None)
     }
 
-    fn language<P: AsRef<Path>>(&mut self, language: Option<P>) -> Result<()> {
+    fn language<P: AsRef<Path>>(&mut self, language: Option<P>) -> Result<Option<FastLayout>> {
         let language = match language {
             Some(l) => l,
             None => {
                 println!("Current language: {}", self.language);
-                return Ok(());
+                return Ok(None);
             }
         };
 
@@ -545,10 +549,10 @@ impl Repl {
             Err(e) => println!("Failed to set language: {}", e),
         }
 
-        Ok(())
+        Ok(None)
     }
 
-    pub fn include<P: AsRef<Path>>(&mut self, languages: &[P]) -> Result<()> {
+    pub fn include<P: AsRef<Path>>(&mut self, languages: &[P]) -> Result<Option<FastLayout>> {
         for language in languages {
             let language = language.as_ref().display().to_string();
 
@@ -563,10 +567,10 @@ impl Repl {
         self.saved
             .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
 
-        Ok(())
+        Ok(None)
     }
 
-    pub fn languages(&self) -> Result<()> {
+    pub fn languages(&self) -> Result<Option<FastLayout>> {
         std::fs::read_dir("static/language_data")?
             .flatten()
             .for_each(|p| {
@@ -581,7 +585,7 @@ impl Repl {
                 }
             });
 
-        Ok(())
+        Ok(None)
     }
 
     fn load_one_with_config(&mut self, language: &str, cleaner: CorpusCleaner) -> Result<()> {
@@ -598,7 +602,12 @@ impl Repl {
         Ok(())
     }
 
-    pub fn load<P: AsRef<Path>>(&mut self, language: P, all: bool, raw: bool) -> Result<()> {
+    pub fn load<P: AsRef<Path>>(
+        &mut self,
+        language: P,
+        all: bool,
+        raw: bool,
+    ) -> Result<Option<FastLayout>> {
         let language = language.as_ref().display().to_string();
 
         match (all, raw) {
@@ -632,10 +641,10 @@ impl Repl {
             }
         };
 
-        Ok(())
+        Ok(None)
     }
 
-    pub fn ngram(&self, ngram: &str) -> Result<()> {
+    pub fn ngram(&self, ngram: &str) -> Result<Option<FastLayout>> {
         let data = &self.layout_gen.data;
 
         match ngram.chars().count() {
@@ -688,7 +697,7 @@ impl Repl {
             n => return Err(ReplError::InvalidNgramLength(n)),
         };
 
-        Ok(())
+        Ok(None)
     }
 
     fn reset_with_language(&mut self, language: &str) -> Result<()> {
@@ -704,8 +713,10 @@ impl Repl {
         Ok(())
     }
 
-    pub fn reload(&mut self) -> Result<()> {
-        self.reset_with_language(&self.language.clone())
+    pub fn reload(&mut self) -> Result<Option<FastLayout>> {
+        self.reset_with_language(&self.language.clone())?;
+
+        Ok(None)
     }
 
     fn respond(&mut self, line: &str) -> Result<ReplStatus> {
@@ -719,7 +730,7 @@ impl Repl {
 
         let flags = Repl::from_vec(args)?;
 
-        match flags.subcommand {
+        let layout = match flags.subcommand {
             Analyze(a) => self.analyze(&a.name_or_nr)?,
             Compare(c) => self.compare(&c.name1, &c.name2)?,
             Swap(s) => self.swap(&s.name, &s.swaps)?,
@@ -738,6 +749,11 @@ impl Repl {
             Reload(_) => self.reload()?,
             Quit(_) => return Ok(ReplStatus::Quit),
         };
+
+        if let Some(layout) = layout {
+            let hash = format!("{:x}", md5::compute(line));
+            self.temp_command_layouts.insert(hash, layout);
+        }
 
         Ok(ReplStatus::Continue)
     }
