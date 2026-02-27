@@ -276,7 +276,7 @@ impl LayoutGeneration {
             .map(|c| data.mapping.get_u(c))
             .collect::<Vec<_>>()
             .try_into()
-            .or_else(|_| Err(anyhow::anyhow!("Failed to convert Vec<u8> to [u8; 30]")))?;
+            .map_err(|_| anyhow::anyhow!("Failed to convert Vec<u8> to [u8; 30]"))?;
 
         chars_for_generation.sort_by(|&a, &b| {
             let a = data.get_char_u(a);
@@ -428,33 +428,6 @@ impl LayoutGeneration {
         }
 
         res as f64 / (total as f64)
-    }
-
-    pub fn sfbs(&self, layout: &FastLayout, top_n: usize) -> Vec<(String, f64)> {
-        layout
-            .fspeed_indices
-            .all
-            .iter()
-            .flat_map(|BigramPair { pair: p, .. }| {
-                let u1 = layout.char(p.0).unwrap();
-                let u2 = layout.char(p.1).unwrap();
-
-                let bigram = self.mapping.map_us(&[u1, u2]).collect();
-                let bigram2 = self.mapping.map_us(&[u2, u1]).collect();
-
-                // let i = (u1 as usize) * self.data.characters.len() + (u2 as usize);
-                // let i2 = (u2 as usize) * self.data.characters.len() + (u1 as usize);
-
-                let freq =
-                    self.data.get_bigram_u([u1, u2]) as f64 / (self.data.bigram_total as f64);
-                let freq2 =
-                    self.data.get_bigram_u([u2, u1]) as f64 / (self.data.bigram_total as f64);
-
-                [(bigram, freq), (bigram2, freq2)]
-            })
-            .sorted_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap())
-            .take(top_n)
-            .collect::<Vec<_>>()
     }
 
     pub fn get_trigram_pattern(
@@ -780,6 +753,21 @@ impl LayoutGeneration {
             }
     }
 
+    pub fn pair_sfb(&self, layout: &FastLayout, bigram_pair: &BigramPair) -> i64 {
+        let BigramPair {
+            pair: PosPair(p1, p2),
+            ..
+        } = bigram_pair;
+
+        if let Some(c1) = layout.char(*p1)
+            && let Some(c2) = layout.char(*p2)
+        {
+            self.data.get_bigram_u([c1, c2]) + self.data.get_bigram_u([c2, c1])
+        } else {
+            0
+        }
+    }
+
     #[inline]
     pub fn pair_fspeed(&self, layout: &FastLayout, bigram_pair: &BigramPair) -> i64 {
         let BigramPair {
@@ -812,7 +800,7 @@ impl LayoutGeneration {
         }
     }
 
-    pub fn pair_stretch(&self, layout: &FastLayout, pair: &PosPair) -> i64 {
+    pub fn stretches_including_pair(&self, layout: &FastLayout, pair: &PosPair) -> i64 {
         layout
             .stretch_indices
             .per_key_pair
@@ -820,22 +808,25 @@ impl LayoutGeneration {
             .map(|pairs| {
                 pairs
                     .iter()
-                    .map(
-                        |BigramPair {
-                             pair: PosPair(a, b),
-                             dist,
-                         }| {
-                            let u1 = layout.matrix[*b];
-                            let u2 = layout.matrix[*a];
-
-                            (self.data.get_stretch_weighted_bigram_u([u1, u2])
-                                + self.data.get_stretch_weighted_bigram_u([u2, u1]))
-                                * dist
-                        },
-                    )
+                    .map(|pair| self.pair_stretch(layout, pair))
                     .sum()
             })
             .unwrap_or_default()
+    }
+
+    #[inline]
+    pub fn pair_stretch(&self, layout: &FastLayout, pair: &BigramPair) -> i64 {
+        let BigramPair {
+            pair: PosPair(a, b),
+            dist,
+        } = pair;
+
+        let u1 = layout.matrix[*b];
+        let u2 = layout.matrix[*a];
+
+        (self.data.get_stretch_weighted_bigram_u([u1, u2])
+            + self.data.get_stretch_weighted_bigram_u([u2, u1]))
+            * dist
     }
 
     pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
@@ -935,12 +926,12 @@ impl LayoutGeneration {
         };
 
         let (stretch_score, trigrams_score) = {
-            let stretch_new = self.pair_stretch(layout, swap);
+            let stretch_new = self.stretches_including_pair(layout, swap);
             let trigrams_end = self.trigram_char_score(layout, swap);
 
             layout.swap_pair(swap);
 
-            let stretch_old = self.pair_stretch(layout, swap);
+            let stretch_old = self.stretches_including_pair(layout, swap);
             let trigrams_start = self.trigram_char_score(layout, swap);
 
             let stretch_score = cache.stretch_total - stretch_old + stretch_new;
@@ -970,7 +961,7 @@ impl LayoutGeneration {
             return;
         }
 
-        let stretch_start = self.pair_stretch(layout, swap);
+        let stretch_start = self.stretches_including_pair(layout, swap);
         let trigrams_start = self.trigram_char_score(layout, swap);
 
         layout.swap_pair(swap).unwrap();
@@ -1018,7 +1009,7 @@ impl LayoutGeneration {
             total
         };
 
-        let stretch_end = self.pair_stretch(layout, swap);
+        let stretch_end = self.stretches_including_pair(layout, swap);
         let trigrams_end = self.trigram_char_score(layout, swap);
 
         cache.stretch_total = cache.stretch_total - stretch_start + stretch_end;

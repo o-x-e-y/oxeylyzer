@@ -435,15 +435,56 @@ impl Repl {
         total as f64 / self.layout_gen.data.bigram_total as f64
     }
 
+    fn bigram_stat(
+        &self,
+        pairs: &[BigramPair],
+        freq: impl Fn(&LayoutGeneration, &FastLayout, &BigramPair) -> i64,
+        layout: &FastLayout,
+        count: usize,
+    ) {
+        let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
+
+        pairs
+            .iter()
+            .flat_map(|pair| {
+                let u1 = layout.char(pair.pair.0)?;
+                let u2 = layout.char(pair.pair.1)?;
+
+                let bigram = self
+                    .layout_gen
+                    .mapping
+                    .map_us(&[u1, u2])
+                    .collect::<String>();
+
+                let bigram2 = self
+                    .layout_gen
+                    .mapping
+                    .map_us(&[u2, u1])
+                    .collect::<String>();
+
+                let fmt = format!("{bigram}/{bigram2}");
+
+                let freq = freq(&self.layout_gen, layout, pair);
+
+                Some((fmt, fmt_freq(freq)))
+            })
+            .sorted_by(|(_, a), (_, b)| a.total_cmp(b))
+            .take(count)
+            .for_each(|(bigram, freq)| println!("{bigram}: {:.3}", freq));
+    }
+
     fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10);
 
         println!("top {} sfbs for {name}:", count);
 
-        for (bigram, freq) in self.layout_gen.sfbs(layout, count) {
-            println!("{bigram}: {:.3}%", freq * 100.0)
-        }
+        self.bigram_stat(
+            &layout.fspeed_indices.all,
+            LayoutGeneration::pair_sfb,
+            layout,
+            count,
+        );
 
         Ok(())
     }
@@ -454,41 +495,12 @@ impl Repl {
 
         println!("top {} fspeed pairs for {name}:", count);
 
-        let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
-
-        let fspeed = layout
-            .fspeed_indices
-            .all
-            .iter()
-            .map(|pair| {
-                let u1 = layout.char(pair.pair.0).unwrap();
-                let u2 = layout.char(pair.pair.1).unwrap();
-
-                let bigram = self
-                    .layout_gen
-                    .mapping
-                    .map_us(&[u1, u2])
-                    .collect::<String>();
-
-                let bigram2 = self
-                    .layout_gen
-                    .mapping
-                    .map_us(&[u2, u1])
-                    .collect::<String>();
-
-                let fmt = format!("{bigram}/{bigram2}");
-
-                let freq = self.layout_gen.pair_fspeed(layout, pair);
-
-                (fmt, freq)
-            })
-            .sorted_by(|(_, a), (_, b)| a.cmp(b))
-            .take(count)
-            .collect::<Vec<_>>();
-
-        for (bigrams, freq) in fspeed {
-            println!("{bigrams}: {:.3}", fmt_freq(freq))
-        }
+        self.bigram_stat(
+            &layout.fspeed_indices.all,
+            LayoutGeneration::pair_fspeed,
+            layout,
+            count,
+        );
 
         Ok(())
     }
@@ -499,48 +511,12 @@ impl Repl {
 
         println!("top {} stretch pairs for {name}:", count);
 
-        let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
-
-        let fspeed = layout
-            .stretch_indices
-            .all_pairs
-            .iter()
-            .map(|pair| {
-                let u1 = layout.char(pair.pair.0).unwrap();
-                let u2 = layout.char(pair.pair.1).unwrap();
-
-                let bigram = self
-                    .layout_gen
-                    .mapping
-                    .map_us(&[u1, u2])
-                    .collect::<String>();
-
-                let bigram2 = self
-                    .layout_gen
-                    .mapping
-                    .map_us(&[u2, u1])
-                    .collect::<String>();
-
-                let fmt = format!("{bigram}/{bigram2}");
-
-                let freq = {
-                    let u1 = layout.matrix[pair.pair.0];
-                    let u2 = layout.matrix[pair.pair.1];
-
-                    (self.layout_gen.data.get_stretch_weighted_bigram_u([u1, u2])
-                        + self.layout_gen.data.get_stretch_weighted_bigram_u([u2, u1]))
-                        * pair.dist
-                };
-
-                (fmt, freq)
-            })
-            .sorted_by(|(_, a), (_, b)| a.cmp(b))
-            .take(count)
-            .collect::<Vec<_>>();
-
-        for (bigrams, freq) in fspeed {
-            println!("{bigrams}: {:.3}", fmt_freq(freq))
-        }
+        self.bigram_stat(
+            &layout.stretch_indices.all_pairs,
+            LayoutGeneration::pair_stretch,
+            layout,
+            count,
+        );
 
         Ok(())
     }
