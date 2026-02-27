@@ -435,22 +435,24 @@ impl Repl {
         total as f64 / self.layout_gen.data.bigram_total as f64
     }
 
-    fn sfbs(&self, name: &str, top_n: usize) -> Result<()> {
+    fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
+        let count = top_n.unwrap_or(10);
 
-        println!("top {} sfbs for {name}:", top_n.min(48));
+        println!("top {} sfbs for {name}:", count);
 
-        for (bigram, freq) in self.layout_gen.sfbs(layout, top_n) {
+        for (bigram, freq) in self.layout_gen.sfbs(layout, count) {
             println!("{bigram}: {:.3}%", freq * 100.0)
         }
 
         Ok(())
     }
 
-    fn fspeed(&self, name: &str, top_n: usize) -> Result<()> {
+    fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
+        let count = top_n.unwrap_or(10);
 
-        println!("top {} fspeed pairs for {name}:", top_n.min(48));
+        println!("top {} fspeed pairs for {name}:", count);
 
         let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
 
@@ -481,7 +483,7 @@ impl Repl {
                 (fmt, freq)
             })
             .sorted_by(|(_, a), (_, b)| a.cmp(b))
-            .take(top_n)
+            .take(count)
             .collect::<Vec<_>>();
 
         for (bigrams, freq) in fspeed {
@@ -491,10 +493,11 @@ impl Repl {
         Ok(())
     }
 
-    fn stretches(&self, name: &str, top_n: usize) -> Result<()> {
+    fn stretches(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
+        let count = top_n.unwrap_or(10);
 
-        println!("top {} stretch pairs for {name}:", top_n.min(48));
+        println!("top {} stretch pairs for {name}:", count);
 
         let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
 
@@ -532,7 +535,7 @@ impl Repl {
                 (fmt, freq)
             })
             .sorted_by(|(_, a), (_, b)| a.cmp(b))
-            .take(top_n)
+            .take(count)
             .collect::<Vec<_>>();
 
         for (bigrams, freq) in fspeed {
@@ -561,18 +564,9 @@ impl Repl {
             Generate(g) => self.generate(g.count)?,
             Improve(i) => self.improve(&i.name, i.count, i.pins)?,
             Save(s) => self.save(s.n, s.name)?,
-            Sfbs(s) => match s.count {
-                Some(count) => self.sfbs(&s.name, count)?,
-                None => self.sfbs(&s.name, 10)?,
-            },
-            Fspeed(s) => match s.count {
-                Some(count) => self.fspeed(&s.name, count)?,
-                None => self.fspeed(&s.name, 10)?,
-            },
-            Stretches(s) => match s.count {
-                Some(count) => self.stretches(&s.name, count)?,
-                None => self.stretches(&s.name, 10)?,
-            },
+            Sfbs(s) => self.sfbs(&s.name, s.count)?,
+            Fspeed(s) => self.fspeed(&s.name, s.count)?,
+            Stretches(s) => self.stretches(&s.name, s.count)?,
             Language(l) => match l.language {
                 Some(l) => {
                     let config = Config::with_loaded_weights("config.toml");
