@@ -569,6 +569,24 @@ impl Repl {
         Ok(())
     }
 
+    pub fn languages(&self) -> Result<()> {
+        std::fs::read_dir("static/language_data")?
+            .flatten()
+            .for_each(|p| {
+                let name = p
+                    .file_name()
+                    .to_string_lossy()
+                    .replace('_', " ")
+                    .replace(".json", "");
+
+                if name != "test" {
+                    println!("{}", name);
+                }
+            });
+
+        Ok(())
+    }
+
     fn respond(&mut self, line: &str) -> Result<ReplStatus> {
         use crate::flags::{Repl, ReplCmd::*};
 
@@ -593,20 +611,7 @@ impl Repl {
             Stretches(s) => self.stretches(&s.name, s.count)?,
             Language(l) => self.language(l.language)?,
             Include(l) => self.include(&l.languages)?,
-            Languages(_) => {
-                std::fs::read_dir("static/language_data")?
-                    .flatten()
-                    .for_each(|p| {
-                        let name = p
-                            .file_name()
-                            .to_string_lossy()
-                            .replace('_', " ")
-                            .replace(".json", "");
-                        if name != "test" {
-                            println!("{}", name);
-                        }
-                    });
-            }
+            Languages(_) => self.languages()?,
             Load(l) => match (l.all, l.raw) {
                 (true, true) => {
                     let base_path = PathBuf::from("./static/text");
