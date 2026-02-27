@@ -551,6 +551,24 @@ impl Repl {
         Ok(())
     }
 
+    pub fn include<P: AsRef<Path>>(&mut self, languages: &[P]) -> Result<()> {
+        for language in languages {
+            let language = language.as_ref().display().to_string();
+
+            self.layout_gen
+                .load_layouts("static/layouts", &language)?
+                .into_iter()
+                .for_each(|(name, layout)| {
+                    self.saved.insert(name, layout);
+                });
+        }
+
+        self.saved
+            .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
+
+        Ok(())
+    }
+
     fn respond(&mut self, line: &str) -> Result<ReplStatus> {
         use crate::flags::{Repl, ReplCmd::*};
 
@@ -574,16 +592,7 @@ impl Repl {
             Fspeed(s) => self.fspeed(&s.name, s.count)?,
             Stretches(s) => self.stretches(&s.name, s.count)?,
             Language(l) => self.language(l.language)?,
-            Include(l) => {
-                self.layout_gen
-                    .load_layouts("static/layouts", &l.language)?
-                    .into_iter()
-                    .for_each(|(name, layout)| {
-                        self.saved.insert(name, layout);
-                    });
-                self.saved
-                    .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
-            }
+            Include(l) => self.include(&l.languages)?,
             Languages(_) => {
                 std::fs::read_dir("static/language_data")?
                     .flatten()

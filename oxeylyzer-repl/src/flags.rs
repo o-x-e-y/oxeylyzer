@@ -56,7 +56,7 @@ xflags::xflags! {
         }
         /// Include layouts stored under a different language
         cmd include {
-            required language: String
+            repeated languages: PathBuf
         }
         /// Lists all currently available languages.
         cmd languages langs {}
