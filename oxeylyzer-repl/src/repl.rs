@@ -521,6 +521,36 @@ impl Repl {
         Ok(())
     }
 
+    fn language<P: AsRef<Path>>(&mut self, language: Option<P>) -> Result<()> {
+        let language = match language {
+            Some(l) => l,
+            None => {
+                println!("Current language: {}", self.language);
+                return Ok(());
+            }
+        };
+
+        let config = Config::with_loaded_weights("config.toml");
+        let language = language.as_ref().display().to_string();
+
+        let generator = LayoutGeneration::new(&language, "static", Some(config))?;
+
+        self.layout_gen = generator;
+        self.saved = self
+            .layout_gen
+            .load_layouts("static/layouts", &language)
+            .expect("couldn't load layouts lol");
+        self.language = language.clone();
+
+        println!(
+            "Set language to {}. Sfr: {:.2}%",
+            &language,
+            self.sfr_freq() * 100.0
+        );
+
+        Ok(())
+    }
+
     fn respond(&mut self, line: &str) -> Result<ReplStatus> {
         use crate::flags::{Repl, ReplCmd::*};
 
@@ -543,30 +573,7 @@ impl Repl {
             Sfbs(s) => self.sfbs(&s.name, s.count)?,
             Fspeed(s) => self.fspeed(&s.name, s.count)?,
             Stretches(s) => self.stretches(&s.name, s.count)?,
-            Language(l) => match l.language {
-                Some(l) => {
-                    let config = Config::with_loaded_weights("config.toml");
-                    let language = l.display().to_string();
-
-                    println!("{language:?}");
-
-                    let generator = LayoutGeneration::new(&language, "static", Some(config))?;
-
-                    self.layout_gen = generator;
-                    self.saved = self
-                        .layout_gen
-                        .load_layouts("static/layouts", &language)
-                        .expect("couldn't load layouts lol");
-                    self.language = language.to_string();
-
-                    println!(
-                        "Set language to {}. Sfr: {:.2}%",
-                        &language,
-                        self.sfr_freq() * 100.0
-                    );
-                }
-                None => println!("Current language: {}", self.language),
-            },
+            Language(l) => self.language(l.language)?,
             Include(l) => {
                 self.layout_gen
                     .load_layouts("static/layouts", &l.language)?
