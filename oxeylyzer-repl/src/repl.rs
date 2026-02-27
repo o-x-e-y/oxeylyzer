@@ -532,20 +532,15 @@ impl Repl {
             }
         };
 
-        let config = Config::with_loaded_weights("config.toml");
         let language = language.as_ref().display().to_string();
-
-        let generator = LayoutGeneration::new(&language, "static", Some(config))?;
-
-        self.layout_gen = generator;
-        self.saved = self.layout_gen.load_layouts("static/layouts", &language)?;
-        self.language = language.clone();
-
-        println!(
-            "Set language to {}. Sfr: {:.2}%",
-            &language,
-            self.sfr_freq() * 100.0
-        );
+        match self.reset_with_language(&language) {
+            Ok(_) => println!(
+                "Set language to {}. Sfr: {:.2}%",
+                &language,
+                self.sfr_freq() * 100.0
+            ),
+            Err(e) => println!("Failed to set language: {}", e),
+        }
 
         Ok(())
     }
@@ -693,6 +688,23 @@ impl Repl {
         Ok(())
     }
 
+    fn reset_with_language(&mut self, language: &str) -> Result<()> {
+        let config = Config::with_loaded_weights("config.toml");
+
+        let mut generator = LayoutGeneration::new(language, "static", Some(config))?;
+        let saved = generator.load_layouts("static/layouts", language)?;
+
+        self.layout_gen = generator;
+        self.language = language.to_string();
+        self.saved = saved;
+
+        Ok(())
+    }
+
+    pub fn reload(&mut self) -> Result<()> {
+        self.reset_with_language(&self.language.clone())
+    }
+
     fn respond(&mut self, line: &str) -> Result<ReplStatus> {
         use crate::flags::{Repl, ReplCmd::*};
 
@@ -720,16 +732,7 @@ impl Repl {
             Languages(_) => self.languages()?,
             Load(l) => self.load(l.language, l.all, l.raw)?,
             Ngram(n) => self.ngram(&n.ngram)?,
-            Reload(_) => {
-                let config = Config::with_loaded_weights("config.toml");
-
-                let generator = LayoutGeneration::new(&self.language, "static", Some(config))?;
-
-                self.layout_gen = generator;
-                self.saved = self
-                    .layout_gen
-                    .load_layouts("static/layouts", &self.language)?;
-            }
+            Reload(_) => self.reload()?,
             Quit(_) => {
                 println!("{EXIT_MESSAGE}");
                 return Ok(ReplStatus::Quit);
