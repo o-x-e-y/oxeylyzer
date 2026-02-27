@@ -780,6 +780,7 @@ name = "oxeylyzer-repl"
 version = "0.1.0"
 dependencies = [
  "ansi_rgb",
+ "anyhow",
  "glob",
  "indexmap 2.13.0",
  "indicatif",
@@ -791,6 +792,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "shlex",
+ "thiserror",
  "toml 0.9.11+spec-1.1.0",
  "xflags",
 ]

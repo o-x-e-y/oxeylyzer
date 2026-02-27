@@ -132,9 +132,10 @@ impl CorpusConfig {
                     let lang = pb
                         .file_name()
                         .unwrap()
-                        .to_os_string()
-                        .into_string()
-                        .unwrap();
+                        .to_string_lossy()
+                        .trim_end_matches(".toml")
+                        .to_string();
+
                     (lang, file)
                 })
             })
