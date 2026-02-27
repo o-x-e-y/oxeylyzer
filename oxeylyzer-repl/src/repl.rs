@@ -82,8 +82,7 @@ impl Repl {
             config.language.clone().as_str(),
             generator_base_path.as_ref(),
             Some(config),
-        )
-        .unwrap_or_else(|_| panic!("Could not read language data for {}", language));
+        )?;
 
         Ok(Self {
             saved: layout_gen.load_layouts(
@@ -145,6 +144,12 @@ impl Repl {
         Ok(())
     }
 
+    pub fn layout(&self, name: &str) -> Result<&FastLayout> {
+        self.saved
+            .get(&name.to_lowercase())
+            .ok_or(ReplError::UnknownLayout(name.into()))
+    }
+
     pub fn rank(&self) {
         for (name, layout) in self.saved.iter() {
             let score = (layout.score as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
@@ -152,20 +157,13 @@ impl Repl {
         }
     }
 
-    pub fn layout_by_name(&self, name: &str) -> Option<&FastLayout> {
-        self.saved.get(name)
-    }
+    pub fn analyze_name(&self, name: &str) -> Result<()> {
+        let layout = self.layout(name)?;
 
-    pub fn analyze_name(&self, name: &str) {
-        let l = match self.layout_by_name(name) {
-            Some(layout) => layout,
-            None => {
-                println!("layout {} does not exist!", name);
-                return;
-            }
-        };
         println!("{}", name);
-        self.analyze(l);
+        self.analyze(layout);
+
+        Ok(())
     }
 
     pub fn pin_positions(&self, layout: &FastLayout, pin_chars: String) -> Vec<usize> {
@@ -186,10 +184,8 @@ impl Repl {
         count: Option<usize>,
         pin_chars: Option<String>,
     ) -> Result<()> {
-        let layout = self
-            .layout_by_name(name)
-            .ok_or_else(|| ReplError::UnknownLayout(name.to_string()))?
-            .clone();
+        let layout = self.layout(name)?.clone();
+
         let count = count.unwrap_or(2500);
         let pins = match pin_chars {
             Some(chars) => self.pin_positions(&layout, chars),
@@ -205,23 +201,15 @@ impl Repl {
 
     fn placeholder_name(&self, layout: &FastLayout) -> Result<String> {
         for i in 1..1000usize {
-            let new_name_bytes = layout
+            let new_name = layout
                 .matrix
                 .iter()
                 .skip(10)
                 .take(4)
-                .copied()
-                .collect::<Vec<_>>();
-
-            let mut new_name = self
-                .layout_gen
-                .data
-                .mapping
-                .map_us(&new_name_bytes)
+                .map(|u| self.layout_gen.mapping.get_c(*u))
+                .chain(i.to_string().chars())
                 .collect::<String>()
-                .replace('*', "");
-
-            new_name.push_str(format!("{}", i).as_str());
+                .replace('*', "-");
 
             if !self.saved.contains_key(&new_name) {
                 return Ok(new_name);
@@ -270,21 +258,10 @@ impl Repl {
         println!("{}\n{}\nScore: {:.3}", layout_str, stats, fmt_score(score));
     }
 
-    pub fn compare_name(&self, name1: &str, name2: &str) {
-        let l1 = match self.layout_by_name(name1) {
-            Some(layout) => layout,
-            None => {
-                println!("layout {} does not exist!", name1);
-                return;
-            }
-        };
-        let l2 = match self.layout_by_name(name2) {
-            Some(layout) => layout,
-            None => {
-                println!("layout {} does not exist!", name2);
-                return;
-            }
-        };
+    pub fn compare_name(&self, name1: &str, name2: &str) -> Result<()> {
+        let l1 = self.layout(name1)?;
+        let l2 = self.layout(name2)?;
+
         println!("\n{:31}{}", name1, name2);
         for y in 0..3 {
             for (n, layout) in [l1, l2].into_iter().enumerate() {
@@ -384,42 +361,44 @@ impl Repl {
             format!("{:.3}", fmt_score(l1.score)),
             fmt_score(l2.score)
         );
+
+        Ok(())
     }
 
-    fn swap(&self, name: &str, swaps: &[String]) {
-        if let Some(mut layout) = self.layout_by_name(name).cloned() {
-            swaps
-                .iter()
-                .filter(|swap| swap.len() >= 2)
-                .flat_map(|swap| swap.chars().zip(swap.chars().skip(1)).collect::<Vec<_>>())
-                .for_each(|(c1, c2)| {
-                    let p1 = layout
-                        .matrix
-                        .iter()
-                        .position(|&k| k == self.layout_gen.mapping.get_u(c1));
-                    let p2 = layout
-                        .matrix
-                        .iter()
-                        .position(|&k| k == self.layout_gen.mapping.get_u(c2));
+    fn swap(&self, name: &str, swaps: &[String]) -> Result<()> {
+        let mut layout = self.layout(name)?.clone();
 
-                    match (p1, p2) {
-                        (Some(p1), Some(p2)) => assert!(layout.swap(p1, p2).is_some()),
-                        (Some(_), None) => {
-                            println!("Couldn't swap {c1}{c2} because {c1} is not on the layout.")
-                        }
-                        (None, Some(_)) => {
-                            println!("Couldn't swap {c1}{c2} because {c2} is not on the layout.")
-                        }
-                        (None, None) => {
-                            println!("Couldn't swap {c1}{c2} because neither key is on the layout.")
-                        }
+        swaps
+            .iter()
+            .filter(|swap| swap.len() >= 2)
+            .flat_map(|swap| swap.chars().zip(swap.chars().skip(1)).collect::<Vec<_>>())
+            .for_each(|(c1, c2)| {
+                let p1 = layout
+                    .matrix
+                    .iter()
+                    .position(|&k| k == self.layout_gen.mapping.get_u(c1));
+                let p2 = layout
+                    .matrix
+                    .iter()
+                    .position(|&k| k == self.layout_gen.mapping.get_u(c2));
+
+                match (p1, p2) {
+                    (Some(p1), Some(p2)) => assert!(layout.swap(p1, p2).is_some()),
+                    (Some(_), None) => {
+                        println!("Couldn't swap {c1}{c2} because {c1} is not on the layout.")
                     }
-                });
+                    (None, Some(_)) => {
+                        println!("Couldn't swap {c1}{c2} because {c2} is not on the layout.")
+                    }
+                    (None, None) => {
+                        println!("Couldn't swap {c1}{c2} because neither key is on the layout.")
+                    }
+                }
+            });
 
-            self.analyze(&layout);
-        } else {
-            println!("layout {name} does not exist!")
-        }
+        self.analyze(&layout);
+
+        Ok(())
     }
 
     fn get_nth(&self, nr: usize) -> Option<&FastLayout> {
@@ -434,25 +413,20 @@ impl Repl {
         total as f64 / self.layout_gen.data.bigram_total as f64
     }
 
-    fn sfbs(&self, name: &str, top_n: usize) {
-        if let Some(layout) = self.layout_by_name(name) {
-            println!("top {} sfbs for {name}:", top_n.min(48));
+    fn sfbs(&self, name: &str, top_n: usize) -> Result<()> {
+        let layout = self.layout(name)?;
 
-            for (bigram, freq) in self.layout_gen.sfbs(layout, top_n) {
-                println!("{bigram}: {:.3}%", freq * 100.0)
-            }
-        } else {
-            println!("layout {name} does not exist!")
+        println!("top {} sfbs for {name}:", top_n.min(48));
+
+        for (bigram, freq) in self.layout_gen.sfbs(layout, top_n) {
+            println!("{bigram}: {:.3}%", freq * 100.0)
         }
+
+        Ok(())
     }
 
-    fn fspeed(&self, name: &str, top_n: usize) {
-        let layout = if let Some(layout) = self.layout_by_name(name) {
-            layout
-        } else {
-            println!("layout {name} does not exist!");
-            return;
-        };
+    fn fspeed(&self, name: &str, top_n: usize) -> Result<()> {
+        let layout = self.layout(name)?;
 
         println!("top {} fspeed pairs for {name}:", top_n.min(48));
 
@@ -491,15 +465,12 @@ impl Repl {
         for (bigrams, freq) in fspeed {
             println!("{bigrams}: {:.3}", fmt_freq(freq))
         }
+
+        Ok(())
     }
 
-    fn stretches(&self, name: &str, top_n: usize) {
-        let layout = if let Some(layout) = self.layout_by_name(name) {
-            layout
-        } else {
-            println!("layout {name} does not exist!");
-            return;
-        };
+    fn stretches(&self, name: &str, top_n: usize) -> Result<()> {
+        let layout = self.layout(name)?;
 
         println!("top {} stretch pairs for {name}:", top_n.min(48));
 
@@ -545,6 +516,8 @@ impl Repl {
         for (bigrams, freq) in fspeed {
             println!("{bigrams}: {:.3}", fmt_freq(freq))
         }
+
+        Ok(())
     }
 
     fn respond(&mut self, line: &str) -> Result<ReplStatus> {
@@ -566,10 +539,10 @@ impl Repl {
                         return Err(ReplError::IndexOutOfBounds(nr, self.temp_generated.len()));
                     }
                 },
-                Err(_) => self.analyze_name(&a.name_or_nr),
+                Err(_) => self.analyze_name(&a.name_or_nr)?,
             },
-            Compare(c) => self.compare_name(&c.name1, &c.name2),
-            Swap(s) => self.swap(&s.name, &s.swaps),
+            Compare(c) => self.compare_name(&c.name1, &c.name2)?,
+            Swap(s) => self.swap(&s.name, &s.swaps)?,
             Rank(_) => self.rank(),
             Generate(g) => {
                 println!("generating {} layouts...", g.count);
@@ -585,16 +558,16 @@ impl Repl {
                 }
             },
             Sfbs(s) => match s.count {
-                Some(count) => self.sfbs(&s.name, count),
-                None => self.sfbs(&s.name, 10),
+                Some(count) => self.sfbs(&s.name, count)?,
+                None => self.sfbs(&s.name, 10)?,
             },
             Fspeed(s) => match s.count {
-                Some(count) => self.fspeed(&s.name, count),
-                None => self.fspeed(&s.name, 10),
+                Some(count) => self.fspeed(&s.name, count)?,
+                None => self.fspeed(&s.name, 10)?,
             },
             Stretches(s) => match s.count {
-                Some(count) => self.stretches(&s.name, count),
-                None => self.stretches(&s.name, 10),
+                Some(count) => self.stretches(&s.name, count)?,
+                None => self.stretches(&s.name, 10)?,
             },
             Language(l) => match l.language {
                 Some(l) => {

@@ -307,6 +307,7 @@ impl LayoutGeneration {
         })
     }
 
+    // TODO: move layouts out of LayoutGeneration to split concerns
     pub fn load_layouts<P>(
         &mut self,
         base_directory: P,
