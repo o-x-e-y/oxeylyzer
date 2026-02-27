@@ -536,10 +536,7 @@ impl Repl {
         let generator = LayoutGeneration::new(&language, "static", Some(config))?;
 
         self.layout_gen = generator;
-        self.saved = self
-            .layout_gen
-            .load_layouts("static/layouts", &language)
-            .expect("couldn't load layouts lol");
+        self.saved = self.layout_gen.load_layouts("static/layouts", &language)?;
         self.language = language.clone();
 
         println!(
@@ -587,6 +584,57 @@ impl Repl {
         Ok(())
     }
 
+    fn load_one_with_config(&mut self, language: &str, cleaner: CorpusCleaner) -> Result<()> {
+        let base_path = PathBuf::from("./static/text");
+
+        match Data::from_path(base_path.join(language), language, &cleaner) {
+            Ok(data) => match data.save("./static/language_data") {
+                Ok(_) => println!("Saved data for {language}!"),
+                Err(e) => println!("Failed to save data for {language}: {e}"),
+            },
+            Err(e) => println!("Couldn't convert language: {e}"),
+        };
+
+        Ok(())
+    }
+
+    pub fn load<P: AsRef<Path>>(&mut self, language: P, all: bool, raw: bool) -> Result<()> {
+        let language = language.as_ref().display().to_string();
+
+        match (all, raw) {
+            (true, true) => {
+                for (language, _) in CorpusConfig::all("./") {
+                    println!("loading raw data for language: {language}...");
+                    let cleaner = CorpusCleaner::raw();
+
+                    self.load_one_with_config(&language, cleaner)?;
+                }
+            }
+            (true, false) => {
+                for (language, config) in CorpusConfig::all("./") {
+                    println!("loading data for language: {language}...");
+
+                    self.load_one_with_config(&language, config.into())?;
+                }
+            }
+            (false, true) => {
+                println!("loading raw data for language: {language}...");
+                let cleaner = CorpusCleaner::raw();
+
+                self.load_one_with_config(&language, cleaner)?;
+            }
+            (false, false) => {
+                println!("loading data for {language}...");
+                let cleaner = CorpusConfig::new_translator(&language, None);
+
+                self.load_one_with_config(&language, cleaner)?;
+                self.language(Some(language))?;
+            }
+        };
+
+        Ok(())
+    }
+
     fn respond(&mut self, line: &str) -> Result<ReplStatus> {
         use crate::flags::{Repl, ReplCmd::*};
 
@@ -612,87 +660,7 @@ impl Repl {
             Language(l) => self.language(l.language)?,
             Include(l) => self.include(&l.languages)?,
             Languages(_) => self.languages()?,
-            Load(l) => match (l.all, l.raw) {
-                (true, true) => {
-                    let base_path = PathBuf::from("./static/text");
-
-                    for (language, _) in CorpusConfig::all("./") {
-                        let language = language.trim_end_matches(".toml");
-                        println!("loading data for language: {language}...");
-                        let cleaner = CorpusCleaner::raw();
-
-                        match Data::from_path(base_path.join(language), language, &cleaner) {
-                            Ok(data) => match data.save("./static/language_data") {
-                                Ok(_) => println!("Saved data for {language}!"),
-                                Err(e) => println!("Failed to save data for {language}: {e}"),
-                            },
-                            Err(e) => println!("Couldn't convert language: {e}"),
-                        }
-                    }
-                }
-                (true, false) => {
-                    let base_path = PathBuf::from("./static/text");
-
-                    for (language, config) in CorpusConfig::all("./") {
-                        let language = language.trim_end_matches(".toml");
-                        println!("loading data for language: {language}...");
-
-                        match Data::from_path(base_path.join(language), language, &config.into()) {
-                            Ok(data) => match data.save("./static/language_data") {
-                                Ok(_) => println!("Saved data for {language}!"),
-                                Err(e) => println!("Failed to save data for {language}: {e}"),
-                            },
-                            Err(e) => println!("Couldn't convert language: {e}"),
-                        }
-                    }
-                }
-                (false, true) => {
-                    println!("loading raw data for language: {}...", l.language.display());
-
-                    let base_path = PathBuf::from("./static/text");
-                    let language = l.language.display().to_string();
-                    let cleaner = CorpusCleaner::raw();
-
-                    match Data::from_path(base_path.join(l.language), &language, &cleaner) {
-                        Ok(data) => match data.save("./static/language_data") {
-                            Ok(_) => println!("Saved data for {language}!"),
-                            Err(e) => println!("Failed to save data for {language}: {e}"),
-                        },
-                        Err(e) => println!("Couldn't convert language: {e}"),
-                    }
-                }
-                (false, false) => {
-                    let base_path = PathBuf::from("./static/text");
-                    let language = l.language.display().to_string();
-
-                    println!("loading data for {language}...");
-
-                    let cleaner = CorpusConfig::new_translator(&language, None);
-
-                    match Data::from_path(base_path.join(l.language), &language, &cleaner) {
-                        Ok(data) => match data.save("./static/language_data") {
-                            Ok(_) => println!("Saved data for {language}!"),
-                            Err(e) => println!("Failed to save data for {language}: {e}"),
-                        },
-                        Err(e) => println!("Couldn't convert language: {e}"),
-                    }
-
-                    if !cleaner.is_raw() {
-                        let config = Config::with_loaded_weights("config.toml");
-                        let generator = LayoutGeneration::new(&language, "static", Some(config))?;
-
-                        self.language = language.clone();
-                        self.layout_gen = generator;
-                        self.saved = self.layout_gen.load_layouts("static/layouts", &language)?;
-
-                        println!(
-                            "Set language to {}. Sfr: {:.2}%",
-                            language,
-                            self.sfr_freq() * 100.0
-                        );
-                    }
-                }
-            },
+            Load(l) => self.load(l.language, l.all, l.raw)?,
             Ngram(n) => println!("{}", get_ngram_info(&self.layout_gen.data, &n.ngram)),
             Reload(_) => {
                 let config = Config::with_loaded_weights("config.toml");
