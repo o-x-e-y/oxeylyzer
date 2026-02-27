@@ -442,6 +442,7 @@ impl Repl {
                 }
             });
 
+        layout.score = self.layout_gen.score(&layout);
         self.analyze_layout(&layout);
 
         Ok(Some(layout.clone()))
