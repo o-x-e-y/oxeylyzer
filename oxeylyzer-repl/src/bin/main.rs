@@ -1,6 +1,5 @@
-// use oxeylyzer_core::generate_annealing::test;
 use oxeylyzer_repl::repl;
 
-fn main() -> Result<(), String> {
+fn main() -> Result<(), repl::ReplError> {
     repl::Repl::run()
 }

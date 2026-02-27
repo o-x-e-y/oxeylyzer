@@ -10,11 +10,51 @@ use oxeylyzer_core::{generate::LayoutGeneration, layout::*, rayon, weights::Conf
 use rustyline::DefaultEditor;
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
+use thiserror::Error;
 
 use crate::corpus_transposition::CorpusConfig;
 use crate::tui::*;
 
 const EXIT_MESSAGE: &str = "Exiting analyzer...";
+
+#[derive(Debug, Error)]
+pub enum ReplError {
+    #[error("Layout '{0}' not found. It might exist, but it's not currently loaded.")]
+    UnknownLayout(String),
+    #[error("Could not find a placeholder name, try `save <index> <your own name>` instead")]
+    FailedToFindPlaceholderName,
+    #[error("Path '{0}' either doesn't exist or is not a directory")]
+    NotADirectory(PathBuf),
+    #[error("Invalid quotation marks")]
+    ShlexError,
+    #[error("Index '{0}' is out of bounds after generating {1} layouts")]
+    IndexOutOfBounds(usize, usize),
+
+    #[error(transparent)]
+    XflagsError(#[from] xflags::Error),
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+    // #[error("{0}")]
+    // OxeylyzerDataError(#[from] OxeylyzerError),
+    // #[error(transparent)]
+    // DofError(#[from] libdof::DofError),
+    // #[error(transparent)]
+    // TomlSerializeError(#[from] toml::ser::Error),
+    // #[error(transparent)]
+    // TomlDeserializeError(#[from] toml::de::Error),
+    #[error(transparent)]
+    AnyhowError(#[from] anyhow::Error),
+    #[error(transparent)]
+    ReadlineError(#[from] rustyline::error::ReadlineError),
+}
+
+pub type Result<T> = std::result::Result<T, ReplError>;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ReplStatus {
+    Continue,
+    Quit,
+}
 
 pub struct Repl {
     language: String,
@@ -26,7 +66,7 @@ pub struct Repl {
 
 // TODO: move everything out to its own function
 impl Repl {
-    pub fn new<P>(generator_base_path: P) -> Result<Self, String>
+    pub fn new<P>(generator_base_path: P) -> Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -46,12 +86,10 @@ impl Repl {
         .unwrap_or_else(|_| panic!("Could not read language data for {}", language));
 
         Ok(Self {
-            saved: layout_gen
-                .load_layouts(
-                    generator_base_path.as_ref().join("layouts"),
-                    language.as_str(),
-                )
-                .map_err(|e| e.to_string())?,
+            saved: layout_gen.load_layouts(
+                generator_base_path.as_ref().join("layouts"),
+                language.as_str(),
+            )?,
             language,
             layout_gen,
             temp_generated: Vec::new(),
@@ -59,10 +97,10 @@ impl Repl {
         })
     }
 
-    pub fn run() -> Result<(), String> {
+    pub fn run() -> Result<()> {
         let mut env = Self::new("static")?;
 
-        let mut rl = DefaultEditor::new().map_err(|e| e.to_string())?;
+        let mut rl = DefaultEditor::new()?;
 
         rl.set_history_ignore_space(true);
 
@@ -76,7 +114,7 @@ impl Repl {
             match readline {
                 Ok(line) => {
                     if !matches!(line.as_str(), "quit" | "q" | "exit") {
-                        rl.add_history_entry(&line).map_err(|e| e.to_string())?;
+                        rl.add_history_entry(&line)?;
                     }
 
                     match env.respond(&line) {
@@ -147,10 +185,10 @@ impl Repl {
         name: &str,
         count: Option<usize>,
         pin_chars: Option<String>,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let layout = self
             .layout_by_name(name)
-            .ok_or_else(|| format!("Layout '{name}' could not be found"))?
+            .ok_or_else(|| ReplError::UnknownLayout(name.to_string()))?
             .clone();
         let count = count.unwrap_or(2500);
         let pins = match pin_chars {
@@ -165,7 +203,7 @@ impl Repl {
         Ok(())
     }
 
-    fn placeholder_name(&self, layout: &FastLayout) -> Result<String, String> {
+    fn placeholder_name(&self, layout: &FastLayout) -> Result<String> {
         for i in 1..1000usize {
             let new_name_bytes = layout
                 .matrix
@@ -189,10 +227,10 @@ impl Repl {
                 return Ok(new_name);
             }
         }
-        Err("Could not find a good placeholder name for the layout.".to_string())
+        Err(ReplError::FailedToFindPlaceholderName)
     }
 
-    pub fn save(&mut self, mut layout: FastLayout, name: Option<String>) -> Result<(), String> {
+    pub fn save(&mut self, mut layout: FastLayout, name: Option<String>) -> Result<()> {
         let new_name = if let Some(n) = name {
             n.replace(' ', "_")
         } else {
@@ -203,8 +241,7 @@ impl Repl {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("static/layouts/{}/{}.kb", self.language, new_name))
-            .map_err(|e| e.to_string())?;
+            .open(format!("static/layouts/{}/{}.kb", self.language, new_name))?;
 
         let layout_formatted = layout.formatted_string(&self.layout_gen.data.mapping);
         println!("saved {}\n{}", new_name, layout_formatted);
@@ -510,27 +547,23 @@ impl Repl {
         }
     }
 
-    fn respond(&mut self, line: &str) -> Result<bool, String> {
+    fn respond(&mut self, line: &str) -> Result<bool> {
         use crate::flags::{Repl, ReplCmd::*};
 
         let args = shlex::split(line)
-            .ok_or("Invalid quotations")?
+            .ok_or(ReplError::ShlexError)?
             .into_iter()
             .map(std::ffi::OsString::from)
             .collect::<Vec<_>>();
 
-        let flags = Repl::from_vec(args).map_err(|e| e.to_string())?;
+        let flags = Repl::from_vec(args)?;
 
         match flags.subcommand {
             Analyze(a) => match a.name_or_nr.parse::<usize>() {
                 Ok(nr) => match self.get_nth(nr) {
                     Some(layout) => self.analyze(layout),
                     None => {
-                        return Err(format!(
-                            "Index '{}' provided is out of bounds for {} generated layouts",
-                            a.name_or_nr,
-                            self.temp_generated.len()
-                        ));
+                        return Err(ReplError::IndexOutOfBounds(nr, self.temp_generated.len()));
                     }
                 },
                 Err(_) => self.analyze_name(&a.name_or_nr),
@@ -548,11 +581,7 @@ impl Repl {
             Save(s) => match (self.get_nth(s.n), s.name) {
                 (Some(layout), name) => self.save(layout.clone(), name)?,
                 (None, _) => {
-                    return Err(format!(
-                        "Index '{}' provided is out of bounds for {} generated layouts",
-                        s.n,
-                        self.temp_generated.len()
-                    ));
+                    return Err(ReplError::IndexOutOfBounds(s.n, self.temp_generated.len()));
                 }
             },
             Sfbs(s) => match s.count {
@@ -570,35 +599,30 @@ impl Repl {
             Language(l) => match l.language {
                 Some(l) => {
                     let config = Config::with_loaded_weights("config.toml");
-                    let language = l
-                        .to_str()
-                        .ok_or_else(|| format!("Language is invalid utf8: {:?}", l))?;
+                    let language = l.display().to_string();
 
                     println!("{language:?}");
 
-                    if let Ok(generator) = LayoutGeneration::new(language, "static", Some(config)) {
-                        self.layout_gen = generator;
-                        self.saved = self
-                            .layout_gen
-                            .load_layouts("static/layouts", language)
-                            .expect("couldn't load layouts lol");
-                        self.language = language.to_string();
+                    let generator = LayoutGeneration::new(&language, "static", Some(config))?;
 
-                        println!(
-                            "Set language to {}. Sfr: {:.2}%",
-                            &language,
-                            self.sfr_freq() * 100.0
-                        );
-                    } else {
-                        return Err(format!("Could not load data for {}", language));
-                    }
+                    self.layout_gen = generator;
+                    self.saved = self
+                        .layout_gen
+                        .load_layouts("static/layouts", &language)
+                        .expect("couldn't load layouts lol");
+                    self.language = language.to_string();
+
+                    println!(
+                        "Set language to {}. Sfr: {:.2}%",
+                        &language,
+                        self.sfr_freq() * 100.0
+                    );
                 }
                 None => println!("Current language: {}", self.language),
             },
             Include(l) => {
                 self.layout_gen
-                    .load_layouts("static/layouts", &l.language)
-                    .map_err(|e| e.to_string())?
+                    .load_layouts("static/layouts", &l.language)?
                     .into_iter()
                     .for_each(|(name, layout)| {
                         self.saved.insert(name, layout);
@@ -607,8 +631,7 @@ impl Repl {
                     .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
             }
             Languages(_) => {
-                std::fs::read_dir("static/language_data")
-                    .map_err(|e| e.to_string())?
+                std::fs::read_dir("static/language_data")?
                     .flatten()
                     .for_each(|p| {
                         let name = p
@@ -623,7 +646,21 @@ impl Repl {
             }
             Load(l) => match (l.all, l.raw) {
                 (true, true) => {
-                    return Err("You can't currently generate all corpora as raw".into());
+                    let base_path = PathBuf::from("./static/text");
+
+                    for (language, _) in CorpusConfig::all("./") {
+                        let language = language.trim_end_matches(".toml");
+                        println!("loading data for language: {language}...");
+                        let cleaner = CorpusCleaner::raw();
+
+                        match Data::from_path(base_path.join(language), language, &cleaner) {
+                            Ok(data) => match data.save("./static/language_data") {
+                                Ok(_) => println!("Saved data for {language}!"),
+                                Err(e) => println!("Failed to save data for {language}: {e}"),
+                            },
+                            Err(e) => println!("Couldn't convert language: {e}"),
+                        }
+                    }
                 }
                 (true, false) => {
                     let base_path = PathBuf::from("./static/text");
@@ -632,8 +669,7 @@ impl Repl {
                         let language = language.trim_end_matches(".toml");
                         println!("loading data for language: {language}...");
 
-                        match Data::from_path(base_path.join(language), language, &config.into())
-                        {
+                        match Data::from_path(base_path.join(language), language, &config.into()) {
                             Ok(data) => match data.save("./static/language_data") {
                                 Ok(_) => println!("Saved data for {language}!"),
                                 Err(e) => println!("Failed to save data for {language}: {e}"),
@@ -675,23 +711,17 @@ impl Repl {
 
                     if !cleaner.is_raw() {
                         let config = Config::with_loaded_weights("config.toml");
-                        match LayoutGeneration::new(&language, "static", Some(config)) {
-                            Ok(generator) => {
-                                self.language = language.clone();
-                                self.layout_gen = generator;
-                                self.saved = self
-                                    .layout_gen
-                                    .load_layouts("static/layouts", &language)
-                                    .map_err(|e| e.to_string())?;
+                        let generator = LayoutGeneration::new(&language, "static", Some(config))?;
 
-                                println!(
-                                    "Set language to {}. Sfr: {:.2}%",
-                                    language,
-                                    self.sfr_freq() * 100.0
-                                );
-                            }
-                            Err(e) => return Err(e.to_string()),
-                        }
+                        self.language = language.clone();
+                        self.layout_gen = generator;
+                        self.saved = self.layout_gen.load_layouts("static/layouts", &language)?;
+
+                        println!(
+                            "Set language to {}. Sfr: {:.2}%",
+                            language,
+                            self.sfr_freq() * 100.0
+                        );
                     }
                 }
             },
@@ -699,16 +729,12 @@ impl Repl {
             Reload(_) => {
                 let config = Config::with_loaded_weights("config.toml");
 
-                match LayoutGeneration::new(&self.language, "static", Some(config)) {
-                    Ok(generator) => {
-                        self.layout_gen = generator;
-                        self.saved = self
-                            .layout_gen
-                            .load_layouts("static/layouts", &self.language)
-                            .map_err(|e| e.to_string())?;
-                    }
-                    Err(e) => return Err(e.to_string()),
-                }
+                let generator = LayoutGeneration::new(&self.language, "static", Some(config))?;
+
+                self.layout_gen = generator;
+                self.saved = self
+                    .layout_gen
+                    .load_layouts("static/layouts", &self.language)?;
             }
             Quit(_) => {
                 println!("{EXIT_MESSAGE}");
