@@ -119,7 +119,10 @@ impl Repl {
                     }
 
                     match env.respond(&line) {
-                        Ok(ReplStatus::Quit) => break,
+                        Ok(ReplStatus::Quit) => {
+                            println!("{EXIT_MESSAGE}");
+                            break;
+                        }
                         Ok(ReplStatus::Continue) => continue,
                         Err(err) => {
                             println!("{err}");
@@ -286,7 +289,7 @@ impl Repl {
         println!("{}\n{}\nScore: {:.3}", layout_str, stats, fmt_score(score));
     }
 
-    pub fn compare_name(&self, name1: &str, name2: &str) -> Result<()> {
+    pub fn compare(&self, name1: &str, name2: &str) -> Result<()> {
         let l1 = self.layout(name1)?;
         let l2 = self.layout(name2)?;
 
@@ -718,7 +721,7 @@ impl Repl {
 
         match flags.subcommand {
             Analyze(a) => self.analyze(&a.name_or_nr)?,
-            Compare(c) => self.compare_name(&c.name1, &c.name2)?,
+            Compare(c) => self.compare(&c.name1, &c.name2)?,
             Swap(s) => self.swap(&s.name, &s.swaps)?,
             Rank(_) => self.rank(),
             Generate(g) => self.generate(g.count)?,
@@ -733,10 +736,7 @@ impl Repl {
             Load(l) => self.load(l.language, l.all, l.raw)?,
             Ngram(n) => self.ngram(&n.ngram)?,
             Reload(_) => self.reload()?,
-            Quit(_) => {
-                println!("{EXIT_MESSAGE}");
-                return Ok(ReplStatus::Quit);
-            }
+            Quit(_) => return Ok(ReplStatus::Quit),
         };
 
         Ok(ReplStatus::Continue)
