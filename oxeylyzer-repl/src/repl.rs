@@ -31,6 +31,8 @@ pub enum ReplError {
     IndexOutOfBounds(usize, usize),
     #[error("Invalid ngram length, found length {0}. Allowed lengths: 1, 2, 3")]
     InvalidNgramLength(usize),
+    #[error("Failed to parse lisp expression: {0}")]
+    SexpError(String), // TODO: Make these errors fancy with line numbers and such
 
     #[error(transparent)]
     XflagsError(#[from] xflags::Error),
@@ -150,6 +152,15 @@ impl Repl {
         Ok(())
     }
 
+    pub fn insert_temp_layout(&mut self, line: &str, layout: FastLayout) {
+        let hash = format!("{:x}", md5::compute(line));
+        self.temp_command_layouts.insert(hash, layout);
+    }
+
+    pub fn clear_temp_layouts(&mut self) {
+        self.temp_command_layouts.clear();
+    }
+
     pub fn layout(&self, name: &str) -> Result<&FastLayout> {
         self.saved
             .get(&name.to_lowercase())
@@ -211,7 +222,7 @@ impl Repl {
         Ok(None)
     }
 
-    fn improve(
+    pub fn improve(
         &mut self,
         name: &str,
         count: Option<usize>,
@@ -400,7 +411,7 @@ impl Repl {
         Ok(None)
     }
 
-    fn swap(&self, name: &str, swaps: &[String]) -> Result<Option<FastLayout>> {
+    pub fn swap(&self, name: &str, swaps: &[String]) -> Result<Option<FastLayout>> {
         let mut layout = self.layout(name)?.clone();
 
         swaps
@@ -482,7 +493,7 @@ impl Repl {
             .for_each(|(bigram, freq)| println!("{bigram}: {:.3}", freq));
     }
 
-    fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
+    pub fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10);
 
@@ -498,7 +509,7 @@ impl Repl {
         Ok(None)
     }
 
-    fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
+    pub fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10);
 
@@ -514,7 +525,7 @@ impl Repl {
         Ok(None)
     }
 
-    fn stretches(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
+    pub fn stretches(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10);
 
@@ -530,7 +541,7 @@ impl Repl {
         Ok(None)
     }
 
-    fn language<P: AsRef<Path>>(&mut self, language: Option<P>) -> Result<Option<FastLayout>> {
+    pub fn language<P: AsRef<Path>>(&mut self, language: Option<P>) -> Result<Option<FastLayout>> {
         let language = match language {
             Some(l) => l,
             None => {
@@ -717,44 +728,5 @@ impl Repl {
         self.reset_with_language(&self.language.clone())?;
 
         Ok(None)
-    }
-
-    fn respond(&mut self, line: &str) -> Result<ReplStatus> {
-        use crate::flags::{Repl, ReplCmd::*};
-
-        let args = shlex::split(line)
-            .ok_or(ReplError::ShlexError)?
-            .into_iter()
-            .map(std::ffi::OsString::from)
-            .collect::<Vec<_>>();
-
-        let flags = Repl::from_vec(args)?;
-
-        let layout = match flags.subcommand {
-            Analyze(a) => self.analyze(&a.name_or_nr)?,
-            Compare(c) => self.compare(&c.name1, &c.name2)?,
-            Swap(s) => self.swap(&s.name, &s.swaps)?,
-            Rank(_) => self.rank(),
-            Generate(g) => self.generate(g.count)?,
-            Improve(i) => self.improve(&i.name, i.count, i.pins)?,
-            Save(s) => self.save(s.n, s.name)?,
-            Sfbs(s) => self.sfbs(&s.name, s.count)?,
-            Fspeed(s) => self.fspeed(&s.name, s.count)?,
-            Stretches(s) => self.stretches(&s.name, s.count)?,
-            Language(l) => self.language(l.language)?,
-            Include(l) => self.include(&l.languages)?,
-            Languages(_) => self.languages()?,
-            Load(l) => self.load(l.language, l.all, l.raw)?,
-            Ngram(n) => self.ngram(&n.ngram)?,
-            Reload(_) => self.reload()?,
-            Quit(_) => return Ok(ReplStatus::Quit),
-        };
-
-        if let Some(layout) = layout {
-            let hash = format!("{:x}", md5::compute(line));
-            self.temp_command_layouts.insert(hash, layout);
-        }
-
-        Ok(ReplStatus::Continue)
     }
 }
