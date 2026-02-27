@@ -118,8 +118,8 @@ impl Repl {
                     }
 
                     match env.respond(&line) {
-                        Ok(true) => break,
-                        Ok(false) => continue,
+                        Ok(ReplStatus::Quit) => break,
+                        Ok(ReplStatus::Continue) => continue,
                         Err(err) => {
                             println!("{err}");
                         }
@@ -547,7 +547,7 @@ impl Repl {
         }
     }
 
-    fn respond(&mut self, line: &str) -> Result<bool> {
+    fn respond(&mut self, line: &str) -> Result<ReplStatus> {
         use crate::flags::{Repl, ReplCmd::*};
 
         let args = shlex::split(line)
@@ -738,10 +738,10 @@ impl Repl {
             }
             Quit(_) => {
                 println!("{EXIT_MESSAGE}");
-                return Ok(true);
+                return Ok(ReplStatus::Quit);
             }
         };
 
-        Ok(false)
+        Ok(ReplStatus::Continue)
     }
 }
