@@ -9,26 +9,39 @@ fn add_outside_parens(expr: &str) -> String {
     }
 }
 
+impl std::ops::Add for ReplStatus {
+    type Output = ReplStatus;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Quit, _) | (_, Self::Quit) => Self::Quit,
+            _ => Self::Continue
+        }
+    }
+}
+
 impl Repl {
     pub fn walk(&mut self, value: &Sexp) -> Result<(String, ReplStatus)> {
         match value {
             Sexp::Atom(atom) => Ok((atom.to_string(), ReplStatus::Continue)),
             Sexp::List(sexps) => {
-                let subcommand = sexps
+                let (command_parts, statuses) = sexps
                     .iter()
                     .map(|v| match v {
-                        Sexp::Atom(_) => self.walk(v).map(|(result, _)| result),
+                        Sexp::Atom(_) => self.walk(v),
                         Sexp::List(_) => {
-                            let (result, _) = self.walk(v)?;
+                            let (result, status) = self.walk(v)?;
 
-                            Ok(format!("{:x}", md5::compute(&result)))
+                            Ok((format!("{:x}", md5::compute(&result)), status))
                         }
                     })
-                    .collect::<Result<Vec<String>>>()?
-                    .join(" ");
+                    .collect::<Result<(Vec<_>, Vec<_>)>>()?;
+                
+                let subcommand = command_parts.join(" ");
+                let repl_status = statuses.into_iter().reduce(|acc, e| acc + e).unwrap_or(ReplStatus::Continue);
 
                 println!("subcommand: {subcommand}");
-                let repl_status = self.parse_flags(&subcommand)?;
+                let repl_status = repl_status + self.parse_flags(&subcommand)?;
 
                 Ok((subcommand, repl_status))
             }
@@ -46,7 +59,7 @@ impl Repl {
 
         println!("final command: {}", final_command);
 
-        Ok(repl_status)
+        Ok(dbg!(repl_status))
     }
 
     fn parse_flags(&mut self, line: &str) -> Result<ReplStatus> {
