@@ -23,7 +23,7 @@ xflags::xflags! {
         cmd rank list {}
         /// Generate a number of layouts and displays the best 10. Note: layouts may not be correct after changing language.
         cmd generate gen g {
-            required count: usize
+            optional count: usize
         }
         /// Improves the the given layout by pinning keys specified in the `config.toml` and reordering everything else.
         cmd improve i optimize {
@@ -56,13 +56,13 @@ xflags::xflags! {
         }
         /// Include layouts stored under a different language
         cmd include {
-            required language: String
+            repeated languages: PathBuf
         }
         /// Lists all currently available languages.
         cmd languages langs {}
         /// Loads a corpus for a certain language.
         cmd load {
-            required language: PathBuf
+            optional language: PathBuf
             optional -a, --all
             optional -r, --raw
         }
