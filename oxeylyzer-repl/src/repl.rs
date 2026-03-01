@@ -600,21 +600,33 @@ impl Repl {
 
     pub fn load<P: AsRef<Path>>(&mut self, language: P, all: bool, raw: bool) -> Result<()> {
         let language = language.as_ref().display().to_string();
+        let search_in = "./static/text/";
 
         match (all, raw) {
             (true, true) => {
-                for (language, _) in CorpusConfig::all("./") {
-                    println!("loading raw data for language: {language}...");
+                for dir_entry in std::fs::read_dir(search_in)?
+                    .flatten()
+                    .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
+                {
+                    let language = dir_entry.file_name().display().to_string();
                     let cleaner = CorpusCleaner::raw();
+
+                    println!("loading raw data for language: {language}...");
 
                     self.load_one_with_config(&language, cleaner)?;
                 }
             }
             (true, false) => {
-                for (language, config) in CorpusConfig::all("./") {
+                for dir_entry in std::fs::read_dir(search_in)?
+                    .flatten()
+                    .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
+                {
+                    let language = dir_entry.file_name().display().to_string();
+                    let cleaner = CorpusConfig::new_translator(&language, None);
+
                     println!("loading data for language: {language}...");
 
-                    self.load_one_with_config(&language, config.into())?;
+                    self.load_one_with_config(&language, cleaner)?;
                 }
             }
             (false, true) => {
