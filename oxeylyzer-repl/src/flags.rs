@@ -62,7 +62,7 @@ xflags::xflags! {
         cmd languages langs {}
         /// Loads a corpus for a certain language.
         cmd load {
-            required language: PathBuf
+            optional language: PathBuf
             optional -a, --all
             optional -r, --raw
         }

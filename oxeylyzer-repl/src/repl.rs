@@ -31,6 +31,12 @@ pub enum ReplError {
     IndexOutOfBounds(usize, usize),
     #[error("Invalid ngram length, found length {0}. Allowed lengths: 1, 2, 3")]
     InvalidNgramLength(usize),
+    #[error(
+        "{} {}",
+        "Missing <language> flag. The language flag can only be omitted in combination with",
+        "`--all`.\nRun `load help` for more information about the command."
+    )]
+    MissingLanguageFlag,
 
     #[error(transparent)]
     XflagsError(#[from] xflags::Error),
@@ -598,9 +604,18 @@ impl Repl {
         Ok(())
     }
 
-    pub fn load<P: AsRef<Path>>(&mut self, language: P, all: bool, raw: bool) -> Result<()> {
-        let language = language.as_ref().display().to_string();
+    pub fn load<P: AsRef<Path>>(
+        &mut self,
+        language: Option<P>,
+        all: bool,
+        raw: bool,
+    ) -> Result<()> {
         let search_in = "./static/text/";
+
+        let get_language = |language: Option<P>| match language {
+            Some(language) => Ok(language.as_ref().display().to_string()),
+            None => Err(ReplError::MissingLanguageFlag),
+        };
 
         match (all, raw) {
             (true, true) => {
@@ -630,14 +645,18 @@ impl Repl {
                 }
             }
             (false, true) => {
-                println!("loading raw data for language: {language}...");
+                let language = get_language(language)?;
                 let cleaner = CorpusCleaner::raw();
+
+                println!("loading raw data for language: {language}...");
 
                 self.load_one_with_config(&language, cleaner)?;
             }
             (false, false) => {
-                println!("loading data for {language}...");
+                let language = get_language(language)?;
                 let cleaner = CorpusConfig::new_translator(&language, None);
+
+                println!("loading data for {language}...");
 
                 self.load_one_with_config(&language, cleaner)?;
                 self.language(Some(language))?;
