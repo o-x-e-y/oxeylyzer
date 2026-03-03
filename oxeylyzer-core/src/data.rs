@@ -153,9 +153,8 @@ impl Data {
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(result
-            .into_iter()
-            .reduce(|a, b| a + b)
-            .unwrap_or_default()
+            .into_par_iter()
+            .reduce(IntermediateData::default, |a, b| a + b)
             .into())
     }
 
