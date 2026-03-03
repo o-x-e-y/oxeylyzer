@@ -271,46 +271,19 @@ where
 
         if self.use_window {
             self.window.push(c);
+            
+            let (c1, c2) = (self.window[0], self.window[1]);
 
-            if self.cleaner.repeat_key && self.window[0] == self.window[1] {
+            if self.cleaner.repeat_key && c1 == c2 && self.cleaner.map.contains_key(&c1) {
+                self.window.push(REPEAT_KEY);   // TODO: this works for now, consider changing later
                 return Some(vec![REPEAT_KEY]);
             }
         }
 
         if let Some(sk) = self.cleaner.shift_key {
-            // match self.cleaner.map.get(&c).map(|v| v.as_slice()) {
-            //     Some(&[f]) if f == sk => Some(vec![REPLACEMENT_CHAR]),
-            //     Some(&[f]) if self.shift_pressed => {
-            //         self.shift_pressed = false;
-            //         Some(vec![sk, f])
-            //     }
-            //     Some(&[f]) => Some(vec![f]),
-            //     Some(&[f, c]) if f == sk && self.shift_pressed => Some(vec![c]),
-            //     Some(&[f, c]) if self.shift_pressed => {
-            //         self.shift_pressed = false;
-            //         Some(vec![sk, f, c])
-            //     }
-            //     Some(&[f, c]) if f == sk => {
-            //         self.shift_pressed = true;
-            //         Some(vec![f, c])
-            //     }
-            //     Some(&[f, c]) => Some(vec![f, c]),
-            //     Some(s @ &[f, ..]) if f == sk && self.shift_pressed => Some(s[1..].to_vec()),
-            //     Some(s @ &[f, ..]) if f == sk => {
-            //         self.shift_pressed = true;
-            //         Some(s.to_vec())
-            //     }
-            //     Some(s) if self.shift_pressed => {
-            //         self.shift_pressed = false;
-            //         let mut res = vec![sk];
-            //         res.extend(s);
-            //         Some(res)
-            //     }
-            //     Some(s) => Some(s.to_vec()),
-            //     _ => Some(vec![REPLACEMENT_CHAR]),
-            // }
             match self.cleaner.map.get(&c).map(|v| v.as_slice()) {
                 Some(&[f]) if f == sk => Some(vec![REPLACEMENT_CHAR]),
+                Some(&[REPEAT_KEY]) => Some(vec![REPEAT_KEY]),
                 Some(&[f]) if self.shift_pressed => {
                     self.shift_pressed = false;
                     Some(vec![f])
@@ -393,93 +366,93 @@ mod tests {
             .flatten()
             .collect::<String>();
 
-        for c in translation.chars() {
-            println!("{c}");
-        }
+        assert_eq!(translation, "⇑aabcd�⇑;d��⇑;;");
     }
 
-    fn _gen_save_data(name: &str, cleaner: &CorpusCleaner) {
-        let data = crate::data::Data::from_path(
-            format!("../static/text/{name}"),
-            &format!("{name}"),
-            cleaner,
-        )
-        .expect("couldn't create data:");
+    #[test]
+    fn repeat_key() {
+        let corpus = "AAAAAaBcd :dof:;";
 
-        data.save("../static/language_data_new/")
-            .expect("couldn't save data:");
-    }
-
-    // #[test]
-    fn _generate_data() {
-        // let cleaner_ru = CorpusCleaner::builder()
-        //     .with_chars("абвгдеёжзийклмнопрстуфхцчшщъыьэюя".chars())
-        //     .qwerty_punctuation_mappings(true)
-        //     .normalize_misc_punctuation(true)
-        //     // .with_chars([' '])
-        //     .build();
-
-        // _gen_save_data("russian", &cleaner_ru);
-
-        // let cleaner_de = CorpusCleaner::builder()
-        //     .with_chars("abcdefghijklmnopqrstuvwxyzäöüß".chars())
-        //     .qwerty_punctuation_mappings(true)
-        //     .normalize_misc_punctuation(true)
-        //     // .with_chars([' '])
-        //     .build();
-
-        // _gen_save_data("german", &cleaner_de);
-
-        // let cleaner_fr = CorpusCleaner::builder()
-        //     .with_chars("abcdefghijklmnopqrstuvwxyzéàçœâêîôûèìòùáíóúäëïöü".chars())
-        //     .qwerty_punctuation_mappings(true)
-        //     .normalize_misc_punctuation(true)
-        //     // .with_chars([' '])
-        //     .build();
-
-        // _gen_save_data("french", &cleaner_fr);
-
-        let cleaner_no = CorpusCleaner::builder()
-            .with_chars("abcdefghijklmnopqrstuvwxyzåøæ".chars())
+        let cleaner = CorpusCleaner::builder()
+            .with_chars("abcde".chars())
             .qwerty_punctuation_mappings(true)
-            .normalize_misc_punctuation(true)
-            // .with_chars([' '])
+            // .repeat_key(true)
             .build();
 
-        _gen_save_data("bokmal", &cleaner_no);
-        // _gen_save_data("nynorsk", &cleaner_no);
+        let translation = corpus
+            .chars()
+            .clean_corpus(&cleaner)
+            .flatten()
+            .collect::<String>();
 
-        // let cleaner_it = CorpusCleaner::builder()
-        //     .with_chars("abcdefghijklmnopqrstuvwxyz".chars())
-        //     .with_dead_key(
-        //         [('à', 'a'), ('è', 'e'), ('ì', 'i'), ('ò', 'o'), ('ù', 'u')],
-        //         '*',
-        //     )
-        //     .qwerty_punctuation_mappings(true)
-        //     .normalize_misc_punctuation(true)
-        //     // .with_chars([' '])
-        //     .build();
+        assert_eq!(translation, format!("⇑a{}a{}aabcd�⇑;d��⇑;;", REPEAT_KEY, REPEAT_KEY));
+    }
 
-        // _gen_save_data("italian", &cleaner_it);
+    #[test]
+    fn compare_repeat_key() {
+        use fancy_regex::{Captures, Regex};
 
-        // let cleaner_en = CorpusCleaner::builder()
-        //     .with_chars("abcdefghijklmnopqrstuvwxyz".chars())
-        //     .qwerty_punctuation_mappings(true)
-        //     .normalize_misc_punctuation(true)
-        //     // .with_chars([' '])
-        //     .build();
+        let path = concat!(
+            std::env!("CARGO_MANIFEST_DIR"),
+            "/../static/text/monkeyracer/mr.txt"
+        );
+        let monkeyracer = std::fs::read_to_string(path)
+            .unwrap()
+            .chars()
+            .take(100_000)
+            .collect::<String>();
 
-        // _gen_save_data("shai", &cleaner_en);
-        // _gen_save_data("dutch", &cleaner_en);
+        let re = Regex::new(r"(.)\1").unwrap();
+        let monkeyracer_repeat = re.replace_all(&monkeyracer, |caps: &Captures| {
+            format!("{}{}", &caps[1], REPEAT_KEY)
+        });
 
-        // let cleaner_sw = CorpusCleaner::builder()
-        //     .with_chars("abcdefghijklmnopqrstuvwxyzäåö".chars())
-        //     .qwerty_punctuation_mappings(true)
-        //     .normalize_misc_punctuation(true)
-        //     // .with_chars([' '])
-        //     .build();
+        let vanilla_cleaner = CorpusCleaner::builder()
+            .normalize_misc_punctuation(true)
+            .qwerty_punctuation_mappings(true)
+            .with_exact_mappings([REPEAT_KEY])
+            .with_chars("abcdefghijklmnopqrstuvwxyz".chars())
+            .build();
 
-        // _gen_save_data("finnish", &cleaner_sw);
-        // _gen_save_data("swedish", &cleaner_sw);
+        let repeat_cleaner = CorpusCleaner {
+            map: vanilla_cleaner.map.clone(),
+            shift_key: vanilla_cleaner.shift_key,
+            repeat_key: true,
+            raw: false,
+        };
+
+        let repeat_cleaned_monkeyracer = monkeyracer
+            .chars()
+            .clean_corpus(&repeat_cleaner)
+            .flatten()
+            .collect::<String>();
+        
+        let cleaned_repeat_monkeyracer = monkeyracer_repeat
+            .chars()
+            .clean_corpus(&vanilla_cleaner)
+            .flatten()
+            .collect::<String>();
+        
+        assert_eq!(repeat_cleaned_monkeyracer.len(), cleaned_repeat_monkeyracer.len());
+
+        repeat_cleaned_monkeyracer
+            .chars()
+            .zip(cleaned_repeat_monkeyracer.chars())
+            .zip(0usize..)
+            .for_each(|((mr, rpt), i)| {
+                if mr != rpt {                    
+                    let cleaned_mr_context = repeat_cleaned_monkeyracer.chars().skip(i.saturating_sub(10))
+                        .take(20)
+                        .collect::<String>();
+                    
+                    let cleaned_rpt_context = cleaned_repeat_monkeyracer.chars().skip(i.saturating_sub(10))
+                        .take(20)
+                        .collect::<String>();
+
+                    println!("repeat basic context:  {cleaned_mr_context}");
+                    println!("manual repeat context: {cleaned_rpt_context}");
+                    panic!()
+                }
+            })
     }
 }

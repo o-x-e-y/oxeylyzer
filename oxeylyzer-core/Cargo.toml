@@ -29,3 +29,4 @@ num_cpus = "1.17"
 [dev-dependencies]
 time_this = "0"
 approx = "0"
+fancy-regex = "0.17.0"
