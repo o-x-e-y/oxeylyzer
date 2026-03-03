@@ -281,39 +281,9 @@ where
         }
 
         if let Some(sk) = self.cleaner.shift_key {
-            // match self.cleaner.map.get(&c).map(|v| v.as_slice()) {
-            //     Some(&[f]) if f == sk => Some(vec![REPLACEMENT_CHAR]),
-            //     Some(&[f]) if self.shift_pressed => {
-            //         self.shift_pressed = false;
-            //         Some(vec![sk, f])
-            //     }
-            //     Some(&[f]) => Some(vec![f]),
-            //     Some(&[f, c]) if f == sk && self.shift_pressed => Some(vec![c]),
-            //     Some(&[f, c]) if self.shift_pressed => {
-            //         self.shift_pressed = false;
-            //         Some(vec![sk, f, c])
-            //     }
-            //     Some(&[f, c]) if f == sk => {
-            //         self.shift_pressed = true;
-            //         Some(vec![f, c])
-            //     }
-            //     Some(&[f, c]) => Some(vec![f, c]),
-            //     Some(s @ &[f, ..]) if f == sk && self.shift_pressed => Some(s[1..].to_vec()),
-            //     Some(s @ &[f, ..]) if f == sk => {
-            //         self.shift_pressed = true;
-            //         Some(s.to_vec())
-            //     }
-            //     Some(s) if self.shift_pressed => {
-            //         self.shift_pressed = false;
-            //         let mut res = vec![sk];
-            //         res.extend(s);
-            //         Some(res)
-            //     }
-            //     Some(s) => Some(s.to_vec()),
-            //     _ => Some(vec![REPLACEMENT_CHAR]),
-            // }
             match self.cleaner.map.get(&c).map(|v| v.as_slice()) {
                 Some(&[f]) if f == sk => Some(vec![REPLACEMENT_CHAR]),
+                Some(&[REPEAT_KEY]) => Some(vec![REPEAT_KEY]),
                 Some(&[f]) if self.shift_pressed => {
                     self.shift_pressed = false;
                     Some(vec![f])
