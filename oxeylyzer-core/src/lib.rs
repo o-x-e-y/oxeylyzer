@@ -9,6 +9,8 @@ pub mod trigram_patterns;
 pub mod utility;
 pub mod weights;
 
+use std::path::PathBuf;
+
 pub use rayon;
 pub use serde;
 
@@ -31,8 +33,8 @@ pub enum OxeylyzerError {
     ChunkerInitError,
     #[error("Failed to create appropriate chunks")]
     ChunkerChunkError,
-    #[error("Path must be either a directory or a file")]
-    NotAFile,
+    #[error("Path must be either a directory or a file, '{}' is neither", .0.display())]
+    NotAFile(PathBuf),
     #[error("Specifying a name for the corpus is required")]
     MissingDataName,
 

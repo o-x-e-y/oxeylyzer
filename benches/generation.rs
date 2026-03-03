@@ -95,7 +95,7 @@ fn language_data(bencher: Bencher, language: &str) {
     let cleaner = CorpusCleaner::raw();
 
     bencher.bench(|| {
-        Data::from_path(format!("./static/text/{language}"), language, &cleaner)
+        Data::from_paths(&[format!("./static/text/{language}")], language, &cleaner)
             .expect("couldn't create data:");
     })
 }

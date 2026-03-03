@@ -271,11 +271,11 @@ where
 
         if self.use_window {
             self.window.push(c);
-            
+
             let (c1, c2) = (self.window[0], self.window[1]);
 
             if self.cleaner.repeat_key && c1 == c2 && self.cleaner.map.contains_key(&c1) {
-                self.window.push(REPEAT_KEY);   // TODO: this works for now, consider changing later
+                self.window.push(REPEAT_KEY); // TODO: this works for now, consider changing later
                 return Some(vec![REPEAT_KEY]);
             }
         }
@@ -385,7 +385,10 @@ mod tests {
             .flatten()
             .collect::<String>();
 
-        assert_eq!(translation, format!("⇑a{}a{}aabcd�⇑;d��⇑;;", REPEAT_KEY, REPEAT_KEY));
+        assert_eq!(
+            translation,
+            format!("⇑a{}a{}aabcd�⇑;d��⇑;;", REPEAT_KEY, REPEAT_KEY)
+        );
     }
 
     #[test]
@@ -426,26 +429,33 @@ mod tests {
             .clean_corpus(&repeat_cleaner)
             .flatten()
             .collect::<String>();
-        
+
         let cleaned_repeat_monkeyracer = monkeyracer_repeat
             .chars()
             .clean_corpus(&vanilla_cleaner)
             .flatten()
             .collect::<String>();
-        
-        assert_eq!(repeat_cleaned_monkeyracer.len(), cleaned_repeat_monkeyracer.len());
+
+        assert_eq!(
+            repeat_cleaned_monkeyracer.len(),
+            cleaned_repeat_monkeyracer.len()
+        );
 
         repeat_cleaned_monkeyracer
             .chars()
             .zip(cleaned_repeat_monkeyracer.chars())
             .zip(0usize..)
             .for_each(|((mr, rpt), i)| {
-                if mr != rpt {                    
-                    let cleaned_mr_context = repeat_cleaned_monkeyracer.chars().skip(i.saturating_sub(10))
+                if mr != rpt {
+                    let cleaned_mr_context = repeat_cleaned_monkeyracer
+                        .chars()
+                        .skip(i.saturating_sub(10))
                         .take(20)
                         .collect::<String>();
-                    
-                    let cleaned_rpt_context = cleaned_repeat_monkeyracer.chars().skip(i.saturating_sub(10))
+
+                    let cleaned_rpt_context = cleaned_repeat_monkeyracer
+                        .chars()
+                        .skip(i.saturating_sub(10))
                         .take(20)
                         .collect::<String>();
 
