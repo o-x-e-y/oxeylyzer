@@ -271,8 +271,11 @@ where
 
         if self.use_window {
             self.window.push(c);
+            
+            let (c1, c2) = (self.window[0], self.window[1]);
 
-            if self.cleaner.repeat_key && self.window[0] == self.window[1] {
+            if self.cleaner.repeat_key && c1 == c2 && self.cleaner.map.contains_key(&c1) {
+                self.window.push(REPEAT_KEY);   // TODO: this works for now, consider changing later
                 return Some(vec![REPEAT_KEY]);
             }
         }
