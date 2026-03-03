@@ -62,9 +62,18 @@ xflags::xflags! {
         cmd languages langs {}
         /// Loads a corpus for a certain language.
         cmd load {
-            optional language: PathBuf
-            optional -a, --all
+            /// The name of the corpus. This value will be used when looking for a corpus config,
+            /// which is the configuration used to clean the corpus.
+            required language: String
+            /// Path to either a folder or a text file that will be used as the corpus.
+            required corpus_path: PathBuf
+            /// Extra paths to folders or text files that will be bundled to be used as the corpus.
+            repeated corpus_paths: PathBuf
+            /// If set, processes the corpus as-is without cleaning it.
             optional -r, --raw
+            /// If set, processes all corpora found in ./static/text where the folder name is the
+            /// language name.
+            optional -a, --all
         }
         /// Gives information about a certain ngram. for 2 letter ones, skipgram info will be provided as well.
         cmd ngram n occ freq {
