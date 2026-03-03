@@ -85,6 +85,7 @@ pub struct CorpusConfig {
     multiple: Vec<(char, String)>,
     one_to_one: OneToOne,
     punct_unshifted: OneToOne,
+    repeat_key: bool,
     #[serde(skip)]
     inherits_visited: HashSet<String>,
 }
@@ -193,6 +194,7 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
         let keep = self.keep.into_iter().chain(rhs.keep).collect();
         let punct_unshifted = self.punct_unshifted + rhs.punct_unshifted;
         let one_to_one = self.one_to_one + rhs.one_to_one;
+        let repeat_key = self.repeat_key || rhs.repeat_key;
         let inherits_visited = self
             .inherits_visited
             .into_iter()
@@ -206,6 +208,7 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
             keep,
             multiple,
             one_to_one,
+            repeat_key,
             inherits_visited,
         }
     }
@@ -240,6 +243,7 @@ impl From<CorpusConfig> for CorpusCleaner {
                     .into_iter()
                     .map(|(c, s)| (c, s.chars().collect())),
             )
+            .repeat_key(config.repeat_key)
             .build()
     }
 }

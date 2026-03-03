@@ -1,3 +1,3 @@
 inherits = ["default", "finnish"]
 
-keep = "@"
+repeat_key = true

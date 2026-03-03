@@ -4,7 +4,7 @@ static/text/*
 !static/text/README.md
 static/stats
 static/corpus_configs/custom/*.toml
-static/language_data/reddit.json
+static/language_data/test.json
 static/history.txt
 .direnv
 result

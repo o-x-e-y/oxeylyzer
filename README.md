@@ -76,6 +76,10 @@ Redirects are trigrams where you press all three keys with the same hand, but th
 #### Max Finger Use
 This basically exists to be a soft cap on how much %usage you can put on a finger before it's 'too much'. It is useful in columns that do well on paper but have very high total frequency, like `pnb` pinky.
 
+## Importing raw text
+
+You can import raw text for creating your own corpus and corpus rules. To do this create a folder in `/static/text/` and place your text within that folder. The name of the folder will be the name used for loading the text in the REPL. For example we create the folder `icelandic` (no capitals allowed) within `/static/text/`, place `icelandic_sentences.txt` within and load the text with `load icelandic`.
+
 ## Creating your own corpus rules
 
 You can generate language data files using your own rules now! There are a few settings that you can use for them. As a shortcut, if your corpus is just English, you can create a `.toml` file with a single line: `inherits = ["default"]`. That should cover everything you need.

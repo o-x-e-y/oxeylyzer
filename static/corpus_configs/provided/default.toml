@@ -1,8 +1,8 @@
 letters_to_lowercase = "abcdefghijklmnopqrstuvwxyz"
 
 [punct_unshifted]
-from = "{}?+_|\"<>:~“”«»"
-to =   "[]/=-\\',.;`''''"
+from = "{}?+_|\"<>:~“”«»!@#$%^&*()"
+to =   "[]/=-\\',.;`''''1234567890"
 
 [one_to_one]
 from = "´÷‘’–ʹ͵"
