@@ -11,9 +11,10 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::REPEAT_KEY;
 use crate::analyzer_data::AnalyzerData;
-use crate::cached_layout::*;
+use crate::cached_layout::{Layout as _, *};
 use crate::char_mapping::CharMapping;
 use crate::data::Data;
+use crate::layout::Layout;
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::utility::*;
 use crate::weights::{AnalyzerWeights, Config};
@@ -252,7 +253,6 @@ pub struct LayoutGeneration {
     per_char_trigrams: PerCharTrigrams,
 
     pub weights: AnalyzerWeights,
-    pub layouts: IndexMap<String, FastLayout>,
 }
 
 impl LayoutGeneration {
@@ -305,11 +305,9 @@ impl LayoutGeneration {
             pinky_ring_indices: get_pinky_ring_indices(),
 
             weights: config.weights.into(),
-            layouts: IndexMap::default(),
         })
     }
 
-    // TODO: move layouts out of LayoutGeneration to split concerns
     pub fn load_layouts<P>(
         &mut self,
         base_directory: P,
