@@ -376,7 +376,7 @@ mod tests {
         let cleaner = CorpusCleaner::builder()
             .with_chars("abcde".chars())
             .qwerty_punctuation_mappings(true)
-            // .repeat_key(true)
+            .repeat_key(true)
             .build();
 
         let translation = corpus
@@ -387,7 +387,7 @@ mod tests {
 
         assert_eq!(
             translation,
-            format!("⇑a{}a{}aabcd�⇑;d��⇑;;", REPEAT_KEY, REPEAT_KEY)
+            format!("⇑a{}a{}aa⇑bcd�⇑;d��⇑;;", REPEAT_KEY, REPEAT_KEY)
         );
     }
 
