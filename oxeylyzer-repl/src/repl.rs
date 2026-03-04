@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
-use oxeylyzer_core::{generate::LayoutGeneration, layout::*, rayon, weights::Config};
+use oxeylyzer_core::{generate::LayoutGeneration, cached_layout::*, rayon, weights::Config};
 use rustyline::DefaultEditor;
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;

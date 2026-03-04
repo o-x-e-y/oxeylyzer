@@ -2,7 +2,7 @@ use libdof::prelude::Finger;
 
 use crate::{
     generate::{LayoutGeneration, SMALLEST_SCORE},
-    layout::*,
+    cached_layout::*,
     utility::*,
 };
 

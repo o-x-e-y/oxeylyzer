@@ -1,4 +1,4 @@
-use oxeylyzer_core::layout::*;
+use oxeylyzer_core::cached_layout::*;
 use oxeylyzer_core::rayon::iter::ParallelIterator;
 use oxeylyzer_core::{analyzer_data::AnalyzerData, generate::LayoutGeneration};
 
