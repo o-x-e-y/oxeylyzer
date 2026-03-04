@@ -284,11 +284,7 @@ impl Repl {
         let fmt_score = |base| (base as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
 
         let stats = self.layout_gen.get_layout_stats(layout);
-        let score = if layout.score == 0 {
-            self.layout_gen.score(layout)
-        } else {
-            layout.score
-        };
+        let score = self.layout_gen.score(layout);
 
         let layout_str = heatmap_string(&self.layout_gen.data, layout);
 
