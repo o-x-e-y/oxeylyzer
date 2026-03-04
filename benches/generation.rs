@@ -35,6 +35,7 @@ fn main() -> std::io::Result<()> {
     bench.register(best_swap_cached, layout_names.clone());
     bench.register(best_swap, layout_names);
     bench.register(language_data, corpora);
+    bench.register(shuffle_pins, (0..40).step_by(5));
 
     bench.run()?;
     Ok(())
@@ -97,5 +98,20 @@ fn language_data(bencher: Bencher, language: &str) {
     bencher.bench(|| {
         Data::from_paths(&[format!("./static/text/{language}")], language, &cleaner)
             .expect("couldn't create data:");
+    })
+}
+
+fn shuffle_pins(bencher: Bencher, pin_count: usize) {
+    let step = 40f64 / pin_count as f64;
+    let pins = black_box(
+        (0..pin_count)
+            .map(|v| (v as f64 * step) as usize)
+            .collect::<Vec<_>>(),
+    );
+
+    let mut arr = black_box((0..40i32).collect::<Vec<_>>());
+
+    bencher.bench(|| {
+        oxeylyzer_core::utility::shuffle_pins::<i32>(&mut arr, &pins);
     })
 }
