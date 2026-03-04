@@ -199,13 +199,13 @@ impl Layout<u8> for FastLayout {
     }
 
     fn random(layout_chars: &mut [u8]) -> FastLayout {
-        shuffle_pins::<30, u8>(layout_chars, &[]);
+        shuffle_pins(layout_chars, &[]);
         let non_mut: &[u8] = layout_chars;
         FastLayout::try_from(non_mut).unwrap()
     }
 
     fn random_pins(layout_chars: &mut [u8], pins: &[usize]) -> FastLayout {
-        shuffle_pins::<30, u8>(layout_chars, pins);
+        shuffle_pins(layout_chars, pins);
         let non_mut: &[u8] = layout_chars;
         FastLayout::try_from(non_mut).unwrap()
     }

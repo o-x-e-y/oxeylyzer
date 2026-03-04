@@ -1,6 +1,5 @@
 use crate::{languages_cfg::read_cfg, weights::FingerWeights};
 
-use arrayvec::ArrayVec;
 use libdof::prelude::{
     Finger::{self, *},
     PhysicalKey,
@@ -9,8 +8,11 @@ use nanorand::{Rng, tls_rng};
 use serde::Deserialize;
 
 #[inline]
-pub fn shuffle_pins<const N: usize, T>(slice: &mut [T], pins: &[usize]) {
-    let mapping: ArrayVec<_, N> = (0..slice.len()).filter(|x| !pins.contains(x)).collect();
+pub fn shuffle_pins<T>(slice: &mut [T], pins: &[usize]) {
+    let mapping = (0..slice.len())
+        .filter(|x| !pins.contains(x))
+        .collect::<Vec<_>>();
+    
     let mut rng = tls_rng();
 
     for (m, &swap1) in mapping.iter().enumerate() {
