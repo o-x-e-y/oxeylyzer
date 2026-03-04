@@ -616,6 +616,11 @@ impl Repl {
     ) -> Result<()> {
         let base_path = "./static/text/";
 
+        let corpus_paths = match corpus_paths {
+            &[] => vec![PathBuf::from(base_path).join(&language)],
+            p @ &[_, ..] => p.iter().map(AsRef::as_ref).map(PathBuf::from).collect(),
+        };
+
         match (all, raw) {
             (true, true) => {
                 for dir_entry in std::fs::read_dir(base_path)?
@@ -650,14 +655,14 @@ impl Repl {
 
                 println!("loading raw data for language: {language}...");
 
-                self.load_one_with_config(&language, cleaner, corpus_paths)?;
+                self.load_one_with_config(&language, cleaner, &corpus_paths)?;
             }
             (false, false) => {
                 let cleaner = CorpusConfig::new_translator(&language, None);
 
                 println!("loading data for {language}...");
 
-                self.load_one_with_config(&language, cleaner, corpus_paths)?;
+                self.load_one_with_config(&language, cleaner, &corpus_paths)?;
                 self.language(Some(language))?;
             }
         };
@@ -763,10 +768,7 @@ impl Repl {
             Language(l) => self.language(l.language)?,
             Include(l) => self.include(&l.languages)?,
             Languages(_) => self.languages()?,
-            Load(mut l) => {
-                l.corpus_paths.push(l.corpus_path);
-                self.load(l.language, &l.corpus_paths, l.raw, l.all)?
-            }
+            Load(l) => self.load(l.language, &l.corpus_paths, l.raw, l.all)?,
             Ngram(n) => self.ngram(&n.ngram)?,
             Reload(_) => self.reload()?,
             Quit(_) => return Ok(ReplStatus::Quit),
