@@ -1,8 +1,8 @@
 use libdof::prelude::Finger;
 
 use crate::{
-    generate::{LayoutGeneration, SMALLEST_SCORE},
     cached_layout::*,
+    generate::{LayoutGeneration, SMALLEST_SCORE},
     utility::*,
 };
 

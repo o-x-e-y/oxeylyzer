@@ -12,7 +12,7 @@ pub fn shuffle_pins<T>(slice: &mut [T], pins: &[usize]) {
     let mapping = (0..slice.len())
         .filter(|x| !pins.contains(x))
         .collect::<Vec<_>>();
-    
+
     let mut rng = tls_rng();
 
     for (m, &swap1) in mapping.iter().enumerate() {

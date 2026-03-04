@@ -207,7 +207,7 @@ pub fn get_trigram_combinations() -> Box<[TrigramPattern]> {
 #[cfg(test)]
 mod tests {
     use super::{TrigramPattern::*, *};
-    use crate::{char_mapping::CharMapping, generate::LayoutGeneration, cached_layout::FastLayout};
+    use crate::{cached_layout::FastLayout, char_mapping::CharMapping, generate::LayoutGeneration};
     use once_cell::sync::Lazy;
 
     static CON: Lazy<CharMapping> =
