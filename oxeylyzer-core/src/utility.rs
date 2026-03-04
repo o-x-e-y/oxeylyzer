@@ -306,37 +306,6 @@ impl ApproxEq for f64 {
     }
 }
 
-pub(crate) fn is_kb_file(path: &&std::path::PathBuf) -> bool {
-    if let Some(ext) = path.extension() {
-        return ext == "kb";
-    }
-    false
-}
-
-pub(crate) fn is_dof_file(entry: &&std::path::PathBuf) -> bool {
-    if let Some(ext_os) = entry.extension() {
-        return ext_os == "dof";
-    }
-    false
-}
-
-pub(crate) fn layout_name(entry: &std::path::Path) -> Option<String> {
-    if let Some(name_os) = entry.file_stem()
-        && let Some(name_str) = name_os.to_str()
-    {
-        return Some(name_str.to_string());
-    }
-    None
-}
-
-pub(crate) fn format_layout_str(layout_str: &str) -> String {
-    layout_str
-        .split('\n')
-        .take(3)
-        .map(|line| line.split_whitespace().take(10).collect::<String>())
-        .collect::<String>()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,14 +356,5 @@ mod tests {
 
         assert!(!(0.123456789).approx_eq_dbg(0.0, 3));
         assert!(!(0.123456789).approx_eq_dbg(0.1, 4));
-    }
-
-    #[test]
-    fn format_layout_string() {
-        let str1 = "v m l c p  q z u o , \ns t r d y  f n e a i \nx k j g w  b h ; ' .";
-        let str2 = "a b    c d e f g h i \n j k l \n m n o p q \n r s t u v w x y z";
-
-        assert_eq!(format_layout_str(str1), "vmlcpqzuo,strdyfneaixkjgwbh;'.");
-        assert_eq!(format_layout_str(str2), "abcdefghijklmnopq");
     }
 }

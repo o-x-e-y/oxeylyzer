@@ -1,14 +1,9 @@
 use ahash::AHashMap as HashMap;
 use anyhow::Result;
 use itertools::Itertools;
-use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
+use libdof::prelude::{Finger, PhysicalKey, Shape};
 
-use crate::{
-    char_mapping::CharMapping,
-    utility::*,
-    weights::{AnalyzerWeights, FingerWeights},
-    *,
-};
+use crate::{char_mapping::CharMapping, utility::*, weights::FingerWeights};
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 

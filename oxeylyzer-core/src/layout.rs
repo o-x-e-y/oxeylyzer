@@ -100,7 +100,7 @@ impl From<Dof> for Layout {
 
         let name = dof.name().to_owned();
         let fingers = dof.fingering().keys().copied().collect();
-        let keyboard = dof.board().keys().cloned().map(Into::into).collect();
+        let keyboard = dof.board().keys().cloned().collect();
         let shape = dof.main_layer().shape();
 
         Layout {

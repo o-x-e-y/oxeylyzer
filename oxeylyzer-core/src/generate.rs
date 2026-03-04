@@ -3,9 +3,7 @@ use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
 use anyhow::{Context, Result};
-use indexmap::IndexMap;
 use itertools::Itertools;
-use libdof::Dof;
 use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
