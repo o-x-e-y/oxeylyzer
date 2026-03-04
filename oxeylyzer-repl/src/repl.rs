@@ -1,12 +1,19 @@
+#[cfg(not(target_arch = "wasm32"))]
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use indexmap::IndexMap;
 use itertools::Itertools;
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
-use oxeylyzer_core::{cached_layout::*, generate::LayoutGeneration, rayon, weights::Config};
+use oxeylyzer_core::{
+    cached_layout::{Layout as _, *},
+    generate::LayoutGeneration,
+    layout::Layout,
+    rayon,
+    weights::Config,
+};
 use rustyline::DefaultEditor;
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
@@ -67,7 +74,7 @@ pub enum ReplStatus {
 pub struct Repl {
     language: String,
     layout_gen: LayoutGeneration,
-    saved: IndexMap<String, FastLayout>,
+    saved: HashMap<String, Layout>,
     temp_generated: Vec<FastLayout>,
     thread_pool: rayon::ThreadPool,
 }
@@ -86,17 +93,14 @@ impl Repl {
             .build()
             .unwrap();
 
-        let mut layout_gen = LayoutGeneration::new(
+        let layout_gen = LayoutGeneration::new(
             config.language.clone().as_str(),
             generator_base_path.as_ref(),
             Some(config),
         )?;
 
         Ok(Self {
-            saved: layout_gen.load_layouts(
-                generator_base_path.as_ref().join("layouts"),
-                language.as_str(),
-            )?,
+            saved: load_layouts(generator_base_path.as_ref().join("layouts").join(&language))?,
             language,
             layout_gen,
             temp_generated: Vec::new(),
@@ -155,9 +159,11 @@ impl Repl {
         Ok(())
     }
 
-    pub fn layout(&self, name: &str) -> Result<&FastLayout> {
+    // TODO: return Layout at one point
+    pub fn layout(&self, name: &str) -> Result<FastLayout> {
         self.saved
             .get(&name.to_lowercase())
+            .map(|layout| self.layout_gen.fast_layout(layout, &[]))
             .ok_or(ReplError::UnknownLayout(name.into()))
     }
 
@@ -173,7 +179,7 @@ impl Repl {
     pub fn analyze(&self, name_or_nr: &str) -> Result<()> {
         let layout = match name_or_nr.parse::<usize>() {
             Ok(nr) => self.nth_layout(nr)?,
-            Err(_) => self.layout(name_or_nr)?,
+            Err(_) => &self.layout(name_or_nr)?,
         };
 
         println!("{}", name_or_nr);
@@ -183,10 +189,21 @@ impl Repl {
     }
 
     pub fn rank(&self) {
-        for (name, layout) in self.saved.iter() {
-            let score = (layout.score as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
-            println!("{:10}{}", format!("{:.3}:", score), name);
-        }
+        self.saved
+            .iter()
+            .map(|(n, l)| {
+                let fast = self.layout_gen.fast_layout(l, &[]);
+                let s = self.layout_gen.score(&fast);
+                let score = (s as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
+                (n, score)
+            })
+            .sorted_by(|(_, a), (_, b)| a.total_cmp(b))
+            .for_each(|(n, s)| println!("{n:-<15} {s:.3}"));
+
+        // for (name, layout) in self.saved.iter() {
+        //     let score = (layout.score as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
+        //     println!("{:10}{}", format!("{:.3}:", score), name);
+        // }
     }
 
     pub fn pin_positions(&self, layout: &FastLayout, pin_chars: String) -> Vec<usize> {
@@ -266,16 +283,21 @@ impl Repl {
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("static/layouts/{}/{}.kb", self.language, name_path))?;
+            .open(format!(
+                "static/layouts/{}/{}.dof",
+                self.language, name_path
+            ))?;
 
-        let layout_formatted = layout.formatted_string(&self.layout_gen.data.mapping);
-        println!("saved {}\n{}", new_name, layout_formatted);
-        f.write_all(layout_formatted.as_bytes()).unwrap();
+        todo!(); // TODO: fix after implementing From<FastLayout> for Layout
 
-        layout.score = self.layout_gen.score(&layout);
-        self.saved.insert(new_name, layout);
-        self.saved
-            .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
+        // let layout_formatted = layout.formatted_string(&self.layout_gen.data.mapping);
+        // println!("saved {}\n{}", new_name, layout_formatted);
+        // f.write_all(layout_formatted.as_bytes()).unwrap();
+
+        // layout.score = self.layout_gen.score(&layout);
+        // self.saved.insert(new_name, layout);
+        // self.saved
+        //     .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
 
         Ok(())
     }
@@ -297,7 +319,7 @@ impl Repl {
 
         println!("\n{:31}{}", name1, name2);
         for y in 0..3 {
-            for (n, layout) in [l1, l2].into_iter().enumerate() {
+            for (n, layout) in [&l1, &l2].into_iter().enumerate() {
                 for x in 0..10 {
                     print!(
                         "{} ",
@@ -313,8 +335,8 @@ impl Repl {
             }
             println!();
         }
-        let s1 = self.layout_gen.get_layout_stats(l1);
-        let s2 = self.layout_gen.get_layout_stats(l2);
+        let s1 = self.layout_gen.get_layout_stats(&l1);
+        let s2 = self.layout_gen.get_layout_stats(&l2);
         let ts1 = s1.trigram_stats;
         let ts2 = s2.trigram_stats;
 
@@ -391,8 +413,8 @@ impl Repl {
             ts2.bad_sfbs * 100.0,
             format!("{:.3}%", ts1.sfts * 100.0),
             ts2.sfts * 100.0,
-            format!("{:.3}", fmt_score(l1.score)),
-            fmt_score(l2.score)
+            format!("{:.3}", fmt_score(self.layout_gen.score(&l1))),
+            fmt_score(self.layout_gen.score(&l2))
         );
 
         Ok(())
@@ -489,7 +511,7 @@ impl Repl {
         self.bigram_stat(
             &layout.fspeed_indices.all,
             LayoutGeneration::pair_sfb,
-            layout,
+            &layout,
             count,
         );
 
@@ -505,7 +527,7 @@ impl Repl {
         self.bigram_stat(
             &layout.fspeed_indices.all,
             LayoutGeneration::pair_fspeed,
-            layout,
+            &layout,
             count,
         );
 
@@ -521,7 +543,7 @@ impl Repl {
         self.bigram_stat(
             &layout.stretch_indices.all_pairs,
             LayoutGeneration::pair_stretch,
-            layout,
+            &layout,
             count,
         );
 
@@ -551,19 +573,17 @@ impl Repl {
     }
 
     pub fn include<P: AsRef<Path>>(&mut self, languages: &[P]) -> Result<()> {
+        let layouts_base_path = PathBuf::from("./static/layouts");
+
         for language in languages {
             let language = language.as_ref().display().to_string();
 
-            self.layout_gen
-                .load_layouts("static/layouts", &language)?
+            load_layouts(layouts_base_path.join(language))?
                 .into_iter()
-                .for_each(|(name, layout)| {
-                    self.saved.insert(name, layout);
+                .for_each(|(name, l)| {
+                    self.saved.insert(name, l);
                 });
         }
-
-        self.saved
-            .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
 
         Ok(())
     }
@@ -724,9 +744,10 @@ impl Repl {
 
     fn reset_with_language(&mut self, language: &str) -> Result<()> {
         let config = Config::with_loaded_weights("config.toml");
+        let layouts_path = PathBuf::from("./static/layouts").join(language);
 
-        let mut generator = LayoutGeneration::new(language, "static", Some(config))?;
-        let saved = generator.load_layouts("static/layouts", language)?;
+        let generator = LayoutGeneration::new(language, "static", Some(config))?;
+        let saved = load_layouts(layouts_path)?;
 
         self.layout_gen = generator;
         self.language = language.to_string();
@@ -771,5 +792,27 @@ impl Repl {
         };
 
         Ok(ReplStatus::Continue)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_layouts<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Layout>> {
+    if let Ok(readdir) = std::fs::read_dir(&path) {
+        let map = readdir
+            .flatten()
+            .flat_map(|p| {
+                Layout::load(p.path()).inspect_err(|e| {
+                    println!("Error loading layout from '{}': {e}", p.path().display())
+                })
+            })
+            .map(|l| (l.name.to_lowercase(), l))
+            .collect();
+
+        Ok(map)
+    // } else if !path.exists() {
+    //     fs::create_dir_all(path)?;
+    //     Ok(HashMap::default())
+    } else {
+        Err(ReplError::NotADirectory(path.as_ref().into()))
     }
 }

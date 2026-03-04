@@ -308,71 +308,53 @@ impl LayoutGeneration {
         })
     }
 
-    pub fn load_layouts<P>(
-        &mut self,
-        base_directory: P,
-        language: &str,
-    ) -> Result<IndexMap<String, FastLayout>>
-    where
-        P: AsRef<Path>,
-    {
-        let mut res: IndexMap<String, FastLayout> = IndexMap::new();
-        let language_dir_path = base_directory.as_ref().join(language);
+    pub fn fast_layout(&self, layout: &Layout, pins: &[usize]) -> FastLayout {
+        let matrix = layout
+            .keys
+            .iter()
+            .map(|&c| self.data.mapping.get_u(c))
+            .collect::<Box<_>>();
 
-        if let Ok(read_dir) = std::fs::read_dir(&language_dir_path) {
-            let paths = read_dir
-                .flatten()
-                .filter_map(|d| {
-                    let path = d.path();
-                    path.is_file().then_some(path)
-                })
-                .collect::<Vec<_>>();
-            let kb_paths = paths.iter().filter(is_kb_file).collect::<Vec<_>>();
-            let dof_paths = paths.iter().filter(is_dof_file).collect::<Vec<_>>();
+        // let name = layout.name;
+        let matrix_fingers = layout.fingers.clone();
+        let shape = layout.shape.clone();
+        // let char_mapping = self.data.mapping.clone(); // TODO: add char mapping on fast layout
+        let matrix_physical = layout.keyboard.clone();
 
-            // let stats_dir = base_directory.as_ref().join("stats").join(language);
-            // if let Ok(false) = std::fs::try_exists(stats_dir) {
-            // 	std::fs::create_dir_all(&stats_dir)?;
-            // }
+        // TODO: use layout.rs u8 PosPair at one point
+        let possible_swaps = (0..(matrix.len()))
+            .filter(|v| !pins.contains(&(*v as usize)))
+            .tuple_combinations::<(_, _)>()
+            .map(Into::into)
+            .collect();
 
-            for path in kb_paths {
-                if let Some(name) = layout_name(path) {
-                    let content = std::fs::read_to_string(path)?;
-                    let layout_str = format_layout_str(&content);
-                    let layout_bytes = self.mapping.map_cs(&layout_str).collect::<Vec<_>>();
+        let mut char_to_finger = Box::new([None; 60]);
+        matrix
+            .iter()
+            .enumerate()
+            .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
 
-                    if let Ok(mut layout) = FastLayout::try_from(layout_bytes.as_slice()) {
-                        layout.score = self.score(&layout);
-                        res.insert(name, layout);
+        // let unweighted_sfb_indices =
+        //     FspeedIndices::new(&fingers, &keyboard, &FingerWeights::default());
+        let fspeed_indices = FSpeedIndices::new(
+            &matrix_fingers,
+            &matrix_physical,
+            &self.weights.finger_weights,
+        );
+        // TODO: pass [char] instead of [u8]
+        let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
 
-                    // self.get_layout_stats(&layout);
-                    } else {
-                        println!("layout {} is not formatted correctly", name);
-                    }
-                }
-            }
-
-            for path in dof_paths {
-                let s = std::fs::read_to_string(path)?;
-                let dof =
-                    serde_json::from_str::<Dof>(&s).with_context(|| path.display().to_string())?;
-                let name = dof.name().to_string();
-
-                match FastLayout::from_dof(dof, &self.mapping, &self.weights) {
-                    Ok(mut layout) => {
-                        layout.score = self.score(&layout);
-                        res.insert(name.to_lowercase(), layout);
-                    }
-                    Err(e) => println!(".dof layout {name} formatted incorrectly: {e}"),
-                }
-            }
-
-            res.sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
-        } else {
-            std::fs::create_dir(language_dir_path)?;
+        FastLayout {
+            matrix,
+            char_to_finger,
+            matrix_fingers,
+            matrix_physical,
+            fspeed_indices,
+            stretch_indices,
+            possible_swaps,
+            shape,
+            score: 0,
         }
-
-        Ok(res)
     }
 
     pub fn get_layout_stats(&self, layout: &FastLayout) -> LayoutStats {

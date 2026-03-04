@@ -56,6 +56,12 @@ pub static DEFAULT_FINGER_WEIGHTS: FingerWeights = FingerWeights {
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PosPair(pub usize, pub usize);
 
+impl From<(usize, usize)> for PosPair {
+    fn from((p1, p2): (usize, usize)) -> Self {
+        Self(p1, p2)
+    }
+}
+
 #[rustfmt::skip]
 const AFFECTS_SCISSOR: [bool; 30] = [
     true,   true,   true,   true,   true,      true,   true,   true,   true,   true,

@@ -1,8 +1,8 @@
 use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
-use nanorand::{tls_rng, Rng as _};
+use nanorand::{Rng as _, tls_rng};
 
 use crate::{
-    cached_layout::FastLayout, Result, REPEAT_KEY, REPLACEMENT_CHAR, SHIFT_CHAR, SPACE_CHAR,
+    REPEAT_KEY, REPLACEMENT_CHAR, Result, SHIFT_CHAR, SPACE_CHAR, cached_layout::FastLayout,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

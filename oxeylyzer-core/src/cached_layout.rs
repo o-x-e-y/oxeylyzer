@@ -40,6 +40,7 @@ pub struct FastLayout {
     pub matrix_physical: Box<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
     pub stretch_indices: StretchCache,
+    pub possible_swaps: Box<[PosPair]>,
     pub shape: Shape,
     pub score: i64,
 }
@@ -110,61 +111,61 @@ impl FastLayout {
         res
     }
 
-    pub fn from_dof(dof: Dof, convert: &CharMapping, weights: &AnalyzerWeights) -> Result<Self> {
-        use libdof::prelude::{Key, SpecialKey};
+    // pub fn from_dof(dof: Dof, convert: &CharMapping, weights: &AnalyzerWeights) -> Result<Self> {
+    //     use libdof::prelude::{Key, SpecialKey};
 
-        // let key_count = dof.main_layer().shape().inner().iter().sum::<usize>();
-        // if key_count != 30 {
-        //     bail!("Invalid key count {key_count}, expected 30")
-        // }
+    //     // let key_count = dof.main_layer().shape().inner().iter().sum::<usize>();
+    //     // if key_count != 30 {
+    //     //     bail!("Invalid key count {key_count}, expected 30")
+    //     // }
 
-        let matrix = dof
-            .main_layer()
-            .keys()
-            .map(|k| match k {
-                Key::Char(c) => *c,
-                Key::Special(s) => match s {
-                    SpecialKey::Repeat => REPEAT_KEY,
-                    SpecialKey::Space => SPACE_CHAR,
-                    SpecialKey::Shift => SHIFT_CHAR,
-                    _ => REPLACEMENT_CHAR,
-                },
-                _ => REPLACEMENT_CHAR,
-            })
-            .map(|c| convert.get_u(c))
-            .collect::<Box<_>>();
+    //     let matrix = dof
+    //         .main_layer()
+    //         .keys()
+    //         .map(|k| match k {
+    //             Key::Char(c) => *c,
+    //             Key::Special(s) => match s {
+    //                 SpecialKey::Repeat => REPEAT_KEY,
+    //                 SpecialKey::Space => SPACE_CHAR,
+    //                 SpecialKey::Shift => SHIFT_CHAR,
+    //                 _ => REPLACEMENT_CHAR,
+    //             },
+    //             _ => REPLACEMENT_CHAR,
+    //         })
+    //         .map(|c| convert.get_u(c))
+    //         .collect::<Box<_>>();
 
-        let matrix_fingers = dof.fingering().keys().copied().collect::<Box<_>>();
-        let matrix_physical = dof.board().keys().cloned().collect::<Box<_>>();
+    //     let matrix_fingers = dof.fingering().keys().copied().collect::<Box<_>>();
+    //     let matrix_physical = dof.board().keys().cloned().collect::<Box<_>>();
 
-        let mut char_to_finger = Box::new([None; 60]);
-        matrix
-            .iter()
-            .enumerate()
-            .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
+    //     let mut char_to_finger = Box::new([None; 60]);
+    //     matrix
+    //         .iter()
+    //         .enumerate()
+    //         .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
 
-        let fspeed_indices =
-            FSpeedIndices::new(&matrix_fingers, &matrix_physical, &weights.finger_weights);
-        let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
-        let shape = dof.shape();
+    //     let fspeed_indices =
+    //         FSpeedIndices::new(&matrix_fingers, &matrix_physical, &weights.finger_weights);
+    //     let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
+    //     let shape = dof.shape();
 
-        // let name = dof.name().to_owned();
-        // let keyboard = dof.board().keys().cloned().map(Into::into).collect();
-        // let shape = dof.main_layer().shape();
+    //     // let name = dof.name().to_owned();
+    //     // let keyboard = dof.board().keys().cloned().map(Into::into).collect();
+    //     // let shape = dof.main_layer().shape();
 
-        let layout = Self {
-            matrix,
-            matrix_fingers,
-            matrix_physical,
-            char_to_finger,
-            fspeed_indices,
-            stretch_indices,
-            shape,
-            score: 0,
-        };
+    //     let layout = Self {
+    //         matrix,
+    //         matrix_fingers,
+    //         matrix_physical,
+    //         char_to_finger,
+    //         fspeed_indices,
+    //         stretch_indices,
+    //         shape,
+    //         score: 0,
+    //     };
 
-        Ok(layout)
-    }
+    //     Ok(layout)
+    // }
 }
 
 impl Layout<u8> for FastLayout {
@@ -183,6 +184,7 @@ impl Layout<u8> for FastLayout {
             matrix_fingers.as_slice(),
             &matrix_physical,
         );
+        let possible_swaps = Box::new(POSSIBLE_SWAPS);
         let shape = Shape::from(vec![10, 10, 10]);
         let score = 0;
 
@@ -193,6 +195,7 @@ impl Layout<u8> for FastLayout {
             char_to_finger,
             fspeed_indices,
             stretch_indices,
+            possible_swaps,
             shape,
             score,
         }
