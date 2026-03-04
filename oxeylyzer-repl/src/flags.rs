@@ -65,9 +65,8 @@ xflags::xflags! {
             /// The name of the corpus. This value will be used when looking for a corpus config,
             /// which is the configuration used to clean the corpus.
             required language: String
-            /// Path to either a folder or a text file that will be used as the corpus.
-            required corpus_path: PathBuf
-            /// Extra paths to folders or text files that will be bundled to be used as the corpus.
+            /// Paths to folders or text files that will be bundled to be used as the corpus. If
+            /// unspecified, defaults to ./static/text/<language>
             repeated corpus_paths: PathBuf
             /// If set, processes the corpus as-is without cleaning it.
             optional -r, --raw
