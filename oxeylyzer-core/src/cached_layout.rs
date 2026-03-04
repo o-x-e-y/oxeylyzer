@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ahash::AHashMap as HashMap;
 use anyhow::Result;
 use itertools::Itertools;
@@ -29,6 +31,7 @@ pub trait Layout<T: Copy + Default> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FastLayout {
+    pub name: Option<String>,
     pub matrix: Box<[u8]>,
     pub char_to_finger: Box<[Option<Finger>]>,
     pub matrix_fingers: Box<[Finger]>,
@@ -165,6 +168,7 @@ impl FastLayout {
 
 impl Layout<u8> for FastLayout {
     fn new() -> FastLayout {
+        let name = None;
         let matrix = Box::new([u8::MAX; 30]);
         let matrix_fingers = Box::new(DEFAULT_FINGERMAP);
         let matrix_physical = default_physical_map();
@@ -184,6 +188,7 @@ impl Layout<u8> for FastLayout {
         let score = 0;
 
         FastLayout {
+            name,
             matrix,
             matrix_fingers,
             matrix_physical,

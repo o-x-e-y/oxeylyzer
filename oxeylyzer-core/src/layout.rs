@@ -115,8 +115,13 @@ impl From<Dof> for Layout {
 
 // impl From<FastLayout> for Layout {
 //     fn from(layout: FastLayout) -> Self {
+//         let name = match layout.name {
+//             Some(name) => name,
+//             None => todo!(), // Implement when FastLayout has char_mapping field.
+//         };
+
 //         Self {
-//             name: layout.name,
+//             name,
 //             keys: layout
 //                 .matrix
 //                 .iter()

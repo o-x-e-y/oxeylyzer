@@ -307,6 +307,8 @@ impl LayoutGeneration {
     }
 
     pub fn fast_layout(&self, layout: &Layout, pins: &[usize]) -> FastLayout {
+        let name = Some(layout.name.clone());
+
         let matrix = layout
             .keys
             .iter()
@@ -343,6 +345,7 @@ impl LayoutGeneration {
         let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
 
         FastLayout {
+            name,
             matrix,
             char_to_finger,
             matrix_fingers,
