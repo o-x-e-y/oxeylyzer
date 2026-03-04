@@ -113,21 +113,21 @@ impl From<Dof> for Layout {
     }
 }
 
-impl From<FastLayout> for Layout {
-    fn from(layout: FastLayout) -> Self {
-        Self {
-            name: layout.name,
-            keys: layout
-                .matrix
-                .iter()
-                .map(|&u| layout.mapping.get_c(u))
-                .collect(),
-            fingers: layout.matrix_fingers,
-            keyboard: layout.matrix_physical,
-            shape: layout.shape,
-        }
-    }
-}
+// impl From<FastLayout> for Layout {
+//     fn from(layout: FastLayout) -> Self {
+//         Self {
+//             name: layout.name,
+//             keys: layout
+//                 .matrix
+//                 .iter()
+//                 .map(|&u| layout.mapping.get_c(u))
+//                 .collect(),
+//             fingers: layout.matrix_fingers,
+//             keyboard: layout.matrix_physical,
+//             shape: layout.shape,
+//         }
+//     }
+// }
 
 impl std::fmt::Display for Layout {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
