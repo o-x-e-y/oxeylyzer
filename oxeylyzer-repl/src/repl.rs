@@ -590,10 +590,13 @@ impl Repl {
         Ok(())
     }
 
-    fn load_one_with_config(&mut self, language: &str, cleaner: CorpusCleaner) -> Result<()> {
-        let base_path = PathBuf::from("./static/text");
-
-        match Data::from_path(base_path.join(language), language, &cleaner) {
+    fn load_one_with_config<P: AsRef<Path>>(
+        &mut self,
+        language: &str,
+        cleaner: CorpusCleaner,
+        corpus_paths: &[P],
+    ) -> Result<()> {
+        match Data::from_paths(corpus_paths, language, &cleaner) {
             Ok(data) => match data.save("./static/language_data") {
                 Ok(_) => println!("Saved data for {language}!"),
                 Err(e) => println!("Failed to save data for {language}: {e}"),
@@ -606,59 +609,60 @@ impl Repl {
 
     pub fn load<P: AsRef<Path>>(
         &mut self,
-        language: Option<P>,
+        language: String,
+        corpus_paths: &[P],
         all: bool,
         raw: bool,
     ) -> Result<()> {
-        let search_in = "./static/text/";
+        let base_path = "./static/text/";
 
-        let get_language = |language: Option<P>| match language {
-            Some(language) => Ok(language.as_ref().display().to_string()),
-            None => Err(ReplError::MissingLanguageFlag),
+        let corpus_paths = match corpus_paths {
+            &[] => vec![PathBuf::from(base_path).join(&language)],
+            p @ &[_, ..] => p.iter().map(AsRef::as_ref).map(PathBuf::from).collect(),
         };
 
         match (all, raw) {
             (true, true) => {
-                for dir_entry in std::fs::read_dir(search_in)?
+                for dir_entry in std::fs::read_dir(base_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
                 {
                     let language = dir_entry.file_name().display().to_string();
+                    let corpus_path = PathBuf::from(base_path).join(&language);
                     let cleaner = CorpusCleaner::raw();
 
                     println!("loading raw data for language: {language}...");
 
-                    self.load_one_with_config(&language, cleaner)?;
+                    self.load_one_with_config(&language, cleaner, &[corpus_path])?;
                 }
             }
             (true, false) => {
-                for dir_entry in std::fs::read_dir(search_in)?
+                for dir_entry in std::fs::read_dir(base_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
                 {
                     let language = dir_entry.file_name().display().to_string();
+                    let corpus_path = PathBuf::from(base_path).join(&language);
                     let cleaner = CorpusConfig::new_translator(&language, None);
 
                     println!("loading data for language: {language}...");
 
-                    self.load_one_with_config(&language, cleaner)?;
+                    self.load_one_with_config(&language, cleaner, &[corpus_path])?;
                 }
             }
             (false, true) => {
-                let language = get_language(language)?;
                 let cleaner = CorpusCleaner::raw();
 
                 println!("loading raw data for language: {language}...");
 
-                self.load_one_with_config(&language, cleaner)?;
+                self.load_one_with_config(&language, cleaner, &corpus_paths)?;
             }
             (false, false) => {
-                let language = get_language(language)?;
                 let cleaner = CorpusConfig::new_translator(&language, None);
 
                 println!("loading data for {language}...");
 
-                self.load_one_with_config(&language, cleaner)?;
+                self.load_one_with_config(&language, cleaner, &corpus_paths)?;
                 self.language(Some(language))?;
             }
         };
@@ -764,7 +768,7 @@ impl Repl {
             Language(l) => self.language(l.language)?,
             Include(l) => self.include(&l.languages)?,
             Languages(_) => self.languages()?,
-            Load(l) => self.load(l.language, l.all, l.raw)?,
+            Load(l) => self.load(l.language, &l.corpus_paths, l.raw, l.all)?,
             Ngram(n) => self.ngram(&n.ngram)?,
             Reload(_) => self.reload()?,
             Quit(_) => return Ok(ReplStatus::Quit),

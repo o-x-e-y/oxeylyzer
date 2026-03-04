@@ -121,31 +121,41 @@ impl Data {
         Ok(data)
     }
 
-    pub fn from_path<P: AsRef<Path>>(
-        path: P,
+    pub fn from_paths<P: AsRef<Path>>(
+        paths: &[P],
         name: &str,
         cleaner: &CorpusCleaner,
     ) -> Result<Self, OxeylyzerError> {
-        if path.as_ref().is_file() {
-            let f = std::fs::File::open(path)?;
-            Self::from_file(f, name, cleaner)
-        } else if path.as_ref().is_dir() {
-            let mut new = std::fs::read_dir(path)?
-                .flatten()
-                .par_bridge()
-                .filter(|entry| entry.path().is_file())
-                .flat_map(|entry| {
-                    let f = std::fs::File::open(entry.path())?;
+        let result = paths
+            .iter()
+            .map(|path| {
+                if path.as_ref().is_file() {
+                    let f = std::fs::File::open(path)?;
                     IntermediateData::from_file(f, name, cleaner)
-                })
-                .reduce(IntermediateData::default, |a, b| a + b);
+                } else if path.as_ref().is_dir() {
+                    let mut new = std::fs::read_dir(path)?
+                        .flatten()
+                        .par_bridge()
+                        .filter(|entry| entry.path().is_file())
+                        .flat_map(|entry| {
+                            let f = std::fs::File::open(entry.path())?;
+                            IntermediateData::from_file(f, name, cleaner)
+                        })
+                        .reduce(IntermediateData::default, |a, b| a + b);
 
-            new.name = name.to_string();
+                    new.name = name.to_string();
 
-            Ok(new.into())
-        } else {
-            Err(OxeylyzerError::NotAFile)
-        }
+                    Ok(new)
+                } else {
+                    Err(OxeylyzerError::NotAFile(path.as_ref().to_path_buf()))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(result
+            .into_par_iter()
+            .reduce(IntermediateData::default, |a, b| a + b)
+            .into())
     }
 
     pub fn from_file(
