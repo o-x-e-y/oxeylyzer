@@ -84,15 +84,17 @@ fn best_swap_cached(bencher: Bencher, name: String) {
     let cache = black_box(g.initialize_cache(&layout));
 
     bencher.bench(|| {
-        black_box(g.best_swap_cached(&mut layout, &cache, None, &POSSIBLE_SWAPS));
+        black_box(g.best_swap_cached(&mut layout, &cache, None));
     })
 }
 
 fn generate(bencher: Bencher, language: &str) {
     let g = black_box(LayoutGeneration::new(language, "./static/", None).unwrap());
+    let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
+    let basis = black_box(g.fast_layout(saved.get("sturdy").unwrap(), &[]));
 
     bencher.bench(|| {
-        g.generate();
+        g.generate(&basis);
     })
 }
 

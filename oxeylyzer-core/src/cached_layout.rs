@@ -10,11 +10,11 @@ use crate::{char_mapping::CharMapping, utility::*, weights::FingerWeights};
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
 pub trait Layout<T: Copy + Default> {
-    fn new() -> Self;
+    // fn new() -> Self;
 
-    fn random(available_chars: &mut [u8]) -> Self;
+    fn random(&self) -> Self;
 
-    fn random_pins(layout_chars: &mut [u8], pins: &[usize]) -> Self;
+    fn random_with_pins(&self, pins: &[usize]) -> Self;
 
     fn char(&self, i: usize) -> Option<T>;
 
@@ -39,52 +39,17 @@ pub struct FastLayout {
     pub fspeed_indices: FSpeedIndices,
     pub stretch_indices: StretchCache,
     pub possible_swaps: Box<[PosPair]>,
+    pub mapping: Arc<CharMapping>,
     pub shape: Shape,
     pub score: i64,
 }
 
-impl Default for FastLayout {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl From<[u8; 30]> for FastLayout {
-    fn from(layout: [u8; 30]) -> Self {
-        let mut new_layout = FastLayout::new();
-
-        for (i, byte) in layout.into_iter().enumerate() {
-            new_layout.matrix[i] = byte;
-            new_layout.char_to_finger[byte as usize] = Some(new_layout.matrix_fingers[i]);
-        }
-        new_layout
-    }
-}
-
-impl TryFrom<&[u8]> for FastLayout {
-    type Error = anyhow::Error;
-
-    fn try_from(layout_bytes: &[u8]) -> Result<Self, Self::Error> {
-        if layout_bytes.len() >= 30 {
-            let mut new_layout = FastLayout::new();
-
-            for (i, &byte) in layout_bytes.iter().enumerate().take(30) {
-                new_layout.matrix[i] = byte;
-                new_layout.char_to_finger[byte as usize] = Some(new_layout.matrix_fingers[i]);
-            }
-            Ok(new_layout)
-        } else {
-            anyhow::bail!("you should provide at least 30 bytes to create a layout from.")
-        }
-    }
-}
-
 impl FastLayout {
-    pub fn layout_str(&self, con: &CharMapping) -> String {
-        con.map_us(&self.matrix).collect()
+    pub fn layout_str(&self) -> String {
+        self.mapping.map_us(&self.matrix).collect()
     }
 
-    pub fn formatted_string(&self, con: &CharMapping) -> String {
+    pub fn formatted_string(&self) -> String {
         let mut res = String::new();
 
         let mut iter = self.matrix.iter();
@@ -92,7 +57,7 @@ impl FastLayout {
         for &l in self.shape.inner().iter() {
             let mut i = 0;
             for u in iter.by_ref() {
-                let c = con.get_c(*u);
+                let c = self.mapping.get_c(*u);
                 res.push_str(&format!("{c} "));
 
                 i += 1;
@@ -109,108 +74,75 @@ impl FastLayout {
         res
     }
 
-    // pub fn from_dof(dof: Dof, convert: &CharMapping, weights: &AnalyzerWeights) -> Result<Self> {
-    //     use libdof::prelude::{Key, SpecialKey};
+//     pub fn from_dof(dof: Dof, convert: Arc<CharMapping>, weights: &AnalyzerWeights) -> Result<Self> {
+//         use libdof::prelude::{Key, SpecialKey};
 
-    //     // let key_count = dof.main_layer().shape().inner().iter().sum::<usize>();
-    //     // if key_count != 30 {
-    //     //     bail!("Invalid key count {key_count}, expected 30")
-    //     // }
+//         let name = Some(dof.name().to_string());
+        
+//         let matrix = dof
+//             .main_layer()
+//             .keys()
+//             .map(|k| match k {
+//                 Key::Char(c) => *c,
+//                 Key::Special(s) => match s {
+//                     SpecialKey::Repeat => REPEAT_KEY,
+//                     SpecialKey::Space => SPACE_CHAR,
+//                     SpecialKey::Shift => SHIFT_CHAR,
+//                     _ => REPLACEMENT_CHAR,
+//                 },
+//                 _ => REPLACEMENT_CHAR,
+//             })
+//             .map(|c| convert.get_u(c))
+//             .collect::<Box<_>>();
 
-    //     let matrix = dof
-    //         .main_layer()
-    //         .keys()
-    //         .map(|k| match k {
-    //             Key::Char(c) => *c,
-    //             Key::Special(s) => match s {
-    //                 SpecialKey::Repeat => REPEAT_KEY,
-    //                 SpecialKey::Space => SPACE_CHAR,
-    //                 SpecialKey::Shift => SHIFT_CHAR,
-    //                 _ => REPLACEMENT_CHAR,
-    //             },
-    //             _ => REPLACEMENT_CHAR,
-    //         })
-    //         .map(|c| convert.get_u(c))
-    //         .collect::<Box<_>>();
+//         let matrix_fingers = dof.fingering().keys().copied().collect::<Box<_>>();
+//         let matrix_physical = dof.board().keys().cloned().collect::<Box<_>>();
 
-    //     let matrix_fingers = dof.fingering().keys().copied().collect::<Box<_>>();
-    //     let matrix_physical = dof.board().keys().cloned().collect::<Box<_>>();
+//         let mut char_to_finger = Box::new([None; 60]);
+//         matrix
+//             .iter()
+//             .enumerate()
+//             .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
 
-    //     let mut char_to_finger = Box::new([None; 60]);
-    //     matrix
-    //         .iter()
-    //         .enumerate()
-    //         .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
+//         let fspeed_indices =
+//             FSpeedIndices::new(&matrix_fingers, &matrix_physical, &weights.finger_weights);
+//         let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
+//         let shape = dof.shape();
+//         let mapping = convert.clone();
 
-    //     let fspeed_indices =
-    //         FSpeedIndices::new(&matrix_fingers, &matrix_physical, &weights.finger_weights);
-    //     let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
-    //     let shape = dof.shape();
+//         // let name = dof.name().to_owned();
+//         // let keyboard = dof.board().keys().cloned().map(Into::into).collect();
+//         // let shape = dof.main_layer().shape();
 
-    //     // let name = dof.name().to_owned();
-    //     // let keyboard = dof.board().keys().cloned().map(Into::into).collect();
-    //     // let shape = dof.main_layer().shape();
+//         let layout = Self {
+//             name,
+//             matrix,
+//             matrix_fingers,
+//             matrix_physical,
+//             char_to_finger,
+//             fspeed_indices,
+//             stretch_indices,
+//             shape,
+//             mapping,
+//             score: 0,
+//         };
 
-    //     let layout = Self {
-    //         matrix,
-    //         matrix_fingers,
-    //         matrix_physical,
-    //         char_to_finger,
-    //         fspeed_indices,
-    //         stretch_indices,
-    //         shape,
-    //         score: 0,
-    //     };
-
-    //     Ok(layout)
-    // }
+//         Ok(layout)
+//     }
 }
 
 impl Layout<u8> for FastLayout {
-    fn new() -> FastLayout {
-        let name = None;
-        let matrix = Box::new([u8::MAX; 30]);
-        let matrix_fingers = Box::new(DEFAULT_FINGERMAP);
-        let matrix_physical = default_physical_map();
-        let char_to_finger = Box::new([None; 64]);
-        let fspeed_indices = FSpeedIndices::new(
-            matrix_fingers.as_slice(),
-            &matrix_physical,
-            &DEFAULT_FINGER_WEIGHTS,
-        );
-        let stretch_indices = StretchCache::new(
-            matrix.as_slice(),
-            matrix_fingers.as_slice(),
-            &matrix_physical,
-        );
-        let possible_swaps = Box::new(POSSIBLE_SWAPS);
-        let shape = Shape::from(vec![10, 10, 10]);
-        let score = 0;
-
-        FastLayout {
-            name,
-            matrix,
-            matrix_fingers,
-            matrix_physical,
-            char_to_finger,
-            fspeed_indices,
-            stretch_indices,
-            possible_swaps,
-            shape,
-            score,
-        }
+    fn random(&self) -> Self {
+        self.random_with_pins(&[])
     }
 
-    fn random(layout_chars: &mut [u8]) -> FastLayout {
-        shuffle_pins(layout_chars, &[]);
-        let non_mut: &[u8] = layout_chars;
-        FastLayout::try_from(non_mut).unwrap()
-    }
-
-    fn random_pins(layout_chars: &mut [u8], pins: &[usize]) -> FastLayout {
-        shuffle_pins(layout_chars, pins);
-        let non_mut: &[u8] = layout_chars;
-        FastLayout::try_from(non_mut).unwrap()
+    fn random_with_pins(&self, pins: &[usize]) -> Self {
+        let mut res = self.clone();
+        
+        shuffle_pins(&mut res.matrix, pins);
+        res.name = None;
+        
+        res
     }
 
     #[inline(always)]
@@ -492,10 +424,41 @@ fn dist(k1: &PhysicalKey, k2: &PhysicalKey, f1: Finger, f2: Finger) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use crate::{layout::Layout, cached_layout::Layout as _, generate::LayoutGeneration};
+
     use super::*;
     use once_cell::sync::Lazy;
+    
     static CON: Lazy<CharMapping> =
         Lazy::new(|| CharMapping::from("abcdefghijklmnopqrstuvwxyz'.,;/"));
+    
+    static QWERTY: Lazy<FastLayout> = Lazy::new( || {
+        let config = crate::weights::Config::with_defaults();
+        let base_path = concat!(
+            std::env!("CARGO_MANIFEST_DIR"),
+            "/../static"
+        );
+        let g = LayoutGeneration::new("english", base_path, Some(config)).unwrap();
+        
+        let dof_str = r#"
+            {
+                "name": "Qwerty",
+                "board": "ansi",
+                "layers": {
+                    "main": [
+                        "q w e r t  y u i o p",
+                        "a s d f g  h j k l ;",
+                        "z x c v b  n m , . /"
+                    ]
+                },
+                "fingering": "traditional"
+            }
+        "#;
+        
+        let layout = serde_json::from_str::<Layout>(dof_str).unwrap();
+        
+        g.fast_layout(&layout, &[])
+    });
 
     #[test]
     fn test_key_dist() {
@@ -550,109 +513,79 @@ mod tests {
 
     #[test]
     fn layout_str() {
-        let qwerty_bytes = CON
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        println!("{qwerty_bytes:?}");
-        let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
-
         assert_eq!(
-            CON.map_us(&qwerty.matrix).collect::<Vec<_>>(),
+            CON.map_us(&QWERTY.matrix).collect::<Vec<_>>(),
             vec![
                 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h',
                 'j', 'k', 'l', ';', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'
             ]
         );
         assert_eq!(
-            qwerty.layout_str(&CON),
+            QWERTY.layout_str(),
             "qwertyuiopasdfghjkl;zxcvbnm,./".to_string()
         );
     }
 
     #[test]
     fn swap() {
-        let qwerty_bytes = CON
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        println!("{qwerty_bytes:?}");
-        let mut qwerty =
-            FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
+        let mut qwerty = QWERTY.clone();
 
         qwerty.swap(10, 11);
         assert_eq!(
-            qwerty.layout_str(&CON),
+            qwerty.layout_str(),
             "qwertyuiopsadfghjkl;zxcvbnm,./".to_owned()
         );
     }
 
     #[test]
     fn swap_no_bounds() {
-        let qwerty_bytes = CON
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let mut qwerty =
-            FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
+        let mut qwerty = QWERTY.clone();
 
         qwerty.swap(9, 12).unwrap();
         assert_eq!(
-            qwerty.layout_str(&CON),
+            qwerty.layout_str(),
             "qwertyuiodaspfghjkl;zxcvbnm,./".to_string()
         );
     }
 
     #[test]
     fn swap_cols_no_bounds() {
-        let qwerty_bytes = CON
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let mut qwerty =
-            FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
+        let mut qwerty = QWERTY.clone();
 
         qwerty.swap_cols(1, 9).unwrap();
         assert_eq!(
-            qwerty.layout_str(&CON),
+            qwerty.layout_str(),
             "qpertyuiowa;dfghjklsz/cvbnm,.x".to_string()
         );
     }
 
     #[test]
     fn swap_pair() {
-        let qwerty_bytes = CON
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let mut qwerty =
-            FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
+        let mut qwerty = QWERTY.clone();
 
         let new_swap = PosPair::new(0, 29);
         qwerty.swap_pair(&new_swap);
         assert_eq!(
-            qwerty.layout_str(&CON),
+            qwerty.layout_str(),
             "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string()
         );
     }
 
     #[test]
     fn swap_pair_no_bounds() {
-        let qwerty_bytes = CON
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let mut qwerty =
-            FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
+        let mut qwerty = QWERTY.clone();
 
         let new_swap = PosPair::new(0, 29);
         qwerty.swap_pair(&new_swap).unwrap();
         assert_eq!(
-            qwerty.layout_str(&CON),
+            qwerty.layout_str(),
             "/wertyuiopasdfghjkl;zxcvbnm,.q".to_string()
         );
     }
 
     #[test]
     fn char_to_finger() {
-        let qwerty_bytes = CON
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
+        let qwerty = QWERTY.clone();
 
         assert_eq!(
             qwerty.char_to_finger.get(CON.to_single_lossy('a') as usize),
@@ -701,10 +634,7 @@ mod tests {
 
     #[test]
     fn char() {
-        let qwerty_bytes = CON
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
+        let qwerty = QWERTY.clone();
 
         assert_eq!(qwerty.char(4 + (1 * 10)), Some(CON.to_single_lossy('g')));
         assert_eq!(qwerty.char(9 + (2 * 10)), Some(CON.to_single_lossy('/')));
@@ -713,10 +643,7 @@ mod tests {
 
     #[test]
     fn char_by_index() {
-        let qwerty_bytes = CON
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).expect("couldn't create qwerty");
+        let qwerty = QWERTY.clone();
 
         assert_eq!(qwerty.char(10), Some(CON.to_single_lossy('a')));
         assert_eq!(qwerty.char(24), Some(CON.to_single_lossy('b')));

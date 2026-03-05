@@ -1,5 +1,6 @@
 use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
 use nanorand::{Rng as _, tls_rng};
+use serde::Deserialize;
 
 use crate::{
     REPEAT_KEY, REPLACEMENT_CHAR, Result, SHIFT_CHAR, SPACE_CHAR, cached_layout::FastLayout,
@@ -14,7 +15,8 @@ impl<U: Into<u8>> From<(U, U)> for PosPair {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(from = "Dof")]
 pub struct Layout {
     pub name: String,
     pub keys: Box<[char]>,

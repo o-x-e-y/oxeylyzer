@@ -100,7 +100,7 @@ pub fn generate_n(layout_gen: &LayoutGeneration, amount: usize) -> Vec<FastLayou
         .progress_chars("=>-"));
 
     let mut layouts = layout_gen
-        .generate_n_iter(amount)
+        .generate_n_iter(amount, todo!()) // TODO: fix generate command
         .progress_with(pb)
         .collect::<Vec<_>>();
 
