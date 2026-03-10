@@ -1110,8 +1110,7 @@ mod obsolete;
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use crate::utility::ApproxEq;
-    use nanorand::Rng;
+
     use once_cell::sync::Lazy;
     use rayon::iter::ParallelIterator;
     use std::sync::atomic::Ordering;
@@ -1120,10 +1119,6 @@ mod tests {
         Lazy::new(|| LayoutGeneration::new("english", "static", None).unwrap());
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
-        let config = crate::weights::Config::with_defaults();
-        let base_path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../static");
-        let g = LayoutGeneration::new("english", base_path, Some(config)).unwrap();
-
         let dof_str = r#"
             {
                 "name": "Qwerty",
@@ -1141,12 +1136,14 @@ mod tests {
 
         let layout = serde_json::from_str::<Layout>(dof_str).unwrap();
 
-        g.fast_layout(&layout, &[])
+        GEN.fast_layout(&layout, &[])
     });
 
     #[test]
     fn generate() {
-        time_this::time!(GEN.generate_n_iter(250, &QWERTY).collect::<Vec<_>>());
+        let qwerty = QWERTY.clone();
+
+        time_this::time!(GEN.generate_n_iter(100, &qwerty).collect::<Vec<_>>());
 
         println!("{}", ANALYZED_COUNT.load(Ordering::Relaxed));
     }
@@ -1168,10 +1165,14 @@ mod tests {
     fn cached_totals() {
         let mut qwerty = QWERTY.clone();
         let mut cache = GEN.initialize_cache(&qwerty);
-        let mut rng = nanorand::tls_rng();
-        let sc = qwerty.possible_swaps.len();
 
-        for swap in (0..10000).map(|_| &QWERTY.possible_swaps[rng.generate_range(0..sc)]) {
+        for swap in QWERTY
+            .possible_swaps
+            .iter()
+            .permutations(2)
+            .flatten()
+            .take(25_000)
+        {
             GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
             assert_eq!(cache.scissors, GEN.scissor_score(&qwerty));
@@ -1191,11 +1192,8 @@ mod tests {
                 cache.total_score,
                 GEN.score_with_precision(&qwerty, GEN.trigram_precision)
             );
+            assert_eq!(GEN.initialize_cache(&qwerty), cache);
         }
-
-        let new_cache = GEN.initialize_cache(&qwerty);
-
-        assert_eq!(new_cache, cache);
     }
 
     #[test]
@@ -1271,6 +1269,9 @@ mod tests {
 
             let mut cache = GEN.initialize_cache(&layout_for_cached);
             let best_cached_score = GEN.optimize_cached(&mut layout_for_cached, &mut cache);
+            let cache_score = GEN.initialize_cache(&layout_for_cached).total_score();
+
+            assert_eq!(best_cached_score, cache_score);
 
             if normal_score != best_cached_score {
                 println!(
