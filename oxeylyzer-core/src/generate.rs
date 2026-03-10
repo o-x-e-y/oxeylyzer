@@ -1113,7 +1113,7 @@ mod tests {
 
     use once_cell::sync::Lazy;
     use rayon::iter::ParallelIterator;
-    use std::sync::atomic::Ordering;
+    use std::{collections::HashSet, sync::atomic::Ordering};
 
     static GEN: Lazy<LayoutGeneration> =
         Lazy::new(|| LayoutGeneration::new("english", "static", None).unwrap());
@@ -1138,6 +1138,41 @@ mod tests {
 
         GEN.fast_layout(&layout, &[])
     });
+
+    #[test]
+    fn per_char_trigrams_symmetry() {
+        let per_chars = |maybe_pc: Option<&Box<[_]>>| {
+            maybe_pc
+                .cloned()
+                .unwrap_or_else(|| Box::new([]))
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+
+        let chars = GEN
+            .per_char_trigrams
+            .keys()
+            .flatten()
+            .copied()
+            .collect::<HashSet<_>>();
+
+        chars
+            .iter()
+            .copied()
+            .cartesian_product(chars.iter().copied())
+            .for_each(|(c1, c2)| {
+                let bg = per_chars(GEN.per_char_trigrams.get(&[c1, c2]));
+                let rv = per_chars(GEN.per_char_trigrams.get(&[c2, c1]));
+
+                let bg_hs = bg.iter().copied().collect::<HashSet<_>>();
+                let rv_hs = rv.iter().copied().collect::<HashSet<_>>();
+
+                assert_eq!(bg.len(), bg_hs.len());
+                assert_eq!(rv.len(), rv_hs.len());
+
+                assert_eq!(bg_hs, rv_hs);
+            });
+    }
 
     #[test]
     fn generate() {
