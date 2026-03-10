@@ -454,18 +454,10 @@ mod tests {
     use super::*;
     use once_cell::sync::Lazy;
 
-    static CON: Lazy<CharMapping> = Lazy::new(|| {
-        let config = crate::weights::Config::with_defaults();
-        let base_path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../static");
-        let g = LayoutGeneration::new("english", base_path, Some(config)).unwrap();
-        Arc::unwrap_or_clone(g.mapping)
-    });
+    static GEN: Lazy<LayoutGeneration> =
+        Lazy::new(|| LayoutGeneration::new("english", "static", None).unwrap());
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
-        let config = crate::weights::Config::with_defaults();
-        let base_path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../static");
-        let g = LayoutGeneration::new("english", base_path, Some(config)).unwrap();
-
         let dof_str = r#"
             {
                 "name": "Qwerty",
@@ -483,7 +475,7 @@ mod tests {
 
         let layout = serde_json::from_str::<Layout>(dof_str).unwrap();
 
-        g.fast_layout(&layout, &[])
+        GEN.fast_layout(&layout, &[])
     });
 
     #[test]
@@ -541,12 +533,12 @@ mod tests {
     fn layout_str() {
         let v = "abcdefghijklmnopqrstuvwxyz";
         assert_eq!(
-            CON.map_cs(v).collect::<Vec<_>>(),
+            GEN.mapping.map_cs(v).collect::<Vec<_>>(),
             QWERTY.mapping.map_cs(v).collect::<Vec<_>>()
         );
 
         assert_eq!(
-            CON.map_us(&QWERTY.matrix).collect::<Vec<_>>(),
+            GEN.mapping.map_us(&QWERTY.matrix).collect::<Vec<_>>(),
             vec![
                 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h',
                 'j', 'k', 'l', ';', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'
@@ -620,46 +612,46 @@ mod tests {
         let qwerty = QWERTY.clone();
 
         assert_eq!(
-            qwerty.char_to_finger.get(CON.to_single_lossy('a') as usize),
+            qwerty.char_to_finger.get(GEN.mapping.get_u('a') as usize),
             Some(&Some(Finger::LP))
         );
         assert_eq!(
-            qwerty.char_to_finger.get(CON.to_single_lossy('w') as usize),
+            qwerty.char_to_finger.get(GEN.mapping.get_u('w') as usize),
             Some(&Some(Finger::LR))
         );
         assert_eq!(
-            qwerty.char_to_finger.get(CON.to_single_lossy('c') as usize),
+            qwerty.char_to_finger.get(GEN.mapping.get_u('c') as usize),
             Some(&Some(Finger::LM))
         );
 
         assert_eq!(
-            qwerty.char_to_finger.get(CON.to_single_lossy('r') as usize),
+            qwerty.char_to_finger.get(GEN.mapping.get_u('r') as usize),
             Some(&Some(Finger::LI))
         );
         assert_eq!(
-            qwerty.char_to_finger.get(CON.to_single_lossy('b') as usize),
+            qwerty.char_to_finger.get(GEN.mapping.get_u('b') as usize),
             Some(&Some(Finger::LI))
         );
 
         assert_eq!(
-            qwerty.char_to_finger.get(CON.to_single_lossy('h') as usize),
+            qwerty.char_to_finger.get(GEN.mapping.get_u('h') as usize),
             Some(&Some(Finger::RI))
         );
         assert_eq!(
-            qwerty.char_to_finger.get(CON.to_single_lossy('u') as usize),
+            qwerty.char_to_finger.get(GEN.mapping.get_u('u') as usize),
             Some(&Some(Finger::RI))
         );
 
         assert_eq!(
-            qwerty.char_to_finger.get(CON.to_single_lossy('i') as usize),
+            qwerty.char_to_finger.get(GEN.mapping.get_u('i') as usize),
             Some(&Some(Finger::RM))
         );
         assert_eq!(
-            qwerty.char_to_finger.get(CON.to_single_lossy('.') as usize),
+            qwerty.char_to_finger.get(GEN.mapping.get_u('.') as usize),
             Some(&Some(Finger::RR))
         );
         assert_eq!(
-            qwerty.char_to_finger.get(CON.to_single_lossy(';') as usize),
+            qwerty.char_to_finger.get(GEN.mapping.get_u(';') as usize),
             Some(&Some(Finger::RP))
         );
     }
@@ -668,18 +660,18 @@ mod tests {
     fn char() {
         let qwerty = QWERTY.clone();
 
-        assert_eq!(qwerty.char(4 + (1 * 10)), Some(CON.to_single_lossy('g')));
-        assert_eq!(qwerty.char(9 + (2 * 10)), Some(CON.to_single_lossy('/')));
-        assert_eq!(qwerty.char(8 + (1 * 10)), Some(CON.to_single_lossy('l')));
+        assert_eq!(qwerty.char(4 + (1 * 10)), Some(GEN.mapping.get_u('g')));
+        assert_eq!(qwerty.char(9 + (2 * 10)), Some(GEN.mapping.get_u('/')));
+        assert_eq!(qwerty.char(8 + (1 * 10)), Some(GEN.mapping.get_u('l')));
     }
 
     #[test]
     fn char_by_index() {
         let qwerty = QWERTY.clone();
 
-        assert_eq!(qwerty.char(10), Some(CON.to_single_lossy('a')));
-        assert_eq!(qwerty.char(24), Some(CON.to_single_lossy('b')));
-        assert_eq!(qwerty.char(22), Some(CON.to_single_lossy('c')));
+        assert_eq!(qwerty.char(10), Some(GEN.mapping.get_u('a')));
+        assert_eq!(qwerty.char(24), Some(GEN.mapping.get_u('b')));
+        assert_eq!(qwerty.char(22), Some(GEN.mapping.get_u('c')));
     }
 
     // #[test]
