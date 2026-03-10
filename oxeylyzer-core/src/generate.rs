@@ -531,16 +531,11 @@ impl LayoutGeneration {
                     .filter(|(t, _)| t.contains(&c2))
                     .collect::<Vec<_>>();
 
-                let (big, small, c) = if v1.len() >= v2.len() {
-                    (v1, v2, &c1)
-                } else {
-                    (v2, v1, &c2)
-                };
-
-                let per_char = big
+                let per_char = v1
                     .into_iter()
-                    .chain(small.into_iter().filter(|(t, _)| !t.contains(c)))
+                    .chain(v2.into_iter().filter(|(t, _)| !t.contains(&c1)))
                     .collect::<Box<_>>();
+
                 ([c1, c2], per_char)
             })
             .collect()
