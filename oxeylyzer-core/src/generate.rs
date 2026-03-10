@@ -563,9 +563,9 @@ impl LayoutGeneration {
                 Outroll => freqs.outrolls += freq,
                 Onehand => freqs.onehands += freq,
                 Redirect => freqs.redirects += freq,
-                RedirectSfs => freqs.redirects += freq,
+                RedirectSfs => freqs.redirects_sfs += freq,
                 BadRedirect => freqs.bad_redirects += freq,
-                BadRedirectSfs => freqs.bad_redirects += freq,
+                BadRedirectSfs => freqs.bad_redirects_sfs += freq,
                 Sfb => {}
                 BadSfb => {}
                 Sft => {}
