@@ -110,19 +110,18 @@ impl LayoutGeneration {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn optimize_normal_no_cols(
-        &self,
-        mut layout: FastLayout,
-        possible_swaps: &[PosPair],
-    ) -> FastLayout {
+    pub(crate) fn optimize_normal_no_cols(&self, mut layout: FastLayout) -> FastLayout {
         let mut current_best_score = SMALLEST_SCORE;
+        let possible_swaps = std::mem::take(&mut layout.possible_swaps);
 
         while let (Some(best_swap), new_score) =
-            self.best_swap(&mut layout, Some(current_best_score), possible_swaps)
+            self.best_swap(&mut layout, Some(current_best_score), &possible_swaps)
         {
             current_best_score = new_score;
             layout.swap_pair(&best_swap);
         }
+
+        layout.possible_swaps = possible_swaps;
 
         layout
     }

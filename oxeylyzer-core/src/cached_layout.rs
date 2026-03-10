@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
-use anyhow::Result;
 use itertools::Itertools;
 use libdof::prelude::{Finger, PhysicalKey, Shape};
 
@@ -38,6 +37,7 @@ pub struct FastLayout {
     pub matrix_physical: Box<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
     pub stretch_indices: StretchCache,
+    pub usage_indices: UsageIndices,
     pub possible_swaps: Box<[PosPair]>,
     pub mapping: Arc<CharMapping>,
     pub shape: Shape,
@@ -74,61 +74,61 @@ impl FastLayout {
         res
     }
 
-//     pub fn from_dof(dof: Dof, convert: Arc<CharMapping>, weights: &AnalyzerWeights) -> Result<Self> {
-//         use libdof::prelude::{Key, SpecialKey};
+    //     pub fn from_dof(dof: Dof, convert: Arc<CharMapping>, weights: &AnalyzerWeights) -> Result<Self> {
+    //         use libdof::prelude::{Key, SpecialKey};
 
-//         let name = Some(dof.name().to_string());
-        
-//         let matrix = dof
-//             .main_layer()
-//             .keys()
-//             .map(|k| match k {
-//                 Key::Char(c) => *c,
-//                 Key::Special(s) => match s {
-//                     SpecialKey::Repeat => REPEAT_KEY,
-//                     SpecialKey::Space => SPACE_CHAR,
-//                     SpecialKey::Shift => SHIFT_CHAR,
-//                     _ => REPLACEMENT_CHAR,
-//                 },
-//                 _ => REPLACEMENT_CHAR,
-//             })
-//             .map(|c| convert.get_u(c))
-//             .collect::<Box<_>>();
+    //         let name = Some(dof.name().to_string());
 
-//         let matrix_fingers = dof.fingering().keys().copied().collect::<Box<_>>();
-//         let matrix_physical = dof.board().keys().cloned().collect::<Box<_>>();
+    //         let matrix = dof
+    //             .main_layer()
+    //             .keys()
+    //             .map(|k| match k {
+    //                 Key::Char(c) => *c,
+    //                 Key::Special(s) => match s {
+    //                     SpecialKey::Repeat => REPEAT_KEY,
+    //                     SpecialKey::Space => SPACE_CHAR,
+    //                     SpecialKey::Shift => SHIFT_CHAR,
+    //                     _ => REPLACEMENT_CHAR,
+    //                 },
+    //                 _ => REPLACEMENT_CHAR,
+    //             })
+    //             .map(|c| convert.get_u(c))
+    //             .collect::<Box<_>>();
 
-//         let mut char_to_finger = Box::new([None; 60]);
-//         matrix
-//             .iter()
-//             .enumerate()
-//             .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
+    //         let matrix_fingers = dof.fingering().keys().copied().collect::<Box<_>>();
+    //         let matrix_physical = dof.board().keys().cloned().collect::<Box<_>>();
 
-//         let fspeed_indices =
-//             FSpeedIndices::new(&matrix_fingers, &matrix_physical, &weights.finger_weights);
-//         let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
-//         let shape = dof.shape();
-//         let mapping = convert.clone();
+    //         let mut char_to_finger = Box::new([None; 60]);
+    //         matrix
+    //             .iter()
+    //             .enumerate()
+    //             .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
 
-//         // let name = dof.name().to_owned();
-//         // let keyboard = dof.board().keys().cloned().map(Into::into).collect();
-//         // let shape = dof.main_layer().shape();
+    //         let fspeed_indices =
+    //             FSpeedIndices::new(&matrix_fingers, &matrix_physical, &weights.finger_weights);
+    //         let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
+    //         let shape = dof.shape();
+    //         let mapping = convert.clone();
 
-//         let layout = Self {
-//             name,
-//             matrix,
-//             matrix_fingers,
-//             matrix_physical,
-//             char_to_finger,
-//             fspeed_indices,
-//             stretch_indices,
-//             shape,
-//             mapping,
-//             score: 0,
-//         };
+    //         // let name = dof.name().to_owned();
+    //         // let keyboard = dof.board().keys().cloned().map(Into::into).collect();
+    //         // let shape = dof.main_layer().shape();
 
-//         Ok(layout)
-//     }
+    //         let layout = Self {
+    //             name,
+    //             matrix,
+    //             matrix_fingers,
+    //             matrix_physical,
+    //             char_to_finger,
+    //             fspeed_indices,
+    //             stretch_indices,
+    //             shape,
+    //             mapping,
+    //             score: 0,
+    //         };
+
+    //         Ok(layout)
+    //     }
 }
 
 impl Layout<u8> for FastLayout {
@@ -138,10 +138,10 @@ impl Layout<u8> for FastLayout {
 
     fn random_with_pins(&self, pins: &[usize]) -> Self {
         let mut res = self.clone();
-        
+
         shuffle_pins(&mut res.matrix, pins);
         res.name = None;
-        
+
         res
     }
 
@@ -422,24 +422,50 @@ fn dist(k1: &PhysicalKey, k2: &PhysicalKey, f1: Finger, f2: Finger) -> f64 {
     dx.hypot(dy)
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct UsageIndices {
+    pub per_finger: Box<[Box<[usize]>; 10]>, // TODO: use Pos or something rather than usize
+}
+
+impl UsageIndices {
+    pub fn new(fingers: &[Finger]) -> Self {
+        let per_finger = Finger::FINGERS
+            .map(|f| {
+                fingers
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(pos, &lf)| (f == lf).then_some(pos))
+                    .collect::<Box<[_]>>()
+            })
+            .into();
+
+        Self { per_finger }
+    }
+
+    pub fn get(&self, finger: Finger) -> &[usize] {
+        &self.per_finger[finger as usize]
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{layout::Layout, cached_layout::Layout as _, generate::LayoutGeneration};
+    use crate::{cached_layout::Layout as _, generate::LayoutGeneration, layout::Layout};
 
     use super::*;
     use once_cell::sync::Lazy;
-    
-    static CON: Lazy<CharMapping> =
-        Lazy::new(|| CharMapping::from("abcdefghijklmnopqrstuvwxyz'.,;/"));
-    
-    static QWERTY: Lazy<FastLayout> = Lazy::new( || {
+
+    static CON: Lazy<CharMapping> = Lazy::new(|| {
         let config = crate::weights::Config::with_defaults();
-        let base_path = concat!(
-            std::env!("CARGO_MANIFEST_DIR"),
-            "/../static"
-        );
+        let base_path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../static");
         let g = LayoutGeneration::new("english", base_path, Some(config)).unwrap();
-        
+        Arc::unwrap_or_clone(g.mapping)
+    });
+
+    static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
+        let config = crate::weights::Config::with_defaults();
+        let base_path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../static");
+        let g = LayoutGeneration::new("english", base_path, Some(config)).unwrap();
+
         let dof_str = r#"
             {
                 "name": "Qwerty",
@@ -454,9 +480,9 @@ mod tests {
                 "fingering": "traditional"
             }
         "#;
-        
+
         let layout = serde_json::from_str::<Layout>(dof_str).unwrap();
-        
+
         g.fast_layout(&layout, &[])
     });
 
@@ -513,6 +539,12 @@ mod tests {
 
     #[test]
     fn layout_str() {
+        let v = "abcdefghijklmnopqrstuvwxyz";
+        assert_eq!(
+            CON.map_cs(v).collect::<Vec<_>>(),
+            QWERTY.mapping.map_cs(v).collect::<Vec<_>>()
+        );
+
         assert_eq!(
             CON.map_us(&QWERTY.matrix).collect::<Vec<_>>(),
             vec![

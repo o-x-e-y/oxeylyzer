@@ -114,26 +114,6 @@ impl std::fmt::Display for PosPair {
     }
 }
 
-// TODO: create this on a by-layout basis
-pub const POSSIBLE_SWAPS: [PosPair; 435] = get_possible_swaps();
-
-const fn get_possible_swaps() -> [PosPair; 435] {
-    let mut res = [PosPair::default(); 435];
-    let mut i = 0;
-    let mut pos1 = 0;
-
-    while pos1 < 30 {
-        let mut pos2 = pos1 + 1;
-        while pos2 < 30 {
-            res[i] = PosPair(pos1, pos2);
-            i += 1;
-            pos2 += 1;
-        }
-        pos1 += 1;
-    }
-    res
-}
-
 #[derive(Deserialize, Debug, Clone, Default)]
 pub enum KeyboardType {
     #[default]

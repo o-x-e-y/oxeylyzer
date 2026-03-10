@@ -6,18 +6,16 @@ mod languages;
 use std::hint::black_box;
 
 use diol::prelude::*;
-use oxeylyzer_core::{
-    corpus_cleaner::CorpusCleaner,
-    data::Data,
-    generate::*,
-    utility::{POSSIBLE_SWAPS, PosPair},
-};
+use oxeylyzer_core::{corpus_cleaner::CorpusCleaner, data::Data, generate::*, utility::PosPair};
 
 fn main() -> std::io::Result<()> {
+    let g = LayoutGeneration::new("english", "./static/", None).unwrap();
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
 
     let layout_names = saved.keys().take(5).cloned().collect::<Vec<_>>();
-    let swaps = POSSIBLE_SWAPS
+    let swaps = g
+        .fast_layout(&saved.values().next().unwrap(), &[])
+        .possible_swaps
         .into_iter()
         .enumerate()
         .filter_map(|(i, swap)| ((i + 17) % 50 == 0).then_some(swap))
@@ -70,9 +68,10 @@ fn best_swap(bencher: Bencher, name: String) {
     let g = black_box(LayoutGeneration::new("english", "./static/", None).unwrap());
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
     let mut layout = black_box(g.fast_layout(saved.get(&name).unwrap(), &[]));
+    let possible_swaps = std::mem::take(&mut layout.possible_swaps);
 
     bencher.bench(|| {
-        black_box(g.best_swap(&mut layout, None, &POSSIBLE_SWAPS));
+        black_box(g.best_swap(&mut layout, None, &possible_swaps));
     })
 }
 
@@ -82,9 +81,10 @@ fn best_swap_cached(bencher: Bencher, name: String) {
     let mut layout = black_box(g.fast_layout(saved.get(&name).unwrap(), &[]));
 
     let cache = black_box(g.initialize_cache(&layout));
+    let possible_swaps = layout.possible_swaps.clone();
 
     bencher.bench(|| {
-        black_box(g.best_swap_cached(&mut layout, &cache, None));
+        black_box(g.best_swap_cached(&mut layout, &cache, &possible_swaps, None));
     })
 }
 
