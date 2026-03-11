@@ -139,6 +139,7 @@ impl Layout<u8> for FastLayout {
     fn random_with_pins(&self, pins: &[usize]) -> Self {
         let mut res = self.clone();
 
+        res.score = 0;
         res.name = None;
         res.char_to_finger = Box::new([None; 60]);
 
@@ -456,6 +457,8 @@ impl UsageIndices {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use crate::{cached_layout::Layout as _, generate::LayoutGeneration, layout::Layout};
 
     use super::*;
@@ -555,6 +558,37 @@ mod tests {
             QWERTY.layout_str(),
             "qwertyuiopasdfghjkl;zxcvbnm,./".to_string()
         );
+    }
+
+    #[test]
+    fn random() {
+        let random = QWERTY.random();
+
+        assert_eq!(random.usage_indices, QWERTY.usage_indices);
+        assert_eq!(random.fspeed_indices, QWERTY.fspeed_indices);
+        assert_eq!(random.stretch_indices, QWERTY.stretch_indices);
+        assert_eq!(random.mapping, QWERTY.mapping);
+        assert_eq!(random.matrix_fingers, QWERTY.matrix_fingers);
+        assert_eq!(random.matrix_physical, QWERTY.matrix_physical);
+        assert_eq!(random.possible_swaps, QWERTY.possible_swaps);
+        assert_eq!(random.shape, QWERTY.shape);
+
+        assert_eq!(random.name, None);
+        assert_eq!(random.score, 0);
+
+        let r_hs = random.layout_str().chars().collect::<HashSet<_>>();
+        let q_hs = QWERTY.layout_str().chars().collect::<HashSet<_>>();
+
+        assert_eq!(r_hs, q_hs);
+
+        for (i, &u) in random.matrix.iter().enumerate() {
+            let qwerty_eq = QWERTY.matrix[i];
+
+            assert_eq!(
+                random.char_to_finger[u as usize],
+                QWERTY.char_to_finger[qwerty_eq as usize]
+            );
+        }
     }
 
     #[test]
