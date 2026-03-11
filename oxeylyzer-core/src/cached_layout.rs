@@ -9,8 +9,6 @@ use crate::{char_mapping::CharMapping, utility::*, weights::FingerWeights};
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
 pub trait Layout<T: Copy + Default> {
-    // fn new() -> Self;
-
     fn random(&self) -> Self;
 
     fn random_with_pins(&self, pins: &[usize]) -> Self;
@@ -73,62 +71,6 @@ impl FastLayout {
 
         res
     }
-
-    //     pub fn from_dof(dof: Dof, convert: Arc<CharMapping>, weights: &AnalyzerWeights) -> Result<Self> {
-    //         use libdof::prelude::{Key, SpecialKey};
-
-    //         let name = Some(dof.name().to_string());
-
-    //         let matrix = dof
-    //             .main_layer()
-    //             .keys()
-    //             .map(|k| match k {
-    //                 Key::Char(c) => *c,
-    //                 Key::Special(s) => match s {
-    //                     SpecialKey::Repeat => REPEAT_KEY,
-    //                     SpecialKey::Space => SPACE_CHAR,
-    //                     SpecialKey::Shift => SHIFT_CHAR,
-    //                     _ => REPLACEMENT_CHAR,
-    //                 },
-    //                 _ => REPLACEMENT_CHAR,
-    //             })
-    //             .map(|c| convert.get_u(c))
-    //             .collect::<Box<_>>();
-
-    //         let matrix_fingers = dof.fingering().keys().copied().collect::<Box<_>>();
-    //         let matrix_physical = dof.board().keys().cloned().collect::<Box<_>>();
-
-    //         let mut char_to_finger = Box::new([None; 60]);
-    //         matrix
-    //             .iter()
-    //             .enumerate()
-    //             .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
-
-    //         let fspeed_indices =
-    //             FSpeedIndices::new(&matrix_fingers, &matrix_physical, &weights.finger_weights);
-    //         let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
-    //         let shape = dof.shape();
-    //         let mapping = convert.clone();
-
-    //         // let name = dof.name().to_owned();
-    //         // let keyboard = dof.board().keys().cloned().map(Into::into).collect();
-    //         // let shape = dof.main_layer().shape();
-
-    //         let layout = Self {
-    //             name,
-    //             matrix,
-    //             matrix_fingers,
-    //             matrix_physical,
-    //             char_to_finger,
-    //             fspeed_indices,
-    //             stretch_indices,
-    //             shape,
-    //             mapping,
-    //             score: 0,
-    //         };
-
-    //         Ok(layout)
-    //     }
 }
 
 impl Layout<u8> for FastLayout {
