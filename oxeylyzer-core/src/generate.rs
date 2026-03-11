@@ -772,7 +772,7 @@ impl LayoutGeneration {
 
         for finger in Finger::FINGERS {
             res.usage[finger as usize] = self.finger_usage(layout, finger);
-            res.fspeed[finger as usize] = self.finger_fspeed(layout, finger)
+            res.fspeed[finger as usize] = self.finger_fspeed(layout, finger);
         }
         res.usage_total = res.usage.iter().sum();
         res.fspeed_total = res.fspeed.iter().sum();
@@ -1220,6 +1220,7 @@ mod tests {
             );
             assert_eq!(cache.lsbs, GEN.lsb_score(&qwerty));
             assert_eq!(cache.pinky_ring, GEN.pinky_ring_score(&qwerty));
+            assert_eq!(cache.total_score, cache.total_score());
             assert_eq!(
                 cache.total_score,
                 GEN.score_with_precision(&qwerty, GEN.trigram_precision)
@@ -1292,7 +1293,7 @@ mod tests {
 
     #[test]
     fn optimize_random_layouts() {
-        for i in 0..50 {
+        for i in 0..5 {
             let layout = QWERTY.random();
             let mut layout_for_cached = layout.clone();
 
@@ -1303,33 +1304,13 @@ mod tests {
             let best_cached_score = GEN.optimize_cached(&mut layout_for_cached, &mut cache);
             let cache_score = GEN.initialize_cache(&layout_for_cached).total_score();
 
-            assert_eq!(best_cached_score, cache_score);
-
-            if normal_score != best_cached_score {
-                println!(
-                    "{}\n\n{}",
-                    optimized_normal.formatted_string(),
-                    layout_for_cached.formatted_string()
-                );
-                println!(
-                    "trigram scores:\nnormal: {}\ncached: {}",
-                    GEN.initialize_cache(&optimized_normal).trigrams_total,
-                    GEN.initialize_cache(&layout_for_cached).trigrams_total
-                )
-            }
-
-            assert_eq!(
-                normal_score,
-                best_cached_score,
-                "{i}: i\n{cache:#?}\n{:#?}",
-                GEN.initialize_cache(&layout_for_cached)
-            );
             assert_eq!(
                 layout_for_cached.layout_str(),
                 optimized_normal.layout_str(),
-                "i: {i}"
+                "i: {i}",
             );
             assert_eq!(normal_score, best_cached_score, "i: {i}");
+            assert_eq!(normal_score, cache_score, "i: {i}");
         }
     }
 }

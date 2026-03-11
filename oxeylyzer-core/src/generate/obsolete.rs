@@ -30,56 +30,6 @@ impl LayoutGeneration {
     }
 
     #[allow(dead_code)]
-    fn col_fspeed_before(&self, layout: &FastLayout, finger: Finger) -> i64 {
-        let dsfb_ratio = (self.weights.sfs as f64) / (self.weights.sfbs as f64);
-
-        let fspeed = if let Some(indices) = layout.fspeed_indices.fingers.get(finger as usize) {
-            indices
-                .iter()
-                .map(
-                    |BigramPair {
-                         pair: PosPair(p1, p2),
-                         dist,
-                     }| {
-                        if let Some(c1) = layout.char(*p1)
-                            && let Some(c2) = layout.char(*p2)
-                        {
-                            let len = self.data.len();
-                            let (c1, c2) = (c1 as usize, c2 as usize);
-                            let (idx, rev) = (c1 * len + c2, c2 * len + c1);
-
-                            let bp = self.data.bigrams().get(idx).copied().unwrap_or_default();
-                            let br = self.data.bigrams().get(rev).copied().unwrap_or_default();
-
-                            let sp = self.data.skipgrams().get(idx).copied().unwrap_or_default();
-                            let sr = self.data.skipgrams().get(rev).copied().unwrap_or_default();
-
-                            let s2p = self.data.skipgrams2().get(idx).copied().unwrap_or_default();
-                            let s2r = self.data.skipgrams2().get(rev).copied().unwrap_or_default();
-
-                            let s3p = self.data.skipgrams3().get(idx).copied().unwrap_or_default();
-                            let s3r = self.data.skipgrams3().get(rev).copied().unwrap_or_default();
-
-                            let sfbs = (bp + br) as f64;
-                            let sfs = (sp + sr) as f64 * dsfb_ratio;
-                            let sfs2 = (s2p + s2r) as f64 * dsfb_ratio.powi(2);
-                            let sfs3 = (s3p + s3r) as f64 * dsfb_ratio.powi(3);
-
-                            (sfbs + sfs + sfs2 + sfs3) as i64 * dist
-                        } else {
-                            0
-                        }
-                    },
-                )
-                .sum()
-        } else {
-            0
-        };
-
-        fspeed * self.weights.sfbs
-    }
-
-    #[allow(dead_code)]
     pub(crate) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> i64 {
         layout.swap_pair(swap);
         let score = self.score_with_precision(layout, self.trigram_precision);

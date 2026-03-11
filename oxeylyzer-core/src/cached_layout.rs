@@ -139,8 +139,15 @@ impl Layout<u8> for FastLayout {
     fn random_with_pins(&self, pins: &[usize]) -> Self {
         let mut res = self.clone();
 
-        shuffle_pins(&mut res.matrix, pins);
         res.name = None;
+        res.char_to_finger = Box::new([None; 60]);
+
+        shuffle_pins(&mut res.matrix, pins);
+
+        res.matrix
+            .iter()
+            .enumerate()
+            .for_each(|(i, &c)| res.char_to_finger[c as usize] = Some(res.matrix_fingers[i]));
 
         res
     }
