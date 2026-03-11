@@ -60,6 +60,7 @@ pub fn generate_n_with_pins(
 
     let mut layouts = layout_gen
         .generate_n_with_pins_iter(amount, based_on.clone(), pins)
+        .map(|l| (layout_gen.score(&l), l))
         .progress_with(pb)
         .collect::<Vec<_>>();
 
@@ -69,58 +70,16 @@ pub fn generate_n_with_pins(
         start.elapsed().as_secs()
     );
 
-    layouts.sort_by(|l1, l2| l2.score.partial_cmp(&l1.score).unwrap());
+    layouts.sort_by_key(|(score, _)| *score);
 
-    for (i, layout) in layouts.iter().enumerate().take(10) {
+    for (i, (score, layout)) in layouts.iter().enumerate().take(10) {
         let printable = heatmap_string(&layout_gen.data, layout);
-        println!(
-            "#{}, score: {:.5}\n{}",
-            i,
-            fmt_score(layout.score),
-            printable
-        );
+        println!("#{}, score: {:.5}\n{}", i, fmt_score(*score), printable);
     }
 
-    layouts
+    layouts.into_iter().map(|(_, layout)| layout).collect()
 }
 
 pub fn generate_n(layout_gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
-    if amount == 0 {
-        return Vec::new();
-    }
-
-    let fmt_score = |base| (base as f64) / (layout_gen.data.char_total as f64) / 100.0;
-
-    let start = std::time::Instant::now();
-
-    let pb = ProgressBar::new(amount as u64);
-    pb.set_style(ProgressStyle::default_bar()
-        .template("[{elapsed_precise}] [{wide_bar:.white/white}] [eta: {eta:>3}] - {per_sec:>11} {pos:>6}/{len}")
-        .expect("couldn't initialize the progress bar template")
-        .progress_chars("=>-"));
-
-    let mut layouts = layout_gen
-        .generate_n_iter(amount, todo!()) // TODO: fix generate command
-        .progress_with(pb)
-        .collect::<Vec<_>>();
-
-    println!(
-        "optimizing {} variants took: {} seconds",
-        amount,
-        start.elapsed().as_secs()
-    );
-
-    layouts.sort_by(|l1, l2| l2.score.partial_cmp(&l1.score).unwrap());
-
-    for (i, layout) in layouts.iter().enumerate().take(10) {
-        let printable = heatmap_string(&layout_gen.data, layout);
-        println!(
-            "#{}, score: {:.5}\n{}",
-            i,
-            fmt_score(layout.score),
-            printable
-        );
-    }
-
-    layouts
+    generate_n_with_pins(layout_gen, amount, todo!(), &[]) // TODO: fix generate command
 }

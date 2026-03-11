@@ -341,7 +341,6 @@ impl LayoutGeneration {
             possible_swaps,
             mapping,
             shape,
-            score: 0,
         }
     }
 
@@ -1010,7 +1009,12 @@ impl LayoutGeneration {
         current_best_score
     }
 
-    fn optimize_cols(&self, layout: &mut FastLayout, cache: &mut LayoutCache, score: Option<i64>) {
+    fn optimize_cols(
+        &self,
+        layout: &mut FastLayout,
+        cache: &mut LayoutCache,
+        score: Option<i64>,
+    ) -> i64 {
         let mut best_score = score.unwrap_or(cache.total_score);
 
         let mut best = layout.clone();
@@ -1019,7 +1023,8 @@ impl LayoutGeneration {
 
         self.col_perms(layout, &mut best, cache, &mut best_score, 6);
         *layout = best;
-        layout.score = best_score;
+
+        best_score
     }
 
     fn col_perms(
@@ -1052,8 +1057,8 @@ impl LayoutGeneration {
         let layout = basis.random();
         let mut cache = self.initialize_cache(&layout);
 
-        let mut layout = self.optimize(layout, &mut cache);
-        layout.score = self.score(&layout);
+        let layout = self.optimize(layout, &mut cache);
+
         layout
     }
 
@@ -1063,11 +1068,9 @@ impl LayoutGeneration {
 
         while with_col_score < optimized_score {
             optimized_score = self.optimize_cached(&mut layout, cache);
-            self.optimize_cols(&mut layout, cache, Some(optimized_score));
-            with_col_score = layout.score;
+            with_col_score = self.optimize_cols(&mut layout, cache, Some(optimized_score));
         }
 
-        layout.score = optimized_score;
         layout
     }
 
@@ -1096,7 +1099,6 @@ impl LayoutGeneration {
 
         self.optimize_cached(&mut layout, &mut cache);
 
-        layout.score = self.score(&layout);
         layout
     }
 }

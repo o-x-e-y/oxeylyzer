@@ -199,11 +199,6 @@ impl Repl {
             })
             .sorted_by(|(_, a), (_, b)| a.total_cmp(b))
             .for_each(|(n, s)| println!("{n:-<15} {s:.3}"));
-
-        // for (name, layout) in self.saved.iter() {
-        //     let score = (layout.score as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
-        //     println!("{:10}{}", format!("{:.3}:", score), name);
-        // }
     }
 
     pub fn pin_positions(&self, layout: &FastLayout, pin_chars: String) -> Vec<usize> {

@@ -1,2 +1,3 @@
 [alias]
 test-core = "test -p oxeylyzer-core"
+test-all = "test --all"

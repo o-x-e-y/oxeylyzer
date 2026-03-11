@@ -39,7 +39,6 @@ pub struct FastLayout {
     pub possible_swaps: Box<[PosPair]>,
     pub mapping: Arc<CharMapping>,
     pub shape: Shape,
-    pub score: i64,
 }
 
 impl FastLayout {
@@ -81,7 +80,6 @@ impl Layout<u8> for FastLayout {
     fn random_with_pins(&self, pins: &[usize]) -> Self {
         let mut res = self.clone();
 
-        res.score = 0;
         res.name = None;
         res.char_to_finger = Box::new([None; 60]);
 
@@ -516,7 +514,6 @@ mod tests {
         assert_eq!(random.shape, QWERTY.shape);
 
         assert_eq!(random.name, None);
-        assert_eq!(random.score, 0);
 
         let r_hs = random.layout_str().chars().collect::<HashSet<_>>();
         let q_hs = QWERTY.layout_str().chars().collect::<HashSet<_>>();
