@@ -8,7 +8,7 @@ use std::hint::black_box;
 use diol::prelude::*;
 use oxeylyzer_core::{corpus_cleaner::CorpusCleaner, data::Data, generate::*, utility::PosPair};
 
-fn main() -> std::io::Result<()> {
+fn main() -> diol::Result<()> {
     let g = LayoutGeneration::new("english", "./static/", None).unwrap();
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
 
@@ -24,17 +24,18 @@ fn main() -> std::io::Result<()> {
     let languages = ["english", "bokmal"];
     let corpora = ["bokmal", "hebrew", "shai"];
 
-    let mut bench = Bench::new(BenchConfig::from_args()?);
+    let bench = Bench::from_args()?;
 
-    bench.register(score_swap, swaps);
-    bench.register(score_layout, layout_names.clone());
-    bench.register(generate, languages);
-    bench.register(best_swap_cached, layout_names.clone());
-    bench.register(best_swap, layout_names);
-    bench.register(language_data, corpora);
-    bench.register(shuffle_pins, (0..40).step_by(5));
+    bench.register("score_swap", score_swap, swaps);
+    bench.register("score_layout", score_layout, layout_names.clone());
+    bench.register("generate", generate, languages);
+    bench.register("best_swap_cached", best_swap_cached, layout_names.clone());
+    bench.register("best_swap", best_swap, layout_names);
+    bench.register("language_data", language_data, corpora);
+    bench.register("shuffle_pins", shuffle_pins, (0..40).step_by(5));
 
     bench.run()?;
+
     Ok(())
 }
 

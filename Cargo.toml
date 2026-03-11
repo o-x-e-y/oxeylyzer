@@ -26,7 +26,7 @@ oxeylyzer-core = { path = "./oxeylyzer-core" }
 oxeylyzer-repl = { path = "./oxeylyzer-repl" }
 
 [dev-dependencies]
-diol = { version = "0.8.3", default-features = false }
+diol = { version = "0.13.1" }
 
 [profile.release]
 lto = "fat"
