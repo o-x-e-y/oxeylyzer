@@ -3,6 +3,7 @@ use std::sync::Arc;
 use ahash::AHashMap as HashMap;
 use itertools::Itertools;
 use libdof::prelude::{Finger, PhysicalKey, Shape};
+use serde::Serialize;
 
 use crate::{
     char_mapping::CharMapping, layout::LayoutMetadata, utility::*, weights::FingerWeights,
@@ -28,7 +29,8 @@ pub trait Layout<T: Copy + Default> {
     fn get_index(&self, index: usize) -> [T; 6];
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(into = "crate::layout::Layout")]
 pub struct FastLayout {
     pub name: Option<String>,
     pub matrix: Box<[u8]>,

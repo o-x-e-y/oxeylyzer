@@ -17,6 +17,9 @@ use oxeylyzer_core::{
 use rustyline::DefaultEditor;
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
+use serde::Serialize;
+use serde_json::Serializer;
+use serde_json::ser::PrettyFormatter;
 use thiserror::Error;
 
 use crate::corpus_transposition::CorpusConfig;
@@ -198,7 +201,7 @@ impl Repl {
                 (n, score)
             })
             .sorted_by(|(_, a), (_, b)| a.total_cmp(b))
-            .for_each(|(n, s)| println!("{n:-<15} {s:.3}"));
+            .for_each(|(n, s)| println!("{n: <15} {s:.3}"));
     }
 
     pub fn pin_positions(&self, layout: &FastLayout, pin_chars: String) -> Vec<usize> {
@@ -272,6 +275,7 @@ impl Repl {
             None => self.placeholder_name(&layout)?,
         };
 
+        layout.name = Some(new_name.clone());
         let name_path = new_name.replace(' ', "_").to_lowercase();
 
         let mut f = std::fs::OpenOptions::new()
@@ -283,16 +287,15 @@ impl Repl {
                 self.language, name_path
             ))?;
 
-        todo!(); // TODO: fix after implementing From<FastLayout> for Layout
+        let formatter = PrettyFormatter::with_indent(b"    ");
+        let mut ser = Serializer::with_formatter(vec![], formatter);
+        layout.serialize(&mut ser).map_err(|e| anyhow::anyhow!(e))?;
 
-        // let layout_formatted = layout.formatted_string(&self.layout_gen.data.mapping);
-        // println!("saved {}\n{}", new_name, layout_formatted);
-        // f.write_all(layout_formatted.as_bytes()).unwrap();
+        f.write_all(ser.into_inner().as_slice())?;
 
-        // layout.score = self.layout_gen.score(&layout);
-        // self.saved.insert(new_name, layout);
-        // self.saved
-        //     .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
+        println!("saved {}\n{}", new_name, layout.formatted_string());
+
+        self.saved.insert(new_name, layout.into());
 
         Ok(())
     }
