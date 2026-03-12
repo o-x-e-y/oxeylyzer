@@ -79,7 +79,3 @@ pub fn generate_n_with_pins(
 
     layouts.into_iter().map(|(_, layout)| layout).collect()
 }
-
-pub fn generate_n(layout_gen: &LayoutGeneration, amount: usize) -> Vec<FastLayout> {
-    generate_n_with_pins(layout_gen, amount, todo!(), &[]) // TODO: fix generate command
-}

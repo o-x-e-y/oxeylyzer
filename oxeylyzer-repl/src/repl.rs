@@ -216,19 +216,7 @@ impl Repl {
             .collect()
     }
 
-    pub fn generate(&mut self, count: Option<usize>) -> Result<()> {
-        let count = count.unwrap_or(2500);
-
-        println!("generating {} layouts...", count);
-        self.thread_pool.install(|| {
-            // TODO: figure out how to use ctrl+c to cancel during generation
-            self.temp_generated = generate_n(&self.layout_gen, count);
-        });
-
-        Ok(())
-    }
-
-    fn improve(
+    fn generate(
         &mut self,
         name: &str,
         count: Option<usize>,
@@ -774,8 +762,7 @@ impl Repl {
             Compare(c) => self.compare(&c.name1, &c.name2)?,
             Swap(s) => self.swap(&s.name, &s.swaps)?,
             Rank(_) => self.rank(),
-            Generate(g) => self.generate(g.count)?,
-            Improve(i) => self.improve(&i.name, i.count, i.pins)?,
+            Generate(i) => self.generate(&i.name, i.count, i.pins)?,
             Save(s) => self.save(s.n, s.name)?,
             Sfbs(s) => self.sfbs(&s.name, s.count)?,
             Fspeed(s) => self.fspeed(&s.name, s.count)?,
