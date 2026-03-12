@@ -304,6 +304,7 @@ impl LayoutGeneration {
         let shape = layout.shape.clone();
         let mapping = self.mapping.clone();
         let matrix_physical = layout.keyboard.clone();
+        let metadata = layout.metadata.clone();
 
         // TODO: use layout.rs u8 PosPair at one point
         let possible_swaps = (0..(matrix.len()))
@@ -339,6 +340,7 @@ impl LayoutGeneration {
             stretch_indices,
             usage_indices,
             possible_swaps,
+            metadata,
             mapping,
             shape,
         }

@@ -4,7 +4,9 @@ use ahash::AHashMap as HashMap;
 use itertools::Itertools;
 use libdof::prelude::{Finger, PhysicalKey, Shape};
 
-use crate::{char_mapping::CharMapping, utility::*, weights::FingerWeights};
+use crate::{
+    char_mapping::CharMapping, layout::LayoutMetadata, utility::*, weights::FingerWeights,
+};
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
@@ -38,6 +40,7 @@ pub struct FastLayout {
     pub usage_indices: UsageIndices,
     pub possible_swaps: Box<[PosPair]>,
     pub mapping: Arc<CharMapping>,
+    pub metadata: Arc<LayoutMetadata>,
     pub shape: Shape,
 }
 

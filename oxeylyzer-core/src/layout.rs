@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use libdof::{combos::Combos, magic::Magic, prelude::*};
 use serde::{Deserialize, Serialize};
@@ -35,7 +35,7 @@ pub struct Layout {
     pub fingers: Box<[Finger]>,
     pub keyboard: Box<[PhysicalKey]>,
     pub shape: Shape,
-    pub metadata: LayoutMetadata,
+    pub metadata: Arc<LayoutMetadata>,
 }
 
 #[test]
@@ -108,7 +108,7 @@ impl From<Dof> for Layout {
         let keyboard = board.keys().cloned().collect();
         let shape = board.shape();
 
-        let metadata = LayoutMetadata {
+        let metadata = Arc::from(LayoutMetadata {
             authors,
             year,
             link,
@@ -116,7 +116,7 @@ impl From<Dof> for Layout {
             anchor,
             fingering_name,
             parsed_board,
-        };
+        });
 
         Layout {
             name,
@@ -138,7 +138,7 @@ impl From<Layout> for Dof {
             fingering_name,
             parsed_board,
             ..
-        } = layout.metadata;
+        } = layout.metadata.as_ref().clone();
 
         let mut key_iter = layout.keys.into_iter();
         let main_layer = layout
