@@ -201,26 +201,34 @@ impl From<Layout> for Dof {
     }
 }
 
-// impl From<FastLayout> for Layout {
-//     fn from(layout: FastLayout) -> Self {
-//         let name = match layout.name {
-//             Some(name) => name,
-//             None => todo!(), // Implement when FastLayout has char_mapping field.
-//         };
+impl From<FastLayout> for Layout {
+    fn from(layout: FastLayout) -> Self {
+        let name = match layout.name {
+            Some(name) => name,
+            None => layout
+                .matrix
+                .iter()
+                .copied()
+                .skip(10) // TODO: maybe make more accurate based on board shape + anchor
+                .take(4)
+                .map(|u| layout.mapping.get_c(u))
+                .collect::<String>(),
+        };
 
-//         Self {
-//             name,
-//             keys: layout
-//                 .matrix
-//                 .iter()
-//                 .map(|&u| layout.mapping.get_c(u))
-//                 .collect(),
-//             fingers: layout.matrix_fingers,
-//             keyboard: layout.matrix_physical,
-//             shape: layout.shape,
-//         }
-//     }
-// }
+        Self {
+            name,
+            keys: layout
+                .matrix
+                .iter()
+                .map(|&u| layout.mapping.get_c(u))
+                .collect(),
+            fingers: layout.matrix_fingers,
+            keyboard: layout.matrix_physical,
+            shape: layout.shape,
+            metadata: layout.metadata.clone(),
+        }
+    }
+}
 
 impl std::fmt::Display for Layout {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
