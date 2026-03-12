@@ -21,12 +21,9 @@ xflags::xflags! {
         }
         /// Rank all layouts for the currently specified language. A higher score is better.
         cmd rank list {}
-        /// Generate a number of layouts and displays the best 10. Note: layouts may not be correct after changing language.
-        cmd generate gen g {
-            optional count: usize
-        }
-        /// Improves the the given layout by pinning keys specified in the `config.toml` and reordering everything else.
-        cmd improve i optimize {
+        /// Improves the the given layout. Optionally, you can provide a list of pinned characters
+        /// to keep in place during optimization.
+        cmd generate gen g improve i optimize {
             required name: String
             optional count: usize
             optional -p, --pins pins: String

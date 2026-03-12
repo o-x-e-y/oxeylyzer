@@ -1,4 +1,5 @@
 pub mod analyzer_data;
+pub mod cached_layout;
 pub mod char_mapping;
 pub mod corpus_cleaner;
 pub mod data;

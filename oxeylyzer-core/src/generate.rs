@@ -3,17 +3,16 @@ use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
 use anyhow::{Context, Result};
-use indexmap::IndexMap;
 use itertools::Itertools;
-use libdof::Dof;
 use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::REPEAT_KEY;
 use crate::analyzer_data::AnalyzerData;
+use crate::cached_layout::{Layout as _, *};
 use crate::char_mapping::CharMapping;
 use crate::data::Data;
-use crate::layout::*;
+use crate::layout::Layout;
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::utility::*;
 use crate::weights::{AnalyzerWeights, Config};
@@ -183,7 +182,7 @@ impl std::fmt::Display for LayoutStats {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct LayoutCache {
     // effort: [f64; 30],
     // effort_total: f64,
@@ -220,22 +219,6 @@ type PerCharTrigrams = HashMap<[u8; 2], TrigramData>;
 
 static COLS: [usize; 6] = [0, 1, 2, 7, 8, 9];
 
-pub(crate) fn pinned_swaps(pins: &[usize]) -> Vec<PosPair> {
-    let mut map = [true; 30];
-    for (i, m) in map.iter_mut().enumerate() {
-        if pins.contains(&i) {
-            *m = false;
-        }
-    }
-    let mut res = Vec::new();
-    for ps in POSSIBLE_SWAPS {
-        if map[ps.0] && map[ps.1] {
-            res.push(ps);
-        }
-    }
-    res
-}
-
 pub struct LayoutGeneration {
     pub language: String,
     pub data: AnalyzerData,
@@ -252,7 +235,6 @@ pub struct LayoutGeneration {
     per_char_trigrams: PerCharTrigrams,
 
     pub weights: AnalyzerWeights,
-    pub layouts: IndexMap<String, FastLayout>,
 }
 
 impl LayoutGeneration {
@@ -305,76 +287,63 @@ impl LayoutGeneration {
             pinky_ring_indices: get_pinky_ring_indices(),
 
             weights: config.weights.into(),
-            layouts: IndexMap::default(),
         })
     }
 
-    // TODO: move layouts out of LayoutGeneration to split concerns
-    pub fn load_layouts<P>(
-        &mut self,
-        base_directory: P,
-        language: &str,
-    ) -> Result<IndexMap<String, FastLayout>>
-    where
-        P: AsRef<Path>,
-    {
-        let mut res: IndexMap<String, FastLayout> = IndexMap::new();
-        let language_dir_path = base_directory.as_ref().join(language);
+    pub fn fast_layout(&self, layout: &Layout, pins: &[usize]) -> FastLayout {
+        let name = Some(layout.name.clone());
 
-        if let Ok(read_dir) = std::fs::read_dir(&language_dir_path) {
-            let paths = read_dir
-                .flatten()
-                .filter_map(|d| {
-                    let path = d.path();
-                    path.is_file().then_some(path)
-                })
-                .collect::<Vec<_>>();
-            let kb_paths = paths.iter().filter(is_kb_file).collect::<Vec<_>>();
-            let dof_paths = paths.iter().filter(is_dof_file).collect::<Vec<_>>();
+        let matrix = layout
+            .keys
+            .iter()
+            .map(|&c| self.data.mapping.get_u(c))
+            .collect::<Box<_>>();
 
-            // let stats_dir = base_directory.as_ref().join("stats").join(language);
-            // if let Ok(false) = std::fs::try_exists(stats_dir) {
-            // 	std::fs::create_dir_all(&stats_dir)?;
-            // }
+        // let name = layout.name;
+        let matrix_fingers = layout.fingers.clone();
+        let shape = layout.shape.clone();
+        let mapping = self.mapping.clone();
+        let matrix_physical = layout.keyboard.clone();
+        let metadata = layout.metadata.clone();
 
-            for path in kb_paths {
-                if let Some(name) = layout_name(path) {
-                    let content = std::fs::read_to_string(path)?;
-                    let layout_str = format_layout_str(&content);
-                    let layout_bytes = self.mapping.map_cs(&layout_str).collect::<Vec<_>>();
+        // TODO: use layout.rs u8 PosPair at one point
+        let possible_swaps = (0..(matrix.len()))
+            .filter(|v| !pins.contains(v))
+            .tuple_combinations::<(_, _)>()
+            .map(Into::into)
+            .collect();
 
-                    if let Ok(mut layout) = FastLayout::try_from(layout_bytes.as_slice()) {
-                        layout.score = self.score(&layout);
-                        res.insert(name, layout);
+        let mut char_to_finger = Box::new([None; 60]);
+        matrix
+            .iter()
+            .enumerate()
+            .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
 
-                    // self.get_layout_stats(&layout);
-                    } else {
-                        println!("layout {} is not formatted correctly", name);
-                    }
-                }
-            }
+        // let unweighted_sfb_indices =
+        //     FspeedIndices::new(&fingers, &keyboard, &FingerWeights::default());
+        let fspeed_indices = FSpeedIndices::new(
+            &matrix_fingers,
+            &matrix_physical,
+            &self.weights.finger_weights,
+        );
+        // TODO: pass [char] instead of [u8]
+        let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
+        let usage_indices = UsageIndices::new(&matrix_fingers);
 
-            for path in dof_paths {
-                let s = std::fs::read_to_string(path)?;
-                let dof =
-                    serde_json::from_str::<Dof>(&s).with_context(|| path.display().to_string())?;
-                let name = dof.name().to_string();
-
-                match FastLayout::from_dof(dof, &self.mapping, &self.weights) {
-                    Ok(mut layout) => {
-                        layout.score = self.score(&layout);
-                        res.insert(name.to_lowercase(), layout);
-                    }
-                    Err(e) => println!(".dof layout {name} formatted incorrectly: {e}"),
-                }
-            }
-
-            res.sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
-        } else {
-            std::fs::create_dir(language_dir_path)?;
+        FastLayout {
+            name,
+            matrix,
+            char_to_finger,
+            matrix_fingers,
+            matrix_physical,
+            fspeed_indices,
+            stretch_indices,
+            usage_indices,
+            possible_swaps,
+            metadata,
+            mapping,
+            shape,
         }
-
-        Ok(res)
     }
 
     pub fn get_layout_stats(&self, layout: &FastLayout) -> LayoutStats {
@@ -563,16 +532,11 @@ impl LayoutGeneration {
                     .filter(|(t, _)| t.contains(&c2))
                     .collect::<Vec<_>>();
 
-                let (big, small, c) = if v1.len() >= v2.len() {
-                    (v1, v2, &c1)
-                } else {
-                    (v2, v1, &c2)
-                };
-
-                let per_char = big
+                let per_char = v1
                     .into_iter()
-                    .chain(small.into_iter().filter(|(t, _)| !t.contains(c)))
+                    .chain(v2.into_iter().filter(|(t, _)| !t.contains(&c1)))
                     .collect::<Box<_>>();
+
                 ([c1, c2], per_char)
             })
             .collect()
@@ -595,9 +559,9 @@ impl LayoutGeneration {
                 Outroll => freqs.outrolls += freq,
                 Onehand => freqs.onehands += freq,
                 Redirect => freqs.redirects += freq,
-                RedirectSfs => freqs.redirects += freq,
+                RedirectSfs => freqs.redirects_sfs += freq,
                 BadRedirect => freqs.bad_redirects += freq,
-                BadRedirectSfs => freqs.bad_redirects += freq,
+                BadRedirectSfs => freqs.bad_redirects_sfs += freq,
                 Sfb => {}
                 BadSfb => {}
                 Sft => {}
@@ -701,56 +665,28 @@ impl LayoutGeneration {
     }
 
     fn finger_usage(&self, layout: &FastLayout, finger: Finger) -> i64 {
-        let mut res = 0;
-        match finger {
-            Finger::LP | Finger::LR | Finger::LM => {
-                let col = finger as usize;
-                for c in [
-                    layout.char(col).unwrap(),
-                    layout.char(col + 10).unwrap(),
-                    layout.char(col + 20).unwrap(),
-                ] {
-                    res += self.data.get_char_u(c);
-                }
-            }
-            Finger::LI | Finger::RI => {
-                let col = if finger == Finger::LI {
-                    (finger as usize - 3) * 2 + 3
-                } else {
-                    (finger as usize - 5) * 2 + 3
-                };
-                // let x = layout.get_index(index)
-                for c in [
-                    layout.char(col).unwrap(),
-                    layout.char(col + 10).unwrap(),
-                    layout.char(col + 20).unwrap(),
-                    layout.char(col + 1).unwrap(),
-                    layout.char(col + 11).unwrap(),
-                    layout.char(col + 21).unwrap(),
-                ] {
-                    res += self.data.get_char_u(c);
-                }
-            }
-            Finger::LT | Finger::RT => { /* TODO: fix for thumbs */ }
-            Finger::RM | Finger::RR | Finger::RP => {
-                let col = finger as usize;
-                for c in [
-                    layout.char(col).unwrap(),
-                    layout.char(col + 10).unwrap(),
-                    layout.char(col + 20).unwrap(),
-                ] {
-                    res += self.data.get_char_u(c)
-                }
-            }
-        };
+        let usage = layout
+            .usage_indices
+            .get(finger)
+            .iter()
+            .map(|&i| self.data.get_char_u(layout.matrix[i]))
+            .sum::<i64>();
 
         self.weights.max_finger_use.penalty
             * match finger {
-                // TODO: fix calculation for int
-                Finger::LP | Finger::RP => res - self.weights.max_finger_use.pinky,
-                Finger::LR | Finger::RR => res - self.weights.max_finger_use.ring,
-                Finger::LM | Finger::RM => res - self.weights.max_finger_use.middle,
-                Finger::LI | Finger::RI => res - self.weights.max_finger_use.index,
+                Finger::LP | Finger::RP => {
+                    // TODO: optimize
+                    usage - self.weights.max_finger_use.pinky * self.data.char_total / 100
+                }
+                Finger::LR | Finger::RR => {
+                    usage - self.weights.max_finger_use.ring * self.data.char_total / 100
+                }
+                Finger::LM | Finger::RM => {
+                    usage - self.weights.max_finger_use.middle * self.data.char_total / 100
+                }
+                Finger::LI | Finger::RI => {
+                    usage - self.weights.max_finger_use.index * self.data.char_total / 100
+                }
                 Finger::LT | Finger::RT => 0, // TODO: fix for thumb
             }
     }
@@ -792,14 +728,12 @@ impl LayoutGeneration {
 
     #[inline]
     fn finger_fspeed(&self, layout: &FastLayout, finger: Finger) -> i64 {
-        if let Some(indices) = layout.fspeed_indices.fingers.get(finger as usize) {
-            indices
-                .iter()
-                .map(|pair| self.pair_fspeed(layout, pair))
-                .sum()
-        } else {
-            0
-        }
+        layout
+            .fspeed_indices
+            .get_finger(finger)
+            .iter()
+            .map(|pair| self.pair_fspeed(layout, pair))
+            .sum()
     }
 
     pub fn stretches_including_pair(&self, layout: &FastLayout, pair: &PosPair) -> i64 {
@@ -839,7 +773,7 @@ impl LayoutGeneration {
 
         for finger in Finger::FINGERS {
             res.usage[finger as usize] = self.finger_usage(layout, finger);
-            res.fspeed[finger as usize] = self.finger_fspeed(layout, finger)
+            res.fspeed[finger as usize] = self.finger_fspeed(layout, finger);
         }
         res.usage_total = res.usage.iter().sum();
         res.fspeed_total = res.fspeed.iter().sum();
@@ -873,11 +807,13 @@ impl LayoutGeneration {
 
         let PosPair(i1, i2) = *swap;
 
-        if i1 == i2
-            || layout.char(i1) == layout.char(i2)
-            || (self.data.get_char_u(i1 as u8) == 0 && self.data.get_char_u(i2 as u8) == 0)
         {
-            return None;
+            let (c1, c2) = (layout.char(i1)?, layout.char(i2)?);
+            let (f1, f2) = (self.data.get_char_u(c1), self.data.get_char_u(c2));
+
+            if i1 == i2 || c1 == c2 || (f1 == 0 && f2 == 0) {
+                return None;
+            }
         }
 
         layout.swap_pair(swap);
@@ -1036,8 +972,8 @@ impl LayoutGeneration {
         &self,
         layout: &mut FastLayout,
         cache: &LayoutCache,
-        current_best_score: Option<i64>,
         possible_swaps: &[PosPair],
+        current_best_score: Option<i64>,
     ) -> (Option<PosPair>, i64) {
         let mut best_score = current_best_score.unwrap_or(SMALLEST_SCORE);
         let mut best_swap: Option<PosPair> = None;
@@ -1054,17 +990,13 @@ impl LayoutGeneration {
         (best_swap, best_score)
     }
 
-    fn optimize_cached(
-        &self,
-        layout: &mut FastLayout,
-        cache: &mut LayoutCache,
-        possible_swaps: &[PosPair],
-    ) -> i64 {
+    fn optimize_cached(&self, layout: &mut FastLayout, cache: &mut LayoutCache) -> i64 {
         let mut max_swaps = 200; // too high, but makes the system cut off after a while
         let mut current_best_score = SMALLEST_SCORE;
+        let possible_swaps = std::mem::take(&mut layout.possible_swaps);
 
         while let (Some(best_swap), new_score) =
-            self.best_swap_cached(layout, cache, Some(current_best_score), possible_swaps)
+            self.best_swap_cached(layout, cache, &possible_swaps, Some(current_best_score))
         {
             current_best_score = new_score;
             self.accept_swap(layout, &best_swap, cache);
@@ -1073,10 +1005,18 @@ impl LayoutGeneration {
                 return current_best_score;
             }
         }
+
+        layout.possible_swaps = possible_swaps;
+
         current_best_score
     }
 
-    fn optimize_cols(&self, layout: &mut FastLayout, cache: &mut LayoutCache, score: Option<i64>) {
+    fn optimize_cols(
+        &self,
+        layout: &mut FastLayout,
+        cache: &mut LayoutCache,
+        score: Option<i64>,
+    ) -> i64 {
         let mut best_score = score.unwrap_or(cache.total_score);
 
         let mut best = layout.clone();
@@ -1085,7 +1025,8 @@ impl LayoutGeneration {
 
         self.col_perms(layout, &mut best, cache, &mut best_score, 6);
         *layout = best;
-        layout.score = best_score;
+
+        best_score
     }
 
     fn col_perms(
@@ -1114,36 +1055,31 @@ impl LayoutGeneration {
         });
     }
 
-    pub fn generate(&self) -> FastLayout {
-        let layout = FastLayout::random(&mut self.chars_for_generation.clone());
+    pub fn generate(&self, basis: &FastLayout) -> FastLayout {
+        let layout = basis.random();
         let mut cache = self.initialize_cache(&layout);
 
-        let mut layout = self.optimize(layout, &mut cache, &POSSIBLE_SWAPS);
-        layout.score = self.score(&layout);
-        layout
+        self.optimize(layout, &mut cache)
     }
 
-    pub fn optimize(
-        &self,
-        mut layout: FastLayout,
-        cache: &mut LayoutCache,
-        possible_swaps: &[PosPair],
-    ) -> FastLayout {
+    pub fn optimize(&self, mut layout: FastLayout, cache: &mut LayoutCache) -> FastLayout {
         let mut with_col_score = SMALLEST_SCORE;
         let mut optimized_score = SMALLEST_SCORE + 1;
 
         while with_col_score < optimized_score {
-            optimized_score = self.optimize_cached(&mut layout, cache, possible_swaps);
-            self.optimize_cols(&mut layout, cache, Some(optimized_score));
-            with_col_score = layout.score;
+            optimized_score = self.optimize_cached(&mut layout, cache);
+            with_col_score = self.optimize_cols(&mut layout, cache, Some(optimized_score));
         }
 
-        layout.score = optimized_score;
         layout
     }
 
-    pub fn generate_n_iter(&self, amount: usize) -> impl ParallelIterator<Item = FastLayout> + '_ {
-        (0..amount).into_par_iter().map(|_| self.generate())
+    pub fn generate_n_iter<'a>(
+        &'a self,
+        amount: usize,
+        basis: &'a FastLayout,
+    ) -> impl ParallelIterator<Item = FastLayout> + 'a {
+        (0..amount).into_par_iter().map(|_| self.generate(basis))
     }
 
     pub fn generate_n_with_pins_iter<'a>(
@@ -1152,29 +1088,17 @@ impl LayoutGeneration {
         based_on: FastLayout,
         pins: &'a [usize],
     ) -> impl ParallelIterator<Item = FastLayout> + 'a {
-        let possible_swaps = pinned_swaps(pins);
-
         (0..amount)
             .into_par_iter()
-            .map(move |_| self.generate_with_pins(&based_on, pins, Some(&possible_swaps)))
+            .map(move |_| self.generate_with_pins(&based_on, pins))
     }
 
-    pub fn generate_with_pins(
-        &self,
-        based_on: &FastLayout,
-        pins: &[usize],
-        possible_swaps: Option<&[PosPair]>,
-    ) -> FastLayout {
-        let mut layout = FastLayout::random_pins(&mut based_on.matrix.clone(), pins);
+    pub fn generate_with_pins(&self, basis: &FastLayout, pins: &[usize]) -> FastLayout {
+        let mut layout = basis.random_with_pins(pins);
         let mut cache = self.initialize_cache(&layout);
 
-        if let Some(ps) = possible_swaps {
-            self.optimize_cached(&mut layout, &mut cache, ps)
-        } else {
-            self.optimize_cached(&mut layout, &mut cache, &pinned_swaps(pins))
-        };
+        self.optimize_cached(&mut layout, &mut cache);
 
-        layout.score = self.score(&layout);
         layout
     }
 }
@@ -1185,31 +1109,82 @@ mod obsolete;
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use crate::utility::ApproxEq;
-    use nanorand::Rng;
+
     use once_cell::sync::Lazy;
     use rayon::iter::ParallelIterator;
-    use std::sync::atomic::Ordering;
+    use std::{collections::HashSet, sync::atomic::Ordering};
 
     static GEN: Lazy<LayoutGeneration> =
         Lazy::new(|| LayoutGeneration::new("english", "static", None).unwrap());
 
+    static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
+        let dof_str = r#"
+            {
+                "name": "Qwerty",
+                "board": "ansi",
+                "layers": {
+                    "main": [
+                        "q w e r t  y u i o p",
+                        "a s d f g  h j k l ;",
+                        "z x c v b  n m , . /"
+                    ]
+                },
+                "fingering": "traditional"
+            }
+        "#;
+
+        let layout = serde_json::from_str::<Layout>(dof_str).unwrap();
+
+        GEN.fast_layout(&layout, &[])
+    });
+
+    #[test]
+    fn per_char_trigrams_symmetry() {
+        let per_chars = |maybe_pc: Option<&Box<[_]>>| {
+            maybe_pc
+                .cloned()
+                .unwrap_or_else(|| Box::new([]))
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+
+        let chars = GEN
+            .per_char_trigrams
+            .keys()
+            .flatten()
+            .copied()
+            .collect::<HashSet<_>>();
+
+        chars
+            .iter()
+            .copied()
+            .cartesian_product(chars.iter().copied())
+            .for_each(|(c1, c2)| {
+                let bg = per_chars(GEN.per_char_trigrams.get(&[c1, c2]));
+                let rv = per_chars(GEN.per_char_trigrams.get(&[c2, c1]));
+
+                let bg_hs = bg.iter().copied().collect::<HashSet<_>>();
+                let rv_hs = rv.iter().copied().collect::<HashSet<_>>();
+
+                assert_eq!(bg.len(), bg_hs.len());
+                assert_eq!(rv.len(), rv_hs.len());
+
+                assert_eq!(bg_hs, rv_hs);
+            });
+    }
+
     #[test]
     fn generate() {
-        time_this::time!(GEN.generate_n_iter(250).collect::<Vec<_>>());
+        let qwerty = QWERTY.clone();
+
+        time_this::time!(GEN.generate_n_iter(100, &qwerty).collect::<Vec<_>>());
 
         println!("{}", ANALYZED_COUNT.load(Ordering::Relaxed));
     }
 
     #[allow(dead_code)]
     fn fspeed_per_pair() {
-        let qwerty_bytes = GEN
-            .mapping
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
-
-        for BigramPair { pair, dist } in qwerty.fspeed_indices.all {
+        for BigramPair { pair, dist } in &QWERTY.fspeed_indices.all {
             println!(
                 "({}, {}) <-> ({}, {}): {dist}",
                 pair.0 % 10,
@@ -1222,20 +1197,22 @@ mod tests {
 
     #[test]
     fn cached_totals() {
-        let qwerty_bytes = GEN
-            .mapping
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
+        let mut qwerty = QWERTY.clone();
         let mut cache = GEN.initialize_cache(&qwerty);
-        let mut rng = nanorand::tls_rng();
 
-        for swap in (0..10000).map(|_| &POSSIBLE_SWAPS[rng.generate_range(0..435)]) {
+        for swap in QWERTY
+            .possible_swaps
+            .iter()
+            .permutations(2)
+            .flatten()
+            .take(25_000)
+        {
             GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
             assert_eq!(cache.scissors, GEN.scissor_score(&qwerty));
             assert_eq!(cache.usage_total, GEN.usage_score(&qwerty));
             assert_eq!(cache.fspeed_total, GEN.fspeed_score(&qwerty));
+            assert_eq!(cache.stretch_total, GEN.stretch_score(&qwerty));
             assert_eq!(
                 cache.trigrams_total,
                 GEN.trigram_score_iter(
@@ -1245,27 +1222,25 @@ mod tests {
             );
             assert_eq!(cache.lsbs, GEN.lsb_score(&qwerty));
             assert_eq!(cache.pinky_ring, GEN.pinky_ring_score(&qwerty));
+            assert_eq!(cache.total_score, cache.total_score());
             assert_eq!(
                 cache.total_score,
                 GEN.score_with_precision(&qwerty, GEN.trigram_precision)
             );
+            assert_eq!(GEN.initialize_cache(&qwerty), cache);
         }
     }
 
     #[test]
     fn best_found_swap() {
-        let qwerty_bytes = GEN
-            .mapping
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let mut qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
+        let mut qwerty = QWERTY.clone();
         let cache = GEN.initialize_cache(&qwerty);
 
         if let (Some(best_swap_normal), best_score_normal) =
-            GEN.best_swap(&mut qwerty, None, &POSSIBLE_SWAPS)
+            GEN.best_swap(&mut qwerty, None, &QWERTY.possible_swaps)
         {
             if let (Some(best_swap_cached), best_score_cached) =
-                GEN.best_swap_cached(&mut qwerty, &cache, None, &POSSIBLE_SWAPS)
+                GEN.best_swap_cached(&mut qwerty, &cache, &QWERTY.possible_swaps, None)
             {
                 if best_score_normal == best_score_cached {
                     assert_eq!(best_swap_normal, best_swap_cached);
@@ -1278,15 +1253,11 @@ mod tests {
 
     #[test]
     fn score_swaps_no_accept() {
-        let qwerty_bytes = GEN
-            .mapping
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let base = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
+        let base = QWERTY.clone();
         let mut qwerty = base.clone();
         let cache = GEN.initialize_cache(&qwerty);
 
-        for (i, swap) in POSSIBLE_SWAPS.iter().enumerate() {
+        for (i, swap) in QWERTY.possible_swaps.iter().enumerate() {
             let score_normal = GEN.score_swap(&mut qwerty, swap);
             let maybe_score_cached = GEN.score_swap_cached(&mut qwerty, swap, &cache);
 
@@ -1296,7 +1267,7 @@ mod tests {
                 assert!(
                     score_cached == SMALLEST_SCORE + 1000 || score_normal == score_cached,
                     "failed on iteration {i} for {}",
-                    POSSIBLE_SWAPS[i]
+                    QWERTY.possible_swaps[i]
                 );
             }
         }
@@ -1304,25 +1275,20 @@ mod tests {
 
     #[test]
     fn optimize_qwerty() {
-        let qwerty_bytes = GEN
-            .mapping
-            .map_cs("qwertyuiopasdfghjkl;zxcvbnm,./")
-            .collect::<Vec<_>>();
-        let qwerty = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
+        let qwerty = QWERTY.clone();
 
-        let optimized_normal = GEN.optimize_normal_no_cols(qwerty.clone(), &POSSIBLE_SWAPS);
+        let optimized_normal = GEN.optimize_normal_no_cols(qwerty.clone());
         let normal_score = GEN.score_with_precision(&optimized_normal, GEN.trigram_precision);
 
-        let mut qwerty_for_cached = FastLayout::try_from(qwerty_bytes.as_slice()).unwrap();
+        let mut qwerty_for_cached = QWERTY.clone();
         let mut cache = GEN.initialize_cache(&qwerty_for_cached);
 
-        let best_cached_score =
-            GEN.optimize_cached(&mut qwerty_for_cached, &mut cache, &POSSIBLE_SWAPS);
+        let best_cached_score = GEN.optimize_cached(&mut qwerty_for_cached, &mut cache);
 
         assert_eq!(normal_score, best_cached_score);
         assert_eq!(
-            qwerty_for_cached.layout_str(&GEN.mapping),
-            optimized_normal.layout_str(&GEN.mapping)
+            qwerty_for_cached.layout_str(),
+            optimized_normal.layout_str()
         );
         // println!("{qwerty_for_cached}");
     }
@@ -1330,31 +1296,23 @@ mod tests {
     #[test]
     fn optimize_random_layouts() {
         for i in 0..5 {
-            let layout = FastLayout::random(&mut GEN.chars_for_generation.clone());
+            let layout = QWERTY.random();
             let mut layout_for_cached = layout.clone();
 
-            let optimized_normal = GEN.optimize_normal_no_cols(layout, &POSSIBLE_SWAPS);
+            let optimized_normal = GEN.optimize_normal_no_cols(layout);
             let normal_score = GEN.score_with_precision(&optimized_normal, GEN.trigram_precision);
 
             let mut cache = GEN.initialize_cache(&layout_for_cached);
-            let best_cached_score =
-                GEN.optimize_cached(&mut layout_for_cached, &mut cache, &POSSIBLE_SWAPS);
+            let best_cached_score = GEN.optimize_cached(&mut layout_for_cached, &mut cache);
+            let cache_score = GEN.initialize_cache(&layout_for_cached).total_score();
 
-            if normal_score != best_cached_score {
-                println!(
-                    "{}\n\n{}",
-                    optimized_normal.formatted_string(&GEN.data.mapping),
-                    layout_for_cached.formatted_string(&GEN.data.mapping)
-                );
-            }
-
-            assert_eq!(normal_score, best_cached_score, "{i}: i");
             assert_eq!(
-                layout_for_cached.layout_str(&GEN.mapping),
-                optimized_normal.layout_str(&GEN.mapping),
-                "i: {i}"
+                layout_for_cached.layout_str(),
+                optimized_normal.layout_str(),
+                "i: {i}",
             );
             assert_eq!(normal_score, best_cached_score, "i: {i}");
+            assert_eq!(normal_score, cache_score, "i: {i}");
         }
     }
 }
