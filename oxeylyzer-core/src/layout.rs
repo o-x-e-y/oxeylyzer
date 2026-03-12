@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use libdof::{combos::Combos, magic::Magic, prelude::*};
-use nanorand::{Rng as _, tls_rng};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -70,28 +69,6 @@ impl Layout {
 
         Ok(dof.into())
     }
-
-    // pub fn random(&self) -> Self {
-    //     self.random_with_pins(&[])
-    // }
-
-    // pub fn random_with_pins(&self, pins: &[usize]) -> Self {
-    //     let shape = self.shape.clone();
-    //     let fingers = self.fingers.clone();
-    //     let keyboard = self.keyboard.clone();
-    //     let metadata =
-
-    //     let mut keys = self.keys.clone();
-    //     shuffle_pins(&mut keys, pins);
-
-    //     Self {
-    //         name: keys.iter().collect(),
-    //         keys,
-    //         fingers,
-    //         keyboard,
-    //         shape,
-    //     }
-    // }
 }
 
 impl From<Dof> for Layout {
