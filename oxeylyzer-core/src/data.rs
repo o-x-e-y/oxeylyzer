@@ -126,13 +126,18 @@ impl Data {
         name: &str,
         cleaner: &CorpusCleaner,
     ) -> Result<Self, OxeylyzerError> {
-        let result = paths
+        let paths = paths
             .iter()
+            .map(|p| p.as_ref().to_path_buf())
+            .collect::<Vec<_>>();
+
+        let result = paths
+            .into_par_iter()
             .map(|path| {
-                if path.as_ref().is_file() {
+                if path.is_file() {
                     let f = std::fs::File::open(path)?;
                     IntermediateData::from_file(f, name, cleaner)
-                } else if path.as_ref().is_dir() {
+                } else if path.is_dir() {
                     let mut new = std::fs::read_dir(path)?
                         .flatten()
                         .par_bridge()
@@ -147,14 +152,15 @@ impl Data {
 
                     Ok(new)
                 } else {
-                    Err(OxeylyzerError::NotAFile(path.as_ref().to_path_buf()))
+                    Err(OxeylyzerError::NotAFile(path))
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(result
-            .into_par_iter()
-            .reduce(IntermediateData::default, |a, b| a + b)
+            .into_iter()
+            .reduce(|a, b| a + b)
+            .unwrap_or_default()
             .into())
     }
 
