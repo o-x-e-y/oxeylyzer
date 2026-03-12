@@ -308,7 +308,7 @@ impl LayoutGeneration {
 
         // TODO: use layout.rs u8 PosPair at one point
         let possible_swaps = (0..(matrix.len()))
-            .filter(|v| !pins.contains(&(*v as usize)))
+            .filter(|v| !pins.contains(v))
             .tuple_combinations::<(_, _)>()
             .map(Into::into)
             .collect();
@@ -979,7 +979,7 @@ impl LayoutGeneration {
         let mut best_swap: Option<PosPair> = None;
 
         for swap in possible_swaps {
-            if let Some(score) = self.score_swap_cached(layout, &swap, cache)
+            if let Some(score) = self.score_swap_cached(layout, swap, cache)
                 && score > best_score
             {
                 best_score = score;
@@ -1059,9 +1059,7 @@ impl LayoutGeneration {
         let layout = basis.random();
         let mut cache = self.initialize_cache(&layout);
 
-        let layout = self.optimize(layout, &mut cache);
-
-        layout
+        self.optimize(layout, &mut cache)
     }
 
     pub fn optimize(&self, mut layout: FastLayout, cache: &mut LayoutCache) -> FastLayout {

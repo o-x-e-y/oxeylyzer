@@ -176,7 +176,7 @@ impl From<Layout> for Dof {
             .map(|&len| board_iter.by_ref().take(len).collect::<Vec<_>>())
             .collect::<Vec<_>>();
 
-        let intermediate = DofInternal {
+        let internal = DofInternal {
             name: layout.name,
             description: None,
             year: None,
@@ -194,10 +194,7 @@ impl From<Layout> for Dof {
             has_generated_shift: false,
         };
 
-        // TODO: make tests to make sure this cannot fail
-        intermediate
-            .try_into()
-            .expect("converting layout to Dof failed!")
+        internal.into()
     }
 }
 
