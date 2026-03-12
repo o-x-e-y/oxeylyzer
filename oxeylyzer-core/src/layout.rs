@@ -1,6 +1,8 @@
-use libdof::prelude::{Dof, Finger, Keyboard, PhysicalKey, Shape};
+use std::collections::BTreeMap;
+
+use libdof::{combos::Combos, magic::Magic, prelude::*};
 use nanorand::{Rng as _, tls_rng};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     REPEAT_KEY, REPLACEMENT_CHAR, Result, SHIFT_CHAR, SPACE_CHAR, cached_layout::FastLayout,
@@ -15,27 +17,37 @@ impl<U: Into<u8>> From<(U, U)> for PosPair {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(from = "Dof")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct LayoutMetadata {
+    pub authors: Vec<String>,
+    pub year: Option<u32>,
+    pub link: Option<String>,
+    pub languages: Vec<Language>,
+    pub anchor: Anchor,
+    pub fingering_name: Option<NamedFingering>,
+    pub parsed_board: ParseKeyboard,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(from = "Dof", into = "Dof")]
 pub struct Layout {
     pub name: String,
     pub keys: Box<[char]>,
     pub fingers: Box<[Finger]>,
     pub keyboard: Box<[PhysicalKey]>,
     pub shape: Shape,
+    pub metadata: LayoutMetadata,
 }
 
-#[inline]
-fn shuffle_pins<T>(slice: &mut [T], pins: &[usize]) {
-    let mapping = (0..slice.len())
-        .filter(|x| !pins.contains(x))
-        .collect::<Vec<_>>();
-    let mut rng = tls_rng();
+#[test]
+fn thing() {
+    let layout =
+        serde_json::from_str::<Layout>(include_str!("../../static/layouts/english/sturdy.dof"))
+            .unwrap();
 
-    for (m, &swap1) in mapping.iter().enumerate() {
-        let swap2 = rng.generate_range(m..mapping.len());
-        slice.swap(swap1, mapping[swap2]);
-    }
+    let s = serde_json::to_string_pretty(&layout).unwrap();
+
+    println!("{s}");
 }
 
 impl Layout {
@@ -59,26 +71,27 @@ impl Layout {
         Ok(dof.into())
     }
 
-    pub fn random(&self) -> Self {
-        self.random_with_pins(&[])
-    }
+    // pub fn random(&self) -> Self {
+    //     self.random_with_pins(&[])
+    // }
 
-    pub fn random_with_pins(&self, pins: &[usize]) -> Self {
-        let shape = self.shape.clone();
-        let fingers = self.fingers.clone();
-        let keyboard = self.keyboard.clone();
+    // pub fn random_with_pins(&self, pins: &[usize]) -> Self {
+    //     let shape = self.shape.clone();
+    //     let fingers = self.fingers.clone();
+    //     let keyboard = self.keyboard.clone();
+    //     let metadata =
 
-        let mut keys = self.keys.clone();
-        shuffle_pins(&mut keys, pins);
+    //     let mut keys = self.keys.clone();
+    //     shuffle_pins(&mut keys, pins);
 
-        Self {
-            name: keys.iter().collect(),
-            keys,
-            fingers,
-            keyboard,
-            shape,
-        }
-    }
+    //     Self {
+    //         name: keys.iter().collect(),
+    //         keys,
+    //         fingers,
+    //         keyboard,
+    //         shape,
+    //     }
+    // }
 }
 
 impl From<Dof> for Layout {
@@ -100,10 +113,33 @@ impl From<Dof> for Layout {
             })
             .collect();
 
-        let name = dof.name().to_owned();
-        let fingers = dof.fingering().keys().copied().collect();
-        let keyboard = dof.board().keys().cloned().collect();
-        let shape = dof.main_layer().shape();
+        let DofInternal {
+            name,
+            authors,
+            board,
+            parsed_board,
+            year,
+            languages,
+            link,
+            anchor,
+            fingering,
+            fingering_name,
+            ..
+        } = dof.into_inner();
+
+        let fingers = fingering.keys().copied().collect();
+        let keyboard = board.keys().cloned().collect();
+        let shape = board.shape();
+
+        let metadata = LayoutMetadata {
+            authors,
+            year,
+            link,
+            languages,
+            anchor,
+            fingering_name,
+            parsed_board,
+        };
 
         Layout {
             name,
@@ -111,7 +147,80 @@ impl From<Dof> for Layout {
             fingers,
             keyboard,
             shape,
+            metadata,
         }
+    }
+}
+
+impl From<Layout> for Dof {
+    fn from(layout: Layout) -> Self {
+        let LayoutMetadata {
+            authors,
+            languages,
+            anchor,
+            fingering_name,
+            parsed_board,
+            ..
+        } = layout.metadata;
+
+        let mut key_iter = layout.keys.into_iter();
+        let main_layer = layout
+            .shape
+            .inner()
+            .iter()
+            .map(|&len| {
+                key_iter
+                    .by_ref()
+                    .take(len)
+                    .map(|c| match c {
+                        REPLACEMENT_CHAR => Key::Empty,
+                        REPEAT_KEY => Key::Special(SpecialKey::Repeat),
+                        SPACE_CHAR => Key::Special(SpecialKey::Space),
+                        SHIFT_CHAR => Key::Special(SpecialKey::Shift),
+                        c => Key::Char(c),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let mut finger_iter = layout.fingers.into_iter();
+        let fingering = layout
+            .shape
+            .inner()
+            .iter()
+            .map(|&len| finger_iter.by_ref().take(len).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+
+        let mut board_iter = layout.keyboard.into_iter();
+        let board = layout
+            .shape
+            .inner()
+            .iter()
+            .map(|&len| board_iter.by_ref().take(len).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+
+        let intermediate = DofInternal {
+            name: layout.name,
+            description: None,
+            year: None,
+            link: None,
+            authors,
+            languages,
+            parsed_board,
+            board: board.into(),
+            layers: BTreeMap::from_iter([("main".into(), main_layer.into())]),
+            anchor,
+            magic: Magic::default(),
+            combos: Combos::default(),
+            fingering: fingering.into(),
+            fingering_name,
+            has_generated_shift: false,
+        };
+
+        // TODO: make tests to make sure this cannot fail
+        intermediate
+            .try_into()
+            .expect("converting layout to Dof failed!")
     }
 }
 

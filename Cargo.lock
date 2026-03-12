@@ -705,9 +705,9 @@ checksum = "6800badb6cb2082ffd7b6a67e6125bb39f18782f793520caee8cb8846be06112"
 
 [[package]]
 name = "libdof"
-version = "0.22.0"
+version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "314066db7488c9beb751f53b6c8c799d7d35bb058ca94b87aed6de15aaebe4b6"
+checksum = "60962033b573cb269419157167f37c9dead9588997cfa30e351123542d0701cc"
 dependencies = [
  "serde",
  "serde_with",

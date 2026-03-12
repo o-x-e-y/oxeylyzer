@@ -114,6 +114,7 @@ impl std::fmt::Display for PosPair {
     }
 }
 
+// TODO: remove
 #[derive(Deserialize, Debug, Clone, Default)]
 pub enum KeyboardType {
     #[default]
