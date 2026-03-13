@@ -47,7 +47,7 @@ pub fn generate_n_with_pins(
         .progress_chars("=>-"));
 
     let mut layouts = layout_gen
-        .generate_n_with_pins_iter(amount, based_on.clone(), pins)
+        .generate_n_with_pins_iter(amount, &based_on, pins)
         .map(|l| (layout_gen.score(&l), l))
         .progress_with(pb)
         .collect::<Vec<_>>();
