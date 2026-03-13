@@ -1018,6 +1018,20 @@ impl LayoutGeneration {
         self.generate_with_pins(basis, &[])
     }
 
+    pub fn generate_with_pins(&self, based_on: &FastLayout, pins: &[usize]) -> FastLayout {
+        let mut layout = based_on.clone();
+
+        if !pins.is_empty() {
+            layout.possible_swaps = layout
+                .possible_swaps
+                .into_iter()
+                .filter(|swap| !pins.contains(&swap.0) && !pins.contains(&swap.1))
+                .collect();
+        }
+
+        self.optimize(layout.random_with_pins(pins))
+    }
+
     pub fn generate_n_iter<'a>(
         &'a self,
         amount: usize,
@@ -1045,20 +1059,6 @@ impl LayoutGeneration {
         (0..amount)
             .into_par_iter()
             .map(move |_| self.optimize(layout.random_with_pins(pins)))
-    }
-
-    pub fn generate_with_pins(&self, based_on: &FastLayout, pins: &[usize]) -> FastLayout {
-        let mut layout = based_on.clone();
-
-        if !pins.is_empty() {
-            layout.possible_swaps = layout
-                .possible_swaps
-                .into_iter()
-                .filter(|swap| !pins.contains(&swap.0) && !pins.contains(&swap.1))
-                .collect();
-        }
-
-        self.optimize(layout.random_with_pins(pins))
     }
 }
 
