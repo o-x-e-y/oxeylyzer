@@ -1,4 +1,4 @@
-use crate::{languages_cfg::read_cfg, weights::FingerWeights};
+use crate::weights::FingerWeights;
 
 use libdof::prelude::{
     Finger::{self, *},
@@ -248,17 +248,6 @@ pub const fn get_scissor_indices() -> [PosPair; 17] {
     res[16] = PosPair(5, 27);
 
     res
-}
-
-pub fn chars_for_generation(language: &str) -> [char; 30] {
-    let languages_cfg_map = read_cfg();
-
-    if let Some(cfg) = languages_cfg_map.get(language) {
-        cfg.chars().collect::<Vec<char>>().try_into().unwrap()
-    } else {
-        let default = languages_cfg_map.get(&String::from("default")).unwrap();
-        default.chars().collect::<Vec<char>>().try_into().unwrap()
-    }
 }
 
 pub trait ApproxEq {

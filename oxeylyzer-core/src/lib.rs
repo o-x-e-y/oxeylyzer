@@ -4,7 +4,6 @@ pub mod char_mapping;
 pub mod corpus_cleaner;
 pub mod data;
 pub mod generate;
-pub mod languages_cfg;
 pub mod layout;
 pub mod trigram_patterns;
 pub mod utility;
