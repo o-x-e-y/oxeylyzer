@@ -7,7 +7,6 @@ use itertools::Itertools;
 use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-use crate::REPEAT_KEY;
 use crate::analyzer_data::AnalyzerData;
 use crate::cached_layout::{Layout as _, *};
 use crate::char_mapping::CharMapping;
@@ -221,7 +220,6 @@ pub struct LayoutGeneration {
     pub language: String,
     pub data: AnalyzerData,
     pub mapping: Arc<CharMapping>,
-    pub repeat_key: usize,
     pub trigram_precision: usize,
     pub trigram_patterns: Box<[TrigramPattern]>,
 
@@ -260,7 +258,6 @@ impl LayoutGeneration {
                 config.trigram_precision(),
             ),
             mapping: data.mapping.clone(),
-            repeat_key: data.mapping.get_u(REPEAT_KEY) as usize, // TODO: remove
             trigram_precision: config.trigram_precision(),
             trigram_patterns: get_trigram_combinations(),
             data,
