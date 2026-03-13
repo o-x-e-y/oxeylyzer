@@ -1037,7 +1037,7 @@ impl LayoutGeneration {
         amount: usize,
         based_on: &FastLayout,
     ) -> impl ParallelIterator<Item = FastLayout> + 'a {
-        self.generate_n_with_pins_iter(amount, &based_on, &[])
+        self.generate_n_with_pins_iter(amount, based_on, &[])
     }
 
     pub fn generate_n_with_pins_iter<'a>(
