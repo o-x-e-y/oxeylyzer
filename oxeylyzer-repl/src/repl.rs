@@ -295,7 +295,7 @@ impl Repl {
         let stats = self.layout_gen.get_layout_stats(layout);
         let score = self.layout_gen.score(layout);
 
-        let layout_str = heatmap_string(&self.layout_gen.data, layout);
+        let layout_str = heatmap_string(layout, &self.layout_gen.data);
 
         println!("{}\n{}\nScore: {:.3}", layout_str, stats, fmt_score(score));
     }
@@ -308,10 +308,9 @@ impl Repl {
         for y in 0..3 {
             for (n, layout) in [&l1, &l2].into_iter().enumerate() {
                 for x in 0..10 {
-                    print!(
-                        "{} ",
-                        heatmap_heat(&self.layout_gen.data, layout.char(x + 10 * y).unwrap())
-                    );
+                    let c = layout.mapping.get_c(layout.char(x + 10 * y).unwrap());
+                    print!("{} ", heatmap_heat(c, &self.layout_gen.data));
+
                     if x == 4 {
                         print!(" ");
                     }
