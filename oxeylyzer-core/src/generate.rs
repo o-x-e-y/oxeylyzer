@@ -185,7 +185,6 @@ impl std::fmt::Display for LayoutStats {
 pub struct LayoutCache {
     // effort: [f64; 30],
     // effort_total: f64,
-    scissors: i64,
     lsbs: i64,
     pinky_ring: i64,
 
@@ -205,7 +204,6 @@ pub struct LayoutCache {
 impl LayoutCache {
     pub fn total_score(&self) -> i64 {
         self.trigrams_total
-            + self.scissors
             + self.lsbs
             + self.pinky_ring
             + self.stretch_total
@@ -223,7 +221,6 @@ pub struct LayoutGeneration {
     pub trigram_precision: usize,
     pub trigram_patterns: Box<[TrigramPattern]>,
 
-    scissor_indices: [PosPair; 17],
     lsb_indices: [PosPair; 16],
     pinky_ring_indices: [PosPair; 18],
 
@@ -262,8 +259,7 @@ impl LayoutGeneration {
             trigram_patterns: get_trigram_combinations(),
             data,
 
-            scissor_indices: get_scissor_indices(), // TODO: remove for generation
-            lsb_indices: get_lsb_indices(),         // TODO: remove for generation
+            lsb_indices: get_lsb_indices(), // TODO: remove for generation
             pinky_ring_indices: get_pinky_ring_indices(),
 
             weights: config.weights.into(),
@@ -306,6 +302,7 @@ impl LayoutGeneration {
             &matrix_physical,
             &self.weights.finger_weights,
         );
+        let scissor_indices = ScissorIndices::new(&matrix_fingers, &matrix_physical, &layout.keys);
         // TODO: pass [char] instead of [u8]
         let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
         let usage_indices = UsageIndices::new(&matrix_fingers);
@@ -317,6 +314,7 @@ impl LayoutGeneration {
             matrix_fingers,
             matrix_physical,
             fspeed_indices,
+            scissor_indices,
             stretch_indices,
             usage_indices,
             possible_swaps,
@@ -340,8 +338,7 @@ impl LayoutGeneration {
             .map(|v| v as f64 / self.data.bigram_total as f64 / 100.0);
 
         let stretches = self.stretch_score(layout) as f64 / self.data.bigram_total as f64;
-        let scissors = (self.scissor_score(layout) as f64 / self.weights.scissors as f64)
-            / self.data.bigram_total as f64;
+        let scissors = (self.scissor_percent(layout) as f64) / self.data.bigram_total as f64;
         let lsbs = (self.lsb_score(layout) as f64 / self.weights.lsbs as f64)
             / self.data.bigram_total as f64;
         let pinky_ring = (self.pinky_ring_score(layout) as f64
@@ -447,12 +444,11 @@ impl LayoutGeneration {
             .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
             .sum::<i64>();
 
-        let scissors = self.scissor_score(layout);
         let lsbs = self.lsb_score(layout);
         let pinky_ring = self.pinky_ring_score(layout);
         let trigram_score = self.trigram_score_iter(layout, self.data.gen_trigrams());
 
-        trigram_score /* - effort */ + fspeed_usage + scissors + lsbs + pinky_ring
+        trigram_score /* - effort */ + fspeed_usage + lsbs + pinky_ring
     }
 
     // fn weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
@@ -576,19 +572,13 @@ impl LayoutGeneration {
     }
 
     #[inline]
-    fn scissor_score(&self, layout: &FastLayout) -> i64 {
-        let mut res = 0;
-
-        for PosPair(p1, p2) in self.scissor_indices {
-            if let Some(c1) = layout.char(p1)
-                && let Some(c2) = layout.char(p2)
-            {
-                res += self.data.get_bigram_u([c1, c2]);
-                res += self.data.get_bigram_u([c2, c1]);
-            }
-        }
-
-        res * self.weights.scissors
+    fn scissor_percent(&self, layout: &FastLayout) -> i64 {
+        layout
+            .scissor_indices
+            .pairs
+            .iter()
+            .map(|&pair| self.pair_scissor(layout, &BigramPair { pair, dist: 1 }))
+            .sum()
     }
 
     #[inline]
@@ -745,6 +735,19 @@ impl LayoutGeneration {
             * dist
     }
 
+    #[inline]
+    pub fn pair_scissor(&self, layout: &FastLayout, pair: &BigramPair) -> i64 {
+        let BigramPair {
+            pair: PosPair(a, b),
+            dist,
+        } = pair;
+
+        let u1 = layout.matrix[*b];
+        let u2 = layout.matrix[*a];
+
+        (self.data.get_bigram_u([u1, u2]) + self.data.get_bigram_u([u2, u1])) * dist
+    }
+
     pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
         #[cfg(test)]
         ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -757,8 +760,6 @@ impl LayoutGeneration {
         }
         res.usage_total = res.usage.iter().sum();
         res.fspeed_total = res.fspeed.iter().sum();
-
-        res.scissors = self.scissor_score(layout);
 
         res.lsbs = self.lsb_score(layout);
 
@@ -825,12 +826,6 @@ impl LayoutGeneration {
                 + usage2
         };
 
-        let scissors_score = if swap.affects_scissor() {
-            self.scissor_score(layout)
-        } else {
-            cache.scissors
-        };
-
         let lsbs_score = if swap.affects_lsb() {
             self.lsb_score(layout)
         } else {
@@ -860,7 +855,6 @@ impl LayoutGeneration {
 
         Some(
             trigrams_score
-                + scissors_score
                 + lsbs_score
                 + pinky_ring_score
                 + stretch_score
@@ -932,10 +926,6 @@ impl LayoutGeneration {
 
         cache.stretch_total = cache.stretch_total - stretch_start + stretch_end;
         cache.trigrams_total = cache.trigrams_total - trigrams_start + trigrams_end;
-
-        if swap.affects_scissor() {
-            cache.scissors = self.scissor_score(layout);
-        }
 
         if swap.affects_lsb() {
             cache.lsbs = self.lsb_score(layout);
@@ -1150,7 +1140,6 @@ mod tests {
         {
             GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
-            assert_eq!(cache.scissors, GEN.scissor_score(&qwerty));
             assert_eq!(cache.usage_total, GEN.usage_score(&qwerty));
             assert_eq!(cache.fspeed_total, GEN.fspeed_score(&qwerty));
             assert_eq!(cache.stretch_total, GEN.stretch_score(&qwerty));

@@ -34,6 +34,7 @@ pub struct FastLayout {
     pub matrix_fingers: Box<[Finger]>,
     pub matrix_physical: Box<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
+    pub scissor_indices: ScissorIndices,
     pub stretch_indices: StretchCache,
     pub usage_indices: UsageIndices,
     pub possible_swaps: Box<[PosPair]>,
@@ -194,6 +195,105 @@ impl FSpeedIndices {
             .collect::<Box<_>>();
 
         Self { fingers, all }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ScissorIndices {
+    pub pairs: Box<[PosPair]>,
+    pub keys_in_scissor: Box<[bool]>,
+}
+
+impl ScissorIndices {
+    pub fn new(fingers: &[Finger], keyboard: &[PhysicalKey], chars: &[char]) -> Self {
+        assert!(
+            fingers.len() <= u8::MAX as usize,
+            "Too many keys to index with u8, max is {}",
+            u8::MAX
+        );
+        assert_eq!(
+            fingers.len(),
+            keyboard.len(),
+            "finger len is not the same as keyboard len: "
+        );
+
+        fn adjacent_fingers_same_hand(f1: Finger, f2: Finger) -> bool {
+            use Finger::*;
+
+            if f1.hand() != f2.hand() {
+                return false;
+            }
+
+            matches!(
+                (f1, f2),
+                (LP, LR)
+                    | (LR, LP)
+                    | (LR, LM)
+                    | (LM, LR)
+                    | (LM, LI)
+                    | (LI, LM)
+                    | (RI, RM)
+                    | (RM, RI)
+                    | (RM, RR)
+                    | (RR, RM)
+                    | (RR, RP)
+                    | (RP, RR)
+            )
+        }
+
+        let pairs = fingers
+            .iter()
+            .zip(keyboard)
+            .enumerate()
+            .tuple_combinations::<(_, _)>()
+            .flat_map(|((i1, (&f1, k1)), (i2, (&f2, k2)))| {
+                if !adjacent_fingers_same_hand(f1, f2) {
+                    return None;
+                }
+
+                let (dx, dy) = ((k1.x() - k2.x()).abs(), (k1.y() - k2.y()).abs());
+
+                println!("{}{}: ({dx}, {dy})", chars[i1], chars[i2]);
+
+                if dy.abs() <= 1.9 {
+                    return None;
+                }
+
+                if f1.is_index() && f2.is_middle() && k1.y() >= k2.y() {
+                    return None;
+                }
+                if f2.is_index() && f1.is_middle() && k1.y() <= k2.y() {
+                    return None;
+                }
+
+                Some(PosPair(i1, i2))
+            })
+            .collect::<Box<_>>();
+
+        let mut keys_in_scissor = vec![false; fingers.len()].into_boxed_slice();
+        for PosPair(i1, i2) in &pairs {
+            if let Some(v) = keys_in_scissor.get_mut(*i1) {
+                *v = true;
+            }
+            if let Some(v) = keys_in_scissor.get_mut(*i2) {
+                *v = true;
+            }
+        }
+
+        Self {
+            pairs,
+            keys_in_scissor,
+        }
+    }
+
+    #[inline]
+    pub fn affects_scissor_idx(&self, index: usize) -> bool {
+        self.keys_in_scissor.get(index).copied().unwrap_or(false)
+    }
+
+    #[inline]
+    pub fn affects_scissor(&self, PosPair(a, b): PosPair) -> bool {
+        self.affects_scissor_idx(a) || self.affects_scissor_idx(b)
     }
 }
 

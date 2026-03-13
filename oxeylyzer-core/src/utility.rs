@@ -63,13 +63,6 @@ impl From<(usize, usize)> for PosPair {
 }
 
 #[rustfmt::skip]
-const AFFECTS_SCISSOR: [bool; 30] = [
-    true,   true,   true,   true,   true,      true,   true,   true,   true,   true,
-    true,   true,   false,  false,  false,     false,  false,  false,  true,   true,
-    true,   true,   true,   false,  true,      false,  false,  true,   true,   true,
-];
-
-#[rustfmt::skip]
 const AFFECTS_LSB: [bool; 30] = [
     false,  false,  true,   false,  true,      true,   false,  true,   false,  false,
     false,  false,  true,   false,  true,      true,   false,  true,   false,  false,
@@ -90,11 +83,6 @@ impl PosPair {
 
     pub const fn new(x1: usize, x2: usize) -> Self {
         Self(x1, x2)
-    }
-
-    #[inline]
-    pub fn affects_scissor(&self) -> bool {
-        *AFFECTS_SCISSOR.get(self.0).unwrap() || *AFFECTS_SCISSOR.get(self.1).unwrap()
     }
 
     #[inline]
@@ -206,50 +194,6 @@ pub const fn get_pinky_ring_indices() -> [PosPair; 18] {
     ]
 }
 
-pub const fn get_scissor_indices() -> [PosPair; 17] {
-    let mut res = [PosPair::default(); 17];
-
-    //these add normal stretching between ajacent columns that stretch between 2 rows except for
-    //qwerty mi and ce (assuming c is typed with index)
-    // let mut i = 0;
-    // let cols = [0, 1, 2, 6, 7, 8];
-
-    // while i < cols.len() {
-    // 	let col_nr = cols[i];
-    // 	if col_nr != 2 {
-    // 		res[i] = PosPair(col_nr, col_nr+21);
-    // 	}
-    // 	if col_nr != 6 {
-    // 		res[i+6] = PosPair(col_nr+1, col_nr+20);
-    // 	}
-    // 	i += 1;
-    // }
-
-    res[0] = PosPair(0, 21);
-    res[1] = PosPair(1, 22);
-    res[2] = PosPair(6, 27);
-    res[3] = PosPair(7, 28);
-    res[4] = PosPair(8, 29);
-    res[5] = PosPair(1, 20);
-    res[6] = PosPair(2, 21);
-    res[7] = PosPair(3, 22);
-    res[8] = PosPair(8, 27);
-    res[9] = PosPair(9, 28);
-
-    //pinky->ring 1u stretches
-    res[10] = PosPair(0, 11);
-    res[11] = PosPair(9, 18);
-    res[12] = PosPair(10, 21);
-    res[13] = PosPair(19, 28);
-
-    //inner index scissors (no qwerty `ni` because of stagger)
-    res[14] = PosPair(2, 24);
-    res[15] = PosPair(22, 4);
-    res[16] = PosPair(5, 27);
-
-    res
-}
-
 pub trait ApproxEq {
     fn approx_eq(self, other: f64, dec: u8) -> bool;
 
@@ -279,24 +223,6 @@ impl ApproxEq for f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ahash::AHashSet as HashSet;
-
-    #[test]
-    fn affects_scissors() {
-        let indices = get_scissor_indices()
-            .into_iter()
-            .flat_map(|PosPair(i1, i2)| [i1, i2])
-            .collect::<HashSet<_>>();
-
-        (0..30).for_each(|i| {
-            if indices.contains(&i) {
-                assert!(AFFECTS_SCISSOR[i], "failed on {i}");
-            } else {
-                assert!(!AFFECTS_SCISSOR[i], "failed on {i}");
-            }
-        });
-    }
-
     #[test]
     fn approx_eq() {
         assert!((0.123456789).approx_eq(0.0, 0));
