@@ -455,6 +455,7 @@ impl Repl {
         freq: impl Fn(&LayoutGeneration, &FastLayout, &BigramPair) -> i64,
         layout: &FastLayout,
         count: usize,
+        reverse_order: bool,
     ) {
         let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
 
@@ -482,7 +483,10 @@ impl Repl {
 
                 Some((fmt, fmt_freq(freq)))
             })
-            .sorted_by(|(_, a), (_, b)| a.total_cmp(b))
+            .sorted_by(|(_, f1), (_, f2)| match reverse_order {
+                true => f2.total_cmp(f1),
+                false => f1.total_cmp(f2),
+            })
             .take(count)
             .for_each(|(bigram, freq)| println!("{bigram}: {:.3}", freq));
     }
@@ -498,6 +502,7 @@ impl Repl {
             LayoutGeneration::pair_sfb,
             &layout,
             count,
+            false,
         );
 
         Ok(())
@@ -514,6 +519,7 @@ impl Repl {
             LayoutGeneration::pair_fspeed,
             &layout,
             count,
+            false,
         );
 
         Ok(())
@@ -530,7 +536,29 @@ impl Repl {
             LayoutGeneration::pair_stretch,
             &layout,
             count,
+            false,
         );
+
+        Ok(())
+    }
+
+    fn scissors(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+        let layout = self.layout(name)?;
+        let count = top_n.unwrap_or(10);
+
+        println!("top {} scissor pairs for {name}:", count);
+
+        let pairs: Vec<BigramPair> = layout
+            .scissor_indices
+            .pairs
+            .iter()
+            .map(|p| BigramPair {
+                pair: *p,
+                dist: 100,
+            })
+            .collect();
+
+        self.bigram_stat(&pairs, LayoutGeneration::pair_scissor, &layout, count, true);
 
         Ok(())
     }
@@ -766,6 +794,7 @@ impl Repl {
             Sfbs(s) => self.sfbs(&s.name, s.count)?,
             Fspeed(s) => self.fspeed(&s.name, s.count)?,
             Stretches(s) => self.stretches(&s.name, s.count)?,
+            Scissors(s) => self.scissors(&s.name, s.count)?,
             Language(l) => self.language(l.language)?,
             Include(l) => self.include(&l.languages)?,
             Languages(_) => self.languages()?,

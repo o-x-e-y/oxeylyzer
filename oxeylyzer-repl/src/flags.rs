@@ -43,6 +43,11 @@ xflags::xflags! {
             required name: String
             optional -c, --count count: usize
         }
+        /// Shows the top n scissors on a layout. 10 by default.
+        cmd scissors {
+            required name: String
+            optional -c, --count count: usize
+        }
         cmd stretches {
             required name: String
             optional -c, --count count: usize
