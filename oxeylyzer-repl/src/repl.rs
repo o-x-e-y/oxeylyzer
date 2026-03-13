@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use itertools::Itertools;
+use itertools::{EitherOrBoth, Itertools};
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
 use oxeylyzer_core::{
@@ -88,7 +88,8 @@ impl Repl {
     where
         P: AsRef<Path>,
     {
-        let config = Config::with_loaded_weights("config.toml");
+        let config_path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../config.toml");
+        let config = Config::with_loaded_weights(config_path);
         let language = config.language.clone();
 
         let thread_pool = rayon::ThreadPoolBuilder::new()
@@ -294,7 +295,7 @@ impl Repl {
         let stats = self.layout_gen.get_layout_stats(layout);
         let score = self.layout_gen.score(layout);
 
-        let layout_str = heatmap_string(&self.layout_gen.data, layout);
+        let layout_str = heatmap_string(layout, &self.layout_gen.data);
 
         println!("{}\n{}\nScore: {:.3}", layout_str, stats, fmt_score(score));
     }
@@ -303,24 +304,21 @@ impl Repl {
         let l1 = self.layout(name1)?;
         let l2 = self.layout(name2)?;
 
-        println!("\n{:31}{}", name1, name2);
-        for y in 0..3 {
-            for (n, layout) in [&l1, &l2].into_iter().enumerate() {
-                for x in 0..10 {
-                    print!(
-                        "{} ",
-                        heatmap_heat(&self.layout_gen.data, layout.char(x + 10 * y).unwrap())
-                    );
-                    if x == 4 {
-                        print!(" ");
-                    }
+        println!("\n{: <32}{}", name1, name2);
+
+        heatmap_string(&l1, &self.layout_gen.data)
+            .split('\n')
+            .zip(l1.formatted_string().split('\n'))
+            .zip_longest(heatmap_string(&l2, &self.layout_gen.data).split('\n'))
+            .for_each(|z| match z {
+                EitherOrBoth::Both((r1, f), r2) => {
+                    let spaces = std::iter::repeat_n(' ', 32 - f.len()).collect::<String>();
+                    println!("{r1}{spaces}{r2}");
                 }
-                if n == 0 {
-                    print!("          ");
-                }
-            }
-            println!();
-        }
+                EitherOrBoth::Left((r1, _)) => println!("{r1}",),
+                EitherOrBoth::Right(r2) => println!("{: <32}{r2}", ""),
+            });
+
         let s1 = self.layout_gen.get_layout_stats(&l1);
         let s2 = self.layout_gen.get_layout_stats(&l2);
         let ts1 = s1.trigram_stats;
@@ -330,6 +328,7 @@ impl Repl {
 
         println!(
             concat!(
+                "\n",
                 "Sfb:                {: <11} Sfb:                {:.3}%\n",
                 "Dsfb:               {: <11} Dsfb:               {:.3}%\n",
                 "Finger Speed:       {: <11} Finger Speed:       {:.3}\n",
@@ -799,5 +798,48 @@ pub fn load_layouts<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Layout>> 
     //     Ok(HashMap::default())
     } else {
         Err(ReplError::NotADirectory(path.as_ref().into()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use once_cell::sync::Lazy;
+
+    use super::*;
+
+    static REPL: Lazy<Repl> = Lazy::new(|| {
+        let path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../static");
+
+        Repl::new(path).unwrap()
+    });
+
+    static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
+        let dof_str = r#"
+            {
+                "name": "Qwerty",
+                "board": "ansi",
+                "layers": {
+                    "main": [
+                        "q w e r t  y u i o p",
+                        "a s d f g  h j k l ;",
+                        "z x c v b  n m , . /"
+                    ]
+                },
+                "fingering": "traditional"
+            }
+        "#;
+
+        let layout = serde_json::from_str::<Layout>(dof_str).unwrap();
+
+        REPL.layout_gen.fast_layout(&layout, &[])
+    });
+
+    #[test]
+    fn pins() {
+        let pins = REPL.pin_positions(&QWERTY, "qwerty".to_string());
+        assert_eq!(pins, vec![0, 1, 2, 3, 4, 5]);
+
+        let pins = REPL.pin_positions(&QWERTY, "wasd".to_string());
+        assert_eq!(pins, vec![1, 10, 11, 12]);
     }
 }

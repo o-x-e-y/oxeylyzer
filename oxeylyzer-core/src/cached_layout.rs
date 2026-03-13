@@ -73,7 +73,7 @@ impl FastLayout {
             res.push('\n');
         }
 
-        res
+        res.trim().to_string()
     }
 }
 
