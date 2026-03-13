@@ -88,7 +88,8 @@ impl Repl {
     where
         P: AsRef<Path>,
     {
-        let config = Config::with_loaded_weights("config.toml");
+        let config_path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../config.toml");
+        let config = Config::with_loaded_weights(config_path);
         let language = config.language.clone();
 
         let thread_pool = rayon::ThreadPoolBuilder::new()
@@ -799,5 +800,48 @@ pub fn load_layouts<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Layout>> 
     //     Ok(HashMap::default())
     } else {
         Err(ReplError::NotADirectory(path.as_ref().into()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use once_cell::sync::Lazy;
+
+    use super::*;
+
+    static REPL: Lazy<Repl> = Lazy::new(|| {
+        let path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../static");
+
+        Repl::new(path).unwrap()
+    });
+
+    static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
+        let dof_str = r#"
+            {
+                "name": "Qwerty",
+                "board": "ansi",
+                "layers": {
+                    "main": [
+                        "q w e r t  y u i o p",
+                        "a s d f g  h j k l ;",
+                        "z x c v b  n m , . /"
+                    ]
+                },
+                "fingering": "traditional"
+            }
+        "#;
+
+        let layout = serde_json::from_str::<Layout>(dof_str).unwrap();
+
+        REPL.layout_gen.fast_layout(&layout, &[])
+    });
+
+    #[test]
+    fn pins() {
+        let pins = REPL.pin_positions(&QWERTY, "qwerty".to_string());
+        assert_eq!(pins, vec![0, 1, 2, 3, 4, 5]);
+
+        let pins = REPL.pin_positions(&QWERTY, "wasd".to_string());
+        assert_eq!(pins, vec![1, 10, 11, 12]);
     }
 }
