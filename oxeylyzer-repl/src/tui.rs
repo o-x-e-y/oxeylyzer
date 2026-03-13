@@ -5,37 +5,24 @@ use oxeylyzer_core::{analyzer_data::AnalyzerData, generate::LayoutGeneration};
 use ansi_rgb::{Colorable, rgb};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 
-pub fn heatmap_heat(data: &AnalyzerData, u: u8) -> String {
-    let complement = 225.0 - (data.get_char_u(u) as f64 / data.char_total as f64) * 1720.0;
+pub fn heatmap_heat(c: char, data: &AnalyzerData) -> String {
+    let complement = 225.0 - (data.get_char(c) as f64 / data.char_total as f64) * 1720.0;
     let complement = complement.max(0.0) as u8;
     let heat = rgb(225, complement, complement);
-    let c = data.mapping.get_c(u);
+
     format!("{}", c.to_string().fg(heat))
 }
 
-pub fn heatmap_string(data: &AnalyzerData, layout: &FastLayout) -> String {
-    let mut res = String::new();
-
-    let mut iter = layout.matrix.iter();
-
-    for &l in layout.shape.inner().iter() {
-        let mut i = 0;
-        for u in iter.by_ref() {
-            res.push_str(heatmap_heat(data, *u).as_str());
-            res.push(' ');
-
-            i += 1;
-
-            if l == i {
-                break;
-            } else if i == 5 {
-                res.push(' ');
-            }
-        }
-        res.push('\n');
-    }
-
-    res
+pub fn heatmap_string(layout: &FastLayout, data: &AnalyzerData) -> String {
+    layout
+        .formatted_string()
+        .chars()
+        .map(|c| match c {
+            ' ' => ' '.to_string(),
+            '\n' => '\n'.to_string(),
+            c => heatmap_heat(c, data),
+        })
+        .collect()
 }
 
 pub fn generate_n_with_pins(
@@ -45,6 +32,7 @@ pub fn generate_n_with_pins(
     pins: &[usize],
 ) -> Vec<FastLayout> {
     if amount == 0 {
+        println!("Optimizing 0 variants took: 0 seconds");
         return Vec::new();
     }
 
@@ -73,7 +61,7 @@ pub fn generate_n_with_pins(
     layouts.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
 
     for (i, (score, layout)) in layouts.iter().enumerate().take(10) {
-        let printable = heatmap_string(&layout_gen.data, layout);
+        let printable = heatmap_string(layout, &layout_gen.data);
         println!("#{}, score: {:.5}\n{}", i, fmt_score(*score), printable);
     }
 

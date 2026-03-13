@@ -1113,7 +1113,8 @@ impl LayoutGeneration {
 
         // Determine which outer columns are free to permute
         let pinned_cols: Vec<usize> = pins.iter().map(|&p| p % 10).collect();
-        let free_cols: Vec<usize> = COLS.iter()
+        let free_cols: Vec<usize> = COLS
+            .iter()
             .copied()
             .filter(|col| !pinned_cols.contains(col))
             .collect();
@@ -1128,7 +1129,11 @@ impl LayoutGeneration {
         while with_col_score < optimized_score {
             optimized_score = self.optimize_cached(&mut layout, &mut cache);
             with_col_score = self.optimize_cols_for(
-                &mut layout, &mut cache, Some(optimized_score), &free_cols, can_swap_indexes,
+                &mut layout,
+                &mut cache,
+                Some(optimized_score),
+                &free_cols,
+                can_swap_indexes,
             );
         }
 
