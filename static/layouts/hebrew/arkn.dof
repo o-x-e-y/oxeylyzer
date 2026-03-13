@@ -1,11 +1,11 @@
 {
-    "name": "default",
+    "name": "arkn",
     "board": "ortho",
     "layers": {
         "main": [
-            ", ' ק ר א  ט ו ן ם פ",
+            "ץ ן ק ר א  ט ו ת ם פ",
             "ש ד ג כ ע  י ח ל ך ף",
-            "ז ס ב ה נ  מ צ ת ץ ."
+            "ז ס ב ה נ  מ צ , . '"
         ]
     },
     "fingering": "traditional"
