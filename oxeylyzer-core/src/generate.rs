@@ -1095,11 +1095,96 @@ impl LayoutGeneration {
 
     pub fn generate_with_pins(&self, basis: &FastLayout, pins: &[usize]) -> FastLayout {
         let mut layout = basis.random_with_pins(pins);
+
+        if !pins.is_empty() {
+            layout.possible_swaps = layout
+                .possible_swaps
+                .iter()
+                .copied()
+                .filter(|swap| !pins.contains(&swap.0) && !pins.contains(&swap.1))
+                .collect();
+        }
+
         let mut cache = self.initialize_cache(&layout);
 
-        self.optimize_cached(&mut layout, &mut cache);
+        if pins.is_empty() {
+            return self.optimize(layout, &mut cache);
+        }
+
+        // Determine which outer columns are free to permute
+        let pinned_cols: Vec<usize> = pins.iter().map(|&p| p % 10).collect();
+        let free_cols: Vec<usize> = COLS.iter()
+            .copied()
+            .filter(|col| !pinned_cols.contains(col))
+            .collect();
+
+        // Check if inner column swap is safe (no pins in columns 3, 4, 5, 6)
+        let can_swap_indexes = !pinned_cols.iter().any(|c| (3..=6).contains(c));
+
+        // Optimization loop matching optimize()
+        let mut with_col_score = SMALLEST_SCORE;
+        let mut optimized_score = SMALLEST_SCORE + 1;
+
+        while with_col_score < optimized_score {
+            optimized_score = self.optimize_cached(&mut layout, &mut cache);
+            with_col_score = self.optimize_cols_for(
+                &mut layout, &mut cache, Some(optimized_score), &free_cols, can_swap_indexes,
+            );
+        }
 
         layout
+    }
+
+    fn optimize_cols_for(
+        &self,
+        layout: &mut FastLayout,
+        cache: &mut LayoutCache,
+        score: Option<i64>,
+        cols: &[usize],
+        can_swap_indexes: bool,
+    ) -> i64 {
+        let mut best_score = score.unwrap_or(cache.total_score);
+        let mut best = layout.clone();
+        let k = cols.len();
+
+        if k > 1 {
+            self.col_perms_for(layout, &mut best, cache, &mut best_score, k, cols);
+
+            if can_swap_indexes {
+                layout.swap_indexes();
+                self.col_perms_for(layout, &mut best, cache, &mut best_score, k, cols);
+            }
+        }
+
+        *layout = best;
+        best_score
+    }
+
+    fn col_perms_for(
+        &self,
+        layout: &mut FastLayout,
+        best: &mut FastLayout,
+        cache: &mut LayoutCache,
+        best_score: &mut i64,
+        k: usize,
+        cols: &[usize],
+    ) {
+        if k == 1 {
+            let new_score = cache.total_score;
+            if new_score > *best_score {
+                *best_score = new_score;
+                *best = layout.clone();
+            }
+            return;
+        }
+        (0..k).for_each(|i| {
+            self.col_perms_for(layout, best, cache, best_score, k - 1, cols);
+            if k.is_multiple_of(2) {
+                self.accept_swap(layout, &PosPair(cols[i], cols[k - 1]), cache);
+            } else {
+                self.accept_swap(layout, &PosPair(cols[0], cols[k - 1]), cache);
+            }
+        });
     }
 }
 
