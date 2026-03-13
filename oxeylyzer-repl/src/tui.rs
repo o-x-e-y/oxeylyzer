@@ -70,7 +70,7 @@ pub fn generate_n_with_pins(
         start.elapsed().as_secs()
     );
 
-    layouts.sort_by_key(|(score, _)| *score);
+    layouts.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
 
     for (i, (score, layout)) in layouts.iter().enumerate().take(10) {
         let printable = heatmap_string(&layout_gen.data, layout);
