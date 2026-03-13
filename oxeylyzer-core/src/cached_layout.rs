@@ -22,10 +22,6 @@ pub trait Layout<T: Copy + Default> {
 
     fn swap_pair(&mut self, pair: &PosPair) -> Option<()>;
 
-    fn swap_cols(&mut self, col1: usize, col2: usize) -> Option<()>;
-
-    fn swap_indexes(&mut self);
-
     fn get_index(&self, index: usize) -> [T; 6];
 }
 
@@ -101,26 +97,6 @@ impl Layout<u8> for FastLayout {
     #[inline(always)]
     fn char(&self, i: usize) -> Option<u8> {
         self.matrix.get(i).copied()
-    }
-
-    fn swap_cols(&mut self, col1: usize, col2: usize) -> Option<()> {
-        if col1 == col2 {
-            return Some(());
-        }
-        if col1 > 9 || col2 > 9 {
-            return None;
-        }
-        // TODO: handle errors properly here
-        self.swap(col1, col2).unwrap();
-        self.swap(col1 + 10, col2 + 10).unwrap();
-        self.swap(col1 + 20, col2 + 20).unwrap();
-
-        Some(())
-    }
-
-    fn swap_indexes(&mut self) {
-        self.swap_cols(3, 6);
-        self.swap_cols(4, 5);
     }
 
     /// Gets all keys in a certain index column. 0 = left index, 1 = right index.
@@ -554,17 +530,6 @@ mod tests {
         assert_eq!(
             qwerty.layout_str(),
             "qwertyuiodaspfghjkl;zxcvbnm,./".to_string()
-        );
-    }
-
-    #[test]
-    fn swap_cols_no_bounds() {
-        let mut qwerty = QWERTY.clone();
-
-        qwerty.swap_cols(1, 9).unwrap();
-        assert_eq!(
-            qwerty.layout_str(),
-            "qpertyuiowa;dfghjklsz/cvbnm,.x".to_string()
         );
     }
 
