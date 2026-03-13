@@ -222,7 +222,6 @@ pub struct LayoutGeneration {
     pub data: AnalyzerData,
     pub mapping: Arc<CharMapping>,
     pub repeat_key: usize,
-    pub chars_for_generation: [u8; 30],
     pub trigram_precision: usize,
     pub trigram_patterns: Box<[TrigramPattern]>,
 
@@ -253,22 +252,8 @@ impl LayoutGeneration {
 
         let data = AnalyzerData::new(data, &config.weights);
 
-        let mut chars_for_generation: [u8; 30] = chars_for_generation(language)
-            .into_iter()
-            .map(|c| data.mapping.get_u(c))
-            .collect::<Vec<_>>()
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("Failed to convert Vec<u8> to [u8; 30]"))?;
-
-        chars_for_generation.sort_by(|&a, &b| {
-            let a = data.get_char_u(a);
-            let b = data.get_char_u(b);
-            b.cmp(&a)
-        });
-
         Ok(Self {
             language: language.to_string(),
-            chars_for_generation, // TODO: remove
             per_char_trigrams: Self::per_char_trigrams(
                 data.gen_trigrams(),
                 data.len() as u8,
