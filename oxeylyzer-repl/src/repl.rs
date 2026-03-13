@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use itertools::Itertools;
+use itertools::{EitherOrBoth, Itertools};
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
 use oxeylyzer_core::{
@@ -304,23 +304,21 @@ impl Repl {
         let l1 = self.layout(name1)?;
         let l2 = self.layout(name2)?;
 
-        println!("\n{:31}{}", name1, name2);
-        for y in 0..3 {
-            for (n, layout) in [&l1, &l2].into_iter().enumerate() {
-                for x in 0..10 {
-                    let c = layout.mapping.get_c(layout.char(x + 10 * y).unwrap());
-                    print!("{} ", heatmap_heat(c, &self.layout_gen.data));
+        println!("\n{: <32}{}", name1, name2);
 
-                    if x == 4 {
-                        print!(" ");
-                    }
+        heatmap_string(&l1, &self.layout_gen.data)
+            .split('\n')
+            .zip(l1.formatted_string().split('\n'))
+            .zip_longest(heatmap_string(&l2, &self.layout_gen.data).split('\n'))
+            .for_each(|z| match z {
+                EitherOrBoth::Both((r1, f), r2) => {
+                    let spaces = std::iter::repeat_n(' ', 32 - f.len()).collect::<String>();
+                    println!("{r1}{spaces}{r2}");
                 }
-                if n == 0 {
-                    print!("          ");
-                }
-            }
-            println!();
-        }
+                EitherOrBoth::Left((r1, _)) => println!("{r1}",),
+                EitherOrBoth::Right(r2) => println!("{: <32}{r2}", ""),
+            });
+
         let s1 = self.layout_gen.get_layout_stats(&l1);
         let s2 = self.layout_gen.get_layout_stats(&l2);
         let ts1 = s1.trigram_stats;
@@ -330,6 +328,7 @@ impl Repl {
 
         println!(
             concat!(
+                "\n",
                 "Sfb:                {: <11} Sfb:                {:.3}%\n",
                 "Dsfb:               {: <11} Dsfb:               {:.3}%\n",
                 "Finger Speed:       {: <11} Finger Speed:       {:.3}\n",
