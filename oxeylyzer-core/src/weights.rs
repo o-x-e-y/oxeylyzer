@@ -11,6 +11,7 @@ pub struct MaxFingerUse {
     pub ring: f64,
     pub middle: f64,
     pub index: f64,
+    pub thumb: f64,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -42,6 +43,7 @@ pub struct AnalyzerMaxFingerUse {
     pub ring: i64,
     pub middle: i64,
     pub index: i64,
+    pub thumb: i64,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -71,12 +73,12 @@ impl From<Weights> for AnalyzerWeights {
         let scale = |float| (float * 100.0) as i64;
 
         let max_finger_use = AnalyzerMaxFingerUse {
-            // TODO: this is probably wrong
             penalty: scale(weights.max_finger_use.penalty),
             pinky: scale(weights.max_finger_use.pinky),
             ring: scale(weights.max_finger_use.ring),
             middle: scale(weights.max_finger_use.middle),
             index: scale(weights.max_finger_use.index),
+            thumb: scale(weights.max_finger_use.thumb),
         };
 
         Self {
@@ -121,13 +123,13 @@ impl Config {
         let mut load = toml::from_str::<Self>(&buf)
             .expect("Failed to parse config.toml. Values might be missing.");
 
-        // TODO: figure out how this should even work
         load.weights.max_finger_use = MaxFingerUse {
             penalty: load.weights.max_finger_use.penalty,
             pinky: load.weights.max_finger_use.pinky / 100.0,
             ring: load.weights.max_finger_use.ring / 100.0,
             middle: load.weights.max_finger_use.middle / 100.0,
             index: load.weights.max_finger_use.index / 100.0,
+            thumb: load.weights.max_finger_use.thumb / 100.0,
         };
 
         Self {
@@ -178,6 +180,7 @@ impl Config {
                     ring: 16.0,
                     middle: 19.5,
                     index: 18.0,
+                    thumb: 22.0,
                 },
             },
         }

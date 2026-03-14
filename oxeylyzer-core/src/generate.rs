@@ -641,7 +641,9 @@ impl LayoutGeneration {
                 Finger::LI | Finger::RI => {
                     usage - self.weights.max_finger_use.index * self.data.char_total / 100
                 }
-                Finger::LT | Finger::RT => 0, // TODO: fix for thumb
+                Finger::LT | Finger::RT => {
+                    usage - self.weights.max_finger_use.thumb * self.data.char_total / 100
+                }
             }
     }
 
