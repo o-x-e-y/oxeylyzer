@@ -216,7 +216,7 @@ pub struct LayoutGeneration {
     pub data: AnalyzerData,
     pub mapping: Arc<CharMapping>,
     pub trigram_precision: usize,
-    pub trigram_patterns: Box<[TrigramPattern]>,
+    pub trigram_patterns: Box<[TrigramPattern; 1000]>,
 
     per_char_trigrams: PerCharTrigrams,
 
@@ -323,7 +323,6 @@ impl LayoutGeneration {
         let dsfb2 = self.bigram_percent(layout, self.data.skipgrams2(), self.data.skipgram2_total);
         let dsfb3 = self.bigram_percent(layout, self.data.skipgrams3(), self.data.skipgram3_total);
 
-        // TODO: rework conversion to f64
         let cache = self.initialize_cache(layout);
         let fspeed = cache.fspeed_total as f64 / self.data.bigram_total as f64 / 100.0;
         let finger_speed = cache
@@ -376,20 +375,20 @@ impl LayoutGeneration {
         &[t1, t2, t3]: &[u8; 3],
     ) -> TrigramPattern {
         let a = match layout.char_to_finger.get(t1 as usize) {
-            Some(&Some(v)) => v as usize,
+            Some(&Some(f)) => f as usize,
             _ => return TrigramPattern::Invalid,
         };
         let b = match layout.char_to_finger.get(t2 as usize) {
-            Some(&Some(v)) => v as usize,
+            Some(&Some(f)) => f as usize,
             _ => return TrigramPattern::Invalid,
         };
         let c = match layout.char_to_finger.get(t3 as usize) {
-            Some(&Some(v)) => v as usize,
+            Some(&Some(f)) => f as usize,
             _ => return TrigramPattern::Invalid,
         };
 
         let index = a * 100 + b * 10 + c;
-        self.trigram_patterns[index] // TODO: handle out of bounds
+        self.trigram_patterns[index]
     }
 
     pub fn trigram_stats(
