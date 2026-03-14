@@ -295,8 +295,7 @@ impl LayoutGeneration {
         let scissor_indices = ScissorIndices::new(&matrix_fingers, &matrix_physical);
         let lsb_indices = LsbIndices::new(&matrix_fingers, &matrix_physical);
         let pinky_ring_indices = PinkyRingIndices::new(&matrix_fingers);
-        // TODO: pass [char] instead of [u8]
-        let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
+        let stretch_indices = StretchCache::new(&layout.keys, &matrix_fingers, &matrix_physical);
         let usage_indices = UsageIndices::new(&matrix_fingers);
 
         FastLayout {

@@ -430,7 +430,7 @@ pub struct StretchCache {
 }
 
 impl StretchCache {
-    pub fn new(keys: &[u8], fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
+    pub fn new(keys: &[char], fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
         assert!(
             fingers.len() <= u8::MAX as usize,
             "Too many keys to index with u8, max is {}",
