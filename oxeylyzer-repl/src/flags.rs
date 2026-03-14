@@ -48,6 +48,11 @@ xflags::xflags! {
             required name: String
             optional -c, --count count: usize
         }
+        /// Shows the top n pinky-ring bigrams on a layout. 10 by default.
+        cmd pinkyring pinky-ring pr {
+            required name: String
+            optional -c, --count count: usize
+        }
         cmd stretches {
             required name: String
             optional -c, --count count: usize

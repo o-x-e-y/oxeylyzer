@@ -517,6 +517,26 @@ impl Repl {
         Ok(())
     }
 
+    fn pinky_ring(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+        let layout = self.layout(name)?;
+        let count = top_n
+            .unwrap_or(10)
+            .min(layout.pinky_ring_indices.pairs.len());
+
+        println!("top {} pinky-ring bigrams for {name}:", count);
+
+        let pairs: Vec<BigramPair> = layout
+            .pinky_ring_indices
+            .pairs
+            .iter()
+            .map(|p| BigramPair { pair: *p, dist: 1 })
+            .collect();
+
+        self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, &layout, count, true);
+
+        Ok(())
+    }
+
     fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10).min(layout.fspeed_indices.all.len());
@@ -803,6 +823,7 @@ impl Repl {
             Fspeed(s) => self.fspeed(&s.name, s.count)?,
             Stretches(s) => self.stretches(&s.name, s.count)?,
             Scissors(s) => self.scissors(&s.name, s.count)?,
+            Pinkyring(s) => self.pinky_ring(&s.name, s.count)?,
             Language(l) => self.language(l.language)?,
             Include(l) => self.include(&l.languages)?,
             Languages(_) => self.languages()?,
