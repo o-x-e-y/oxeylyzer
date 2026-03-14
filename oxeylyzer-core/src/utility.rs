@@ -69,13 +69,6 @@ const AFFECTS_LSB: [bool; 30] = [
     false,  false,  true,   false,  true,      true,   false,  true,   false,  false,
 ];
 
-#[rustfmt::skip]
-const AFFECTS_PINKY_RING: [bool; 30] = [
-    true,   true,   false,  false,  false,     false,  false,  false,  true,   true,
-    true,   true,   false,  false,  false,     false,  false,  false,  true,   true,
-    true,   true,   false,  false,  false,     false,  false,  false,  true,   true,
-];
-
 impl PosPair {
     pub const fn default() -> Self {
         Self(0, 0)
@@ -88,11 +81,6 @@ impl PosPair {
     #[inline]
     pub fn affects_lsb(&self) -> bool {
         *AFFECTS_LSB.get(self.0).unwrap() || *AFFECTS_LSB.get(self.1).unwrap()
-    }
-
-    #[inline]
-    pub fn affects_pinky_ring(&self) -> bool {
-        *AFFECTS_PINKY_RING.get(self.0).unwrap() || *AFFECTS_PINKY_RING.get(self.1).unwrap()
     }
 }
 
@@ -169,29 +157,6 @@ pub const fn get_lsb_indices() -> [PosPair; 16] {
         i += 1;
     }
     res
-}
-
-pub const fn get_pinky_ring_indices() -> [PosPair; 18] {
-    [
-        PosPair(0, 1),
-        PosPair(0, 11),
-        PosPair(0, 21),
-        PosPair(11, 1),
-        PosPair(11, 11),
-        PosPair(11, 21),
-        PosPair(21, 1),
-        PosPair(21, 11),
-        PosPair(21, 21),
-        PosPair(8, 9),
-        PosPair(8, 19),
-        PosPair(8, 29),
-        PosPair(18, 9),
-        PosPair(18, 19),
-        PosPair(18, 29),
-        PosPair(28, 9),
-        PosPair(28, 19),
-        PosPair(28, 29),
-    ]
 }
 
 pub trait ApproxEq {

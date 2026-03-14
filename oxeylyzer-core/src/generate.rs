@@ -222,7 +222,6 @@ pub struct LayoutGeneration {
     pub trigram_patterns: Box<[TrigramPattern]>,
 
     lsb_indices: [PosPair; 16],
-    pinky_ring_indices: [PosPair; 18],
 
     per_char_trigrams: PerCharTrigrams,
 
@@ -260,7 +259,6 @@ impl LayoutGeneration {
             data,
 
             lsb_indices: get_lsb_indices(), // TODO: remove for generation
-            pinky_ring_indices: get_pinky_ring_indices(),
 
             weights: config.weights.into(),
         })
@@ -303,6 +301,7 @@ impl LayoutGeneration {
             &self.weights.finger_weights,
         );
         let scissor_indices = ScissorIndices::new(&matrix_fingers, &matrix_physical, &layout.keys);
+        let pinky_ring_indices = PinkyRingIndices::new(&matrix_fingers);
         // TODO: pass [char] instead of [u8]
         let stretch_indices = StretchCache::new(&matrix, &matrix_fingers, &matrix_physical);
         let usage_indices = UsageIndices::new(&matrix_fingers);
@@ -315,6 +314,7 @@ impl LayoutGeneration {
             matrix_physical,
             fspeed_indices,
             scissor_indices,
+            pinky_ring_indices,
             stretch_indices,
             usage_indices,
             possible_swaps,
@@ -600,7 +600,7 @@ impl LayoutGeneration {
     fn pinky_ring_score(&self, layout: &FastLayout) -> i64 {
         let mut res = 0;
 
-        for PosPair(p1, p2) in self.pinky_ring_indices {
+        for &PosPair(p1, p2) in layout.pinky_ring_indices.pairs.iter() {
             if let Some(c1) = layout.char(p1)
                 && let Some(c2) = layout.char(p2)
             {
@@ -819,7 +819,7 @@ impl LayoutGeneration {
             cache.lsbs
         };
 
-        let pinky_ring_score = if swap.affects_pinky_ring() {
+        let pinky_ring_score = if layout.pinky_ring_indices.affects_pinky_ring(*swap) {
             self.pinky_ring_score(layout)
         } else {
             cache.pinky_ring
@@ -918,7 +918,7 @@ impl LayoutGeneration {
             cache.lsbs = self.lsb_score(layout);
         }
 
-        if swap.affects_pinky_ring() {
+        if layout.pinky_ring_indices.affects_pinky_ring(*swap) {
             cache.pinky_ring = self.pinky_ring_score(layout);
         }
 

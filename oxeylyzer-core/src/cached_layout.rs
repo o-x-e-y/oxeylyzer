@@ -35,6 +35,7 @@ pub struct FastLayout {
     pub matrix_physical: Box<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
     pub scissor_indices: ScissorIndices,
+    pub pinky_ring_indices: PinkyRingIndices,
     pub stretch_indices: StretchCache,
     pub usage_indices: UsageIndices,
     pub possible_swaps: Box<[PosPair]>,
@@ -294,6 +295,73 @@ impl ScissorIndices {
     #[inline]
     pub fn affects_scissor(&self, PosPair(a, b): PosPair) -> bool {
         self.affects_scissor_idx(a) || self.affects_scissor_idx(b)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PinkyRingIndices {
+    pub pairs: Box<[PosPair]>,
+    pub keys_in_pinky_ring: Box<[bool]>,
+}
+
+impl PinkyRingIndices {
+    pub fn new(fingers: &[Finger]) -> Self {
+        assert!(
+            fingers.len() <= u8::MAX as usize,
+            "Too many keys to index with u8, max is {}",
+            u8::MAX
+        );
+
+        use Finger::*;
+
+        let is_pinky = |f: Finger| matches!(f, LP | RP);
+        let is_ring = |f: Finger| matches!(f, LR | RR);
+
+        let pairs = fingers
+            .iter()
+            .enumerate()
+            .tuple_combinations::<(_, _)>()
+            .filter_map(|((i1, &f1), (i2, &f2))| {
+                // same hand only
+                if f1.hand() != f2.hand() {
+                    return None;
+                }
+
+                let (a_pinky_b_ring, a_ring_b_pinky) =
+                    (is_pinky(f1) && is_ring(f2), is_ring(f1) && is_pinky(f2));
+
+                if a_pinky_b_ring || a_ring_b_pinky {
+                    Some(PosPair(i1, i2))
+                } else {
+                    None
+                }
+            })
+            .collect::<Box<_>>();
+
+        let mut keys_in_pinky_ring = vec![false; fingers.len()].into_boxed_slice();
+        for PosPair(i1, i2) in &pairs {
+            if let Some(v) = keys_in_pinky_ring.get_mut(*i1) {
+                *v = true;
+            }
+            if let Some(v) = keys_in_pinky_ring.get_mut(*i2) {
+                *v = true;
+            }
+        }
+
+        Self {
+            pairs,
+            keys_in_pinky_ring,
+        }
+    }
+
+    #[inline]
+    pub fn affects_pinky_ring_idx(&self, index: usize) -> bool {
+        self.keys_in_pinky_ring.get(index).copied().unwrap_or(false)
+    }
+
+    #[inline]
+    pub fn affects_pinky_ring(&self, PosPair(a, b): PosPair) -> bool {
+        self.affects_pinky_ring_idx(a) || self.affects_pinky_ring_idx(b)
     }
 }
 
