@@ -48,11 +48,17 @@ xflags::xflags! {
             required name: String
             optional -c, --count count: usize
         }
+        /// Shows the top n lsbs on a layout. 10 by default.
+        cmd lsbs {
+            required name: String
+            optional -c, --count count: usize
+        }
         /// Shows the top n pinky-ring bigrams on a layout. 10 by default.
         cmd pinkyring pinky-ring pr {
             required name: String
             optional -c, --count count: usize
         }
+        /// Shows the top n stretches on a layout. 10 by default.
         cmd stretches {
             required name: String
             optional -c, --count count: usize

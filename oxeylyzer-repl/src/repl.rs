@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use itertools::{EitherOrBoth, Itertools};
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
+use oxeylyzer_core::utility::PosPair;
 use oxeylyzer_core::{
     cached_layout::{Layout as _, *},
     generate::LayoutGeneration,
@@ -500,6 +501,15 @@ impl Repl {
             .for_each(|(bigram, freq)| println!("{bigram}: {}", fmt_freq(freq)));
     }
 
+    fn percent_stat(&self, layout: &FastLayout, count: usize, indices: &[PosPair]) {
+        let pairs: Vec<BigramPair> = indices
+            .iter()
+            .map(|p| BigramPair { pair: *p, dist: 1 })
+            .collect();
+
+        self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, &layout, count, true);
+    }
+
     fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10).min(layout.fspeed_indices.all.len());
@@ -587,6 +597,17 @@ impl Repl {
             .collect();
 
         self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, &layout, count, true);
+
+        Ok(())
+    }
+
+    fn lsbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+        let layout = self.layout(name)?;
+        let count = top_n.unwrap_or(10).min(layout.lsb_indices.pairs.len());
+
+        println!("top {} lsbs for {name}:", count);
+
+        self.percent_stat(&layout, count, &layout.lsb_indices.pairs);
 
         Ok(())
     }
@@ -823,6 +844,7 @@ impl Repl {
             Fspeed(s) => self.fspeed(&s.name, s.count)?,
             Stretches(s) => self.stretches(&s.name, s.count)?,
             Scissors(s) => self.scissors(&s.name, s.count)?,
+            Lsbs(s) => self.lsbs(&s.name, s.count)?,
             Pinkyring(s) => self.pinky_ring(&s.name, s.count)?,
             Language(l) => self.language(l.language)?,
             Include(l) => self.include(&l.languages)?,
