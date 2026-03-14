@@ -7,12 +7,26 @@ use crate::{
     REPEAT_KEY, REPLACEMENT_CHAR, Result, SHIFT_CHAR, SPACE_CHAR, cached_layout::FastLayout,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PosPair(pub u8, pub u8);
+pub type Pos = u8;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct PosPair(pub Pos, pub Pos);
+
+impl PosPair {
+    pub const fn new(a: Pos, b: Pos) -> Self {
+        Self(a, b)
+    }
+}
 
 impl<U: Into<u8>> From<(U, U)> for PosPair {
     fn from((p1, p2): (U, U)) -> Self {
         Self(p1.into(), p2.into())
+    }
+}
+
+impl std::fmt::Display for PosPair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.0, self.1)
     }
 }
 

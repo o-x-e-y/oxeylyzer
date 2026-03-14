@@ -3,7 +3,7 @@ use libdof::prelude::Finger;
 use crate::{
     cached_layout::*,
     generate::{LayoutGeneration, SMALLEST_SCORE},
-    utility::*,
+    layout::PosPair,
 };
 
 impl LayoutGeneration {

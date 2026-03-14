@@ -53,43 +53,6 @@ pub static DEFAULT_FINGER_WEIGHTS: FingerWeights = FingerWeights {
     rp: 1.4,
 };
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PosPair(pub usize, pub usize);
-
-impl From<(usize, usize)> for PosPair {
-    fn from((p1, p2): (usize, usize)) -> Self {
-        Self(p1, p2)
-    }
-}
-
-#[rustfmt::skip]
-const AFFECTS_LSB: [bool; 30] = [
-    false,  false,  true,   false,  true,      true,   false,  true,   false,  false,
-    false,  false,  true,   false,  true,      true,   false,  true,   false,  false,
-    false,  false,  true,   false,  true,      true,   false,  true,   false,  false,
-];
-
-impl PosPair {
-    pub const fn default() -> Self {
-        Self(0, 0)
-    }
-
-    pub const fn new(x1: usize, x2: usize) -> Self {
-        Self(x1, x2)
-    }
-
-    #[inline]
-    pub fn affects_lsb(&self) -> bool {
-        *AFFECTS_LSB.get(self.0).unwrap() || *AFFECTS_LSB.get(self.1).unwrap()
-    }
-}
-
-impl std::fmt::Display for PosPair {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {})", self.0, self.1)
-    }
-}
-
 // TODO: remove
 #[derive(Deserialize, Debug, Clone, Default)]
 pub enum KeyboardType {

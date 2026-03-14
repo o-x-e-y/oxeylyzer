@@ -6,7 +6,10 @@ use libdof::prelude::{Finger, PhysicalKey, Shape};
 use serde::Serialize;
 
 use crate::{
-    char_mapping::CharMapping, layout::LayoutMetadata, utility::*, weights::FingerWeights,
+    char_mapping::CharMapping,
+    layout::{LayoutMetadata, Pos, PosPair},
+    utility::*,
+    weights::FingerWeights,
 };
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
@@ -16,9 +19,9 @@ pub trait Layout<T: Copy + Default> {
 
     fn random_with_pins(&self, pins: &[usize]) -> Self;
 
-    fn char(&self, i: usize) -> Option<T>;
+    fn char(&self, i: Pos) -> Option<T>;
 
-    fn swap(&mut self, i1: usize, i2: usize) -> Option<()>;
+    fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()>;
 
     fn swap_pair(&mut self, pair: &PosPair) -> Option<()>;
 
@@ -98,8 +101,8 @@ impl Layout<u8> for FastLayout {
     }
 
     #[inline(always)]
-    fn char(&self, i: usize) -> Option<u8> {
-        self.matrix.get(i).copied()
+    fn char(&self, i: Pos) -> Option<u8> {
+        self.matrix.get(i as usize).copied()
     }
 
     /// Gets all keys in a certain index column. 0 = left index, 1 = right index.
@@ -115,15 +118,17 @@ impl Layout<u8> for FastLayout {
     }
 
     #[inline(always)]
-    fn swap(&mut self, i1: usize, i2: usize) -> Option<()> {
+    fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()> {
         let char1 = self.char(i1)?;
         let char2 = self.char(i2)?;
 
-        *self.matrix.get_mut(i1)? = char2;
-        *self.matrix.get_mut(i2)? = char1;
+        *self.matrix.get_mut(i1 as usize)? = char2;
+        *self.matrix.get_mut(i2 as usize)? = char1;
 
-        *self.char_to_finger.get_mut(char1 as usize)? = Some(*self.matrix_fingers.get(i2)?);
-        *self.char_to_finger.get_mut(char2 as usize)? = Some(*self.matrix_fingers.get(i1)?);
+        *self.char_to_finger.get_mut(char1 as usize)? =
+            Some(*self.matrix_fingers.get(i2 as usize)?);
+        *self.char_to_finger.get_mut(char2 as usize)? =
+            Some(*self.matrix_fingers.get(i1 as usize)?);
 
         Some(())
     }
@@ -174,7 +179,7 @@ impl FSpeedIndices {
                 fingers
                     .iter()
                     .zip(keyboard)
-                    .zip(0usize..)
+                    .zip(0u8..)
                     .filter_map(|((f, k), i)| (f == &finger).then_some((k, i)))
                     .tuple_combinations::<(_, _)>()
                     .map(|((k1, i1), (k2, i2))| {
@@ -247,6 +252,7 @@ impl ScissorIndices {
             .iter()
             .zip(keyboard)
             .enumerate()
+            .map(|(i, t)| (i as u8, t))
             .tuple_combinations::<(_, _)>()
             .flat_map(|((i1, (&f1, k1)), (i2, (&f2, k2)))| {
                 if !adjacent_fingers_same_hand(f1, f2) {
@@ -272,10 +278,10 @@ impl ScissorIndices {
 
         let mut keys_in_scissor = vec![false; fingers.len()].into_boxed_slice();
         for PosPair(i1, i2) in &pairs {
-            if let Some(v) = keys_in_scissor.get_mut(*i1) {
+            if let Some(v) = keys_in_scissor.get_mut(*i1 as usize) {
                 *v = true;
             }
-            if let Some(v) = keys_in_scissor.get_mut(*i2) {
+            if let Some(v) = keys_in_scissor.get_mut(*i2 as usize) {
                 *v = true;
             }
         }
@@ -287,8 +293,11 @@ impl ScissorIndices {
     }
 
     #[inline]
-    pub fn affects_scissor_idx(&self, index: usize) -> bool {
-        self.keys_in_scissor.get(index).copied().unwrap_or(false)
+    pub fn affects_scissor_idx(&self, pos: Pos) -> bool {
+        self.keys_in_scissor
+            .get(pos as usize)
+            .copied()
+            .unwrap_or(false)
     }
 
     #[inline]
@@ -319,6 +328,7 @@ impl LsbIndices {
             .iter()
             .zip(keyboard)
             .enumerate()
+            .map(|(i, t)| (i as u8, t))
             .tuple_combinations::<(_, _)>()
             .filter_map(|((i1, (&f1, k1)), (i2, (&f2, k2)))| {
                 if f1.hand() != f2.hand() {
@@ -364,6 +374,7 @@ impl PinkyRingIndices {
         let pairs = fingers
             .iter()
             .enumerate()
+            .map(|(i, t)| (i as u8, t))
             .tuple_combinations::<(_, _)>()
             .filter_map(|((i1, &f1), (i2, &f2))| {
                 // same hand only
@@ -384,10 +395,10 @@ impl PinkyRingIndices {
 
         let mut keys_in_pinky_ring = vec![false; fingers.len()].into_boxed_slice();
         for PosPair(i1, i2) in &pairs {
-            if let Some(v) = keys_in_pinky_ring.get_mut(*i1) {
+            if let Some(v) = keys_in_pinky_ring.get_mut(*i1 as usize) {
                 *v = true;
             }
-            if let Some(v) = keys_in_pinky_ring.get_mut(*i2) {
+            if let Some(v) = keys_in_pinky_ring.get_mut(*i2 as usize) {
                 *v = true;
             }
         }
@@ -399,8 +410,11 @@ impl PinkyRingIndices {
     }
 
     #[inline]
-    pub fn affects_pinky_ring_idx(&self, index: usize) -> bool {
-        self.keys_in_pinky_ring.get(index).copied().unwrap_or(false)
+    pub fn affects_pinky_ring_idx(&self, pos: Pos) -> bool {
+        self.keys_in_pinky_ring
+            .get(pos as usize)
+            .copied()
+            .unwrap_or(false)
     }
 
     #[inline]
@@ -433,6 +447,7 @@ impl StretchCache {
             .zip(fingers)
             .zip(keys)
             .enumerate()
+            .map(|(i, t)| (i as u8, t))
             .tuple_combinations::<(_, _)>()
             .filter(|((_, ((_, f1), _)), (_, ((_, f2), _)))| f1 != f2 && (f1.hand() == f2.hand()))
             .filter_map(|((i1, ((k1, &f1), _c1)), (i2, ((k2, &f2), _c2)))| {
@@ -460,8 +475,8 @@ impl StretchCache {
 
         // println!("pair count: {}", all_pairs.len());
 
-        let per_keypair = (0..(fingers.len()))
-            .cartesian_product(0..(fingers.len()))
+        let per_keypair = (0..(fingers.len() as u8))
+            .cartesian_product(0..(fingers.len() as u8))
             .map(|(i1, i2)| {
                 let is = [i1, i2];
 

@@ -11,9 +11,8 @@ use crate::analyzer_data::AnalyzerData;
 use crate::cached_layout::{Layout as _, *};
 use crate::char_mapping::CharMapping;
 use crate::data::Data;
-use crate::layout::Layout;
+use crate::layout::{Layout, PosPair};
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
-use crate::utility::*;
 use crate::weights::{AnalyzerWeights, Config};
 
 pub type CharacterData = Box<[f64]>;
@@ -275,8 +274,8 @@ impl LayoutGeneration {
         let metadata = layout.metadata.clone();
 
         // TODO: use layout.rs u8 PosPair at one point
-        let possible_swaps = (0..(matrix.len()))
-            .filter(|v| !pins.contains(v))
+        let possible_swaps = (0..(matrix.len() as u8))
+            .filter(|v| !pins.contains(&(*v as usize)))
             .tuple_combinations::<(_, _)>()
             .map(Into::into)
             .collect();
@@ -610,8 +609,8 @@ impl LayoutGeneration {
                      dist,
                      pair: PosPair(a, b),
                  }| {
-                    let u1 = layout.matrix[*a];
-                    let u2 = layout.matrix[*b];
+                    let u1 = layout.matrix[*a as usize];
+                    let u2 = layout.matrix[*b as usize];
 
                     // TODO: rework with duplicated bigram logic
                     (self.data.get_stretch_weighted_bigram_u([u1, u2])
@@ -711,16 +710,20 @@ impl LayoutGeneration {
     #[inline]
     pub fn pair_stretch(&self, layout: &FastLayout, pair: &BigramPair) -> i64 {
         let BigramPair {
-            pair: PosPair(a, b),
+            pair: PosPair(p1, p2),
             dist,
         } = pair;
 
-        let u1 = layout.matrix[*b];
-        let u2 = layout.matrix[*a];
-
-        (self.data.get_stretch_weighted_bigram_u([u1, u2])
-            + self.data.get_stretch_weighted_bigram_u([u2, u1]))
-            * dist
+        if let Some(c1) = layout.char(*p1)
+            && let Some(c2) = layout.char(*p2)
+        {
+            // TODO: rework with duplicate bigram logic
+            (self.data.get_stretch_weighted_bigram_u([c1, c2])
+                + self.data.get_stretch_weighted_bigram_u([c2, c1]))
+                * dist
+        } else {
+            0
+        }
     }
 
     pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
@@ -772,8 +775,9 @@ impl LayoutGeneration {
 
         layout.swap_pair(swap);
 
-        let f1 = layout.matrix_fingers[i1];
-        let f2 = layout.matrix_fingers[i2];
+        // TODO: make function that can return option
+        let f1 = layout.matrix_fingers[i1 as usize];
+        let f2 = layout.matrix_fingers[i2 as usize];
 
         let fspeed_score = if f1 == f2 {
             let fspeed = self.finger_fspeed(layout, f1);
@@ -840,8 +844,9 @@ impl LayoutGeneration {
 
         layout.swap_pair(swap).unwrap();
 
-        let f1 = layout.matrix_fingers[i1];
-        let f2 = layout.matrix_fingers[i2];
+        // TODO: make function that can return Option
+        let f1 = layout.matrix_fingers[i1 as usize];
+        let f2 = layout.matrix_fingers[i2 as usize];
 
         cache.fspeed_total = if f1 == f2 {
             let fspeed = self.finger_fspeed(layout, f1);
@@ -955,7 +960,9 @@ impl LayoutGeneration {
             layout.possible_swaps = layout
                 .possible_swaps
                 .into_iter()
-                .filter(|swap| !pins.contains(&swap.0) && !pins.contains(&swap.1))
+                .filter(|&PosPair(a, b)| {
+                    !pins.contains(&(a as usize)) && !pins.contains(&(b as usize))
+                })
                 .collect();
         }
 
@@ -982,7 +989,9 @@ impl LayoutGeneration {
             layout.possible_swaps = layout
                 .possible_swaps
                 .into_iter()
-                .filter(|swap| !pins.contains(&swap.0) && !pins.contains(&swap.1))
+                .filter(|&PosPair(a, b)| {
+                    !pins.contains(&(a as usize)) && !pins.contains(&(b as usize))
+                })
                 .collect();
         }
 

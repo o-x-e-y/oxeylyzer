@@ -7,11 +7,10 @@ use std::path::{Path, PathBuf};
 use itertools::{EitherOrBoth, Itertools};
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
-use oxeylyzer_core::utility::PosPair;
 use oxeylyzer_core::{
     cached_layout::{Layout as _, *},
     generate::LayoutGeneration,
-    layout::Layout,
+    layout::{Layout, PosPair},
     rayon,
     weights::Config,
 };
@@ -424,7 +423,7 @@ impl Repl {
                     .position(|&k| k == self.layout_gen.mapping.get_u(c2));
 
                 match (p1, p2) {
-                    (Some(p1), Some(p2)) => assert!(layout.swap(p1, p2).is_some()),
+                    (Some(p1), Some(p2)) => assert!(layout.swap(p1 as u8, p2 as u8).is_some()),
                     (Some(_), None) => {
                         println!("Couldn't swap {c1}{c2} because {c1} is not on the layout.")
                     }
