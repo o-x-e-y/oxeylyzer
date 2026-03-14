@@ -294,7 +294,7 @@ impl LayoutGeneration {
             &matrix_physical,
             &self.weights.finger_weights,
         );
-        let scissor_indices = ScissorIndices::new(&matrix_fingers, &matrix_physical, &layout.keys);
+        let scissor_indices = ScissorIndices::new(&matrix_fingers, &matrix_physical);
         let lsb_indices = LsbIndices::new(&matrix_fingers, &matrix_physical);
         let pinky_ring_indices = PinkyRingIndices::new(&matrix_fingers);
         // TODO: pass [char] instead of [u8]

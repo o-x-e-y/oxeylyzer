@@ -207,7 +207,7 @@ pub struct ScissorIndices {
 }
 
 impl ScissorIndices {
-    pub fn new(fingers: &[Finger], keyboard: &[PhysicalKey], chars: &[char]) -> Self {
+    pub fn new(fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
         assert!(
             fingers.len() <= u8::MAX as usize,
             "Too many keys to index with u8, max is {}",
@@ -253,9 +253,7 @@ impl ScissorIndices {
                     return None;
                 }
 
-                let (dx, dy) = ((k1.x() - k2.x()).abs(), (k1.y() - k2.y()).abs());
-
-                println!("{}{}: ({dx}, {dy})", chars[i1], chars[i2]);
+                let (_, dy) = ((k1.x() - k2.x()).abs(), (k1.y() - k2.y()).abs());
 
                 if dy.abs() <= 1.9 {
                     return None;
