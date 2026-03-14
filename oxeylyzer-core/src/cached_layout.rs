@@ -35,6 +35,7 @@ pub struct FastLayout {
     pub matrix_physical: Box<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
     pub scissor_indices: ScissorIndices,
+    pub lsb_indices: LsbIndices,
     pub pinky_ring_indices: PinkyRingIndices,
     pub stretch_indices: StretchCache,
     pub usage_indices: UsageIndices,
@@ -295,6 +296,51 @@ impl ScissorIndices {
     #[inline]
     pub fn affects_scissor(&self, PosPair(a, b): PosPair) -> bool {
         self.affects_scissor_idx(a) || self.affects_scissor_idx(b)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LsbIndices {
+    pub pairs: Box<[PosPair]>,
+}
+
+impl LsbIndices {
+    pub fn new(fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
+        assert!(
+            fingers.len() <= u8::MAX as usize,
+            "Too many keys to index with u8, max is {}",
+            u8::MAX
+        );
+        assert_eq!(
+            fingers.len(),
+            keyboard.len(),
+            "finger len is not the same as keyboard len: "
+        );
+
+        let pairs = fingers
+            .iter()
+            .zip(keyboard)
+            .enumerate()
+            .tuple_combinations::<(_, _)>()
+            .filter_map(|((i1, (&f1, k1)), (i2, (&f2, k2)))| {
+                if f1.hand() != f2.hand() {
+                    return None;
+                }
+
+                if f1.is_middle() && f2.is_index() || f2.is_middle() && f1.is_index() {
+                    let (dx, _) = dx_dy(k1, k2, f1, f2);
+                    if dx.abs() >= 1.5 {
+                        Some(PosPair(i1, i2))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<Box<_>>();
+
+        Self { pairs }
     }
 }
 

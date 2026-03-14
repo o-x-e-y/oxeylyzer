@@ -18,14 +18,13 @@ impl LayoutGeneration {
             .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
             .sum::<i64>();
 
-        let lsbs = self.lsb_score(layout);
         let pinky_ring = self.pinky_ring_score(layout);
 
         let trigram_iter = self.data.gen_trigrams().iter().take(trigram_precision);
         let trigram_score = self.trigram_score_iter(layout, trigram_iter);
         let stretch_score = self.stretch_score(layout);
 
-        trigram_score + stretch_score + fspeed_usage + lsbs + pinky_ring
+        trigram_score + stretch_score + fspeed_usage + pinky_ring
     }
 
     #[allow(dead_code)]

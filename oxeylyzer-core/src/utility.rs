@@ -127,38 +127,6 @@ impl TryFrom<String> for KeyboardType {
     }
 }
 
-pub const fn get_lsb_indices() -> [PosPair; 16] {
-    let mut res = [PosPair::default(); 16];
-    let left = [
-        (2, 4),
-        (2, 14),
-        (2, 24),
-        (12, 4),
-        (12, 14),
-        (22, 4),
-        (22, 14),
-        (22, 24),
-    ];
-    let right = [
-        (5, 7),
-        (5, 17),
-        (5, 27),
-        (15, 7),
-        (15, 17),
-        (15, 27),
-        (25, 17),
-        (25, 27),
-    ];
-
-    let mut i = 0;
-    while i < left.len() {
-        res[i] = PosPair(left[i].0, left[i].1);
-        res[i + 8] = PosPair(right[i].0, right[i].1);
-        i += 1;
-    }
-    res
-}
-
 pub trait ApproxEq {
     fn approx_eq(self, other: f64, dec: u8) -> bool;
 
