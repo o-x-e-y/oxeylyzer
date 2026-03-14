@@ -273,7 +273,6 @@ impl LayoutGeneration {
         let matrix_physical = layout.keyboard.clone();
         let metadata = layout.metadata.clone();
 
-        // TODO: use layout.rs u8 PosPair at one point
         let possible_swaps = (0..(matrix.len() as u8))
             .filter(|v| !pins.contains(&(*v as usize)))
             .tuple_combinations::<(_, _)>()
@@ -827,7 +826,12 @@ impl LayoutGeneration {
         Some(trigrams_score + pinky_ring_score + stretch_score + usage_score + fspeed_score)
     }
 
-    pub fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
+    pub fn accept_swap(
+        &self,
+        layout: &mut FastLayout,
+        swap: &PosPair,
+        cache: &mut LayoutCache,
+    ) -> Option<i64> {
         let PosPair(i1, i2) = *swap;
 
         {
@@ -835,7 +839,7 @@ impl LayoutGeneration {
             let (f1, f2) = (self.data.get_char_u(c1), self.data.get_char_u(c2));
 
             if i1 == i2 || c1 == c2 || (f1 == 0 && f2 == 0) {
-                return;
+                return None;
             }
         }
 
@@ -899,6 +903,8 @@ impl LayoutGeneration {
         }
 
         cache.total_score = cache.total_score();
+
+        Some(cache.total_score)
     }
 
     pub fn best_swap_cached(
@@ -937,7 +943,9 @@ impl LayoutGeneration {
             Some(current_best_score),
         ) {
             current_best_score = new_score;
-            self.accept_swap(&mut layout, &best_swap, &mut cache);
+            let accepted_score = self.accept_swap(&mut layout, &best_swap, &mut cache);
+            debug_assert_eq!(Some(current_best_score), accepted_score);
+
             max_swaps -= 1;
             if max_swaps == 0 {
                 layout.possible_swaps = possible_swaps;
@@ -1105,7 +1113,7 @@ mod tests {
             .flatten()
             .take(25_000)
         {
-            GEN.accept_swap(&mut qwerty, swap, &mut cache);
+            let accepted_score = GEN.accept_swap(&mut qwerty, swap, &mut cache);
 
             assert_eq!(cache.usage_total, GEN.usage_score(&qwerty));
             assert_eq!(cache.fspeed_total, GEN.fspeed_score(&qwerty));
@@ -1123,6 +1131,7 @@ mod tests {
                 cache.total_score,
                 GEN.score_with_precision(&qwerty, GEN.trigram_precision)
             );
+            assert_eq!(Some(cache.total_score), accepted_score);
             assert_eq!(GEN.initialize_cache(&qwerty), cache);
         }
     }
