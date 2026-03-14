@@ -455,9 +455,15 @@ impl Repl {
         freq: impl Fn(&LayoutGeneration, &FastLayout, &BigramPair) -> i64,
         layout: &FastLayout,
         count: usize,
-        reverse_order: bool,
+        is_percent: bool,
     ) {
-        let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
+        let fmt_freq = |v| {
+            let f = v as f64 / self.layout_gen.data.bigram_total as f64;
+            match is_percent {
+                true => format!("{:.3}%", f),
+                false => format!("{:.3}", f),
+            }
+        };
 
         pairs
             .iter()
@@ -479,16 +485,19 @@ impl Repl {
 
                 let fmt = format!("{bigram}/{bigram2}");
 
-                let freq = freq(&self.layout_gen, layout, pair);
+                let freq = match is_percent {
+                    true => 100 * freq(&self.layout_gen, layout, pair),
+                    false => freq(&self.layout_gen, layout, pair),
+                };
 
-                Some((fmt, fmt_freq(freq)))
+                Some((fmt, freq))
             })
-            .sorted_by(|(_, f1), (_, f2)| match reverse_order {
-                true => f2.total_cmp(f1),
-                false => f1.total_cmp(f2),
+            .sorted_by(|(_, f1), (_, f2)| match is_percent {
+                true => f2.cmp(f1),
+                false => f1.cmp(f2),
             })
             .take(count)
-            .for_each(|(bigram, freq)| println!("{bigram}: {:.3}", freq));
+            .for_each(|(bigram, freq)| println!("{bigram}: {}", fmt_freq(freq)));
     }
 
     fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
@@ -502,7 +511,7 @@ impl Repl {
             LayoutGeneration::pair_sfb,
             &layout,
             count,
-            false,
+            true,
         );
 
         Ok(())
@@ -552,13 +561,10 @@ impl Repl {
             .scissor_indices
             .pairs
             .iter()
-            .map(|p| BigramPair {
-                pair: *p,
-                dist: 100,
-            })
+            .map(|p| BigramPair { pair: *p, dist: 1 })
             .collect();
 
-        self.bigram_stat(&pairs, LayoutGeneration::pair_scissor, &layout, count, true);
+        self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, &layout, count, true);
 
         Ok(())
     }

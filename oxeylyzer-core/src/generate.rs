@@ -577,7 +577,7 @@ impl LayoutGeneration {
             .scissor_indices
             .pairs
             .iter()
-            .map(|&pair| self.pair_scissor(layout, &BigramPair { pair, dist: 1 }))
+            .map(|&pair| self.pair_sfb(layout, &BigramPair { pair, dist: 1 }))
             .sum()
     }
 
@@ -733,19 +733,6 @@ impl LayoutGeneration {
         (self.data.get_stretch_weighted_bigram_u([u1, u2])
             + self.data.get_stretch_weighted_bigram_u([u2, u1]))
             * dist
-    }
-
-    #[inline]
-    pub fn pair_scissor(&self, layout: &FastLayout, pair: &BigramPair) -> i64 {
-        let BigramPair {
-            pair: PosPair(a, b),
-            dist,
-        } = pair;
-
-        let u1 = layout.matrix[*b];
-        let u2 = layout.matrix[*a];
-
-        (self.data.get_bigram_u([u1, u2]) + self.data.get_bigram_u([u2, u1])) * dist
     }
 
     pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
