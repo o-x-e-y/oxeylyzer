@@ -772,11 +772,10 @@ impl LayoutGeneration {
             }
         }
 
-        layout.swap_pair(swap);
+        layout.swap_pair(swap).unwrap();
 
-        // TODO: make function that can return option
-        let f1 = layout.matrix_fingers[i1 as usize];
-        let f2 = layout.matrix_fingers[i2 as usize];
+        let f1 = layout.finger(i1)?;
+        let f2 = layout.finger(i2)?;
 
         let fspeed_score = if f1 == f2 {
             let fspeed = self.finger_fspeed(layout, f1);
@@ -848,9 +847,8 @@ impl LayoutGeneration {
 
         layout.swap_pair(swap).unwrap();
 
-        // TODO: make function that can return Option
-        let f1 = layout.matrix_fingers[i1 as usize];
-        let f2 = layout.matrix_fingers[i2 as usize];
+        let f1 = layout.finger(i1)?;
+        let f2 = layout.finger(i2)?;
 
         cache.fspeed_total = if f1 == f2 {
             let fspeed = self.finger_fspeed(layout, f1);

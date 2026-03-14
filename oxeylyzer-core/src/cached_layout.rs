@@ -49,6 +49,10 @@ pub struct FastLayout {
 }
 
 impl FastLayout {
+    pub fn finger(&self, pos: Pos) -> Option<Finger> {
+        self.matrix_fingers.get(pos as usize).copied()
+    }
+
     pub fn layout_str(&self) -> String {
         self.mapping.map_us(&self.matrix).collect()
     }
