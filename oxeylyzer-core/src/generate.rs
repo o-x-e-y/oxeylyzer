@@ -826,11 +826,13 @@ impl LayoutGeneration {
     pub fn accept_swap(&self, layout: &mut FastLayout, swap: &PosPair, cache: &mut LayoutCache) {
         let PosPair(i1, i2) = *swap;
 
-        if i1 == i2
-            || layout.char(i1) == layout.char(i2)
-            || (self.data.get_char_u(i1 as u8) == 0 && self.data.get_char_u(i2 as u8) == 0)
         {
-            return;
+            let (c1, c2) = (layout.char(i1)?, layout.char(i2)?);
+            let (f1, f2) = (self.data.get_char_u(c1), self.data.get_char_u(c2));
+
+            if i1 == i2 || c1 == c2 || (f1 == 0 && f2 == 0) {
+                return;
+            }
         }
 
         let stretch_start = self.stretches_including_pair(layout, swap);
