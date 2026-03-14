@@ -5,7 +5,6 @@ use libdof::prelude::{
     PhysicalKey,
 };
 use nanorand::{Rng, tls_rng};
-use serde::Deserialize;
 
 #[inline]
 pub fn shuffle_pins<T>(slice: &mut [T], pins: &[usize]) {
@@ -52,43 +51,6 @@ pub static DEFAULT_FINGER_WEIGHTS: FingerWeights = FingerWeights {
     rr: 3.6,
     rp: 1.4,
 };
-
-// TODO: remove
-#[derive(Deserialize, Debug, Clone, Default)]
-pub enum KeyboardType {
-    #[default]
-    AnsiAngle,
-    IsoAngle,
-    RowstagDefault,
-    Ortho,
-    Colstag,
-}
-
-impl TryFrom<String> for KeyboardType {
-    type Error = &'static str;
-
-    fn try_from(value: String) -> Result<Self, &'static str> {
-        let lower = value.to_lowercase();
-        let split = lower.split_whitespace().collect::<Vec<&str>>();
-
-        if split.len() == 1 {
-            match split[0] {
-                "ortho" => Ok(Self::Ortho),
-                "colstag" => Ok(Self::Colstag),
-                "rowstag" | "iso" | "ansi" | "jis" => Ok(Self::RowstagDefault),
-                _ => Err("Couldn't parse keyboard type!"),
-            }
-        } else if split.len() == 2 {
-            match (split[0], split[1]) {
-                ("ansi", "angle") => Ok(Self::AnsiAngle),
-                ("iso", "angle") => Ok(Self::IsoAngle),
-                _ => Err("Couldn't parse keyboard type!"),
-            }
-        } else {
-            Err("Couldn't parse keyboard type!")
-        }
-    }
-}
 
 pub trait ApproxEq {
     fn approx_eq(self, other: f64, dec: u8) -> bool;
