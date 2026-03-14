@@ -502,12 +502,12 @@ impl Repl {
     }
 
     fn percent_stat(&self, layout: &FastLayout, count: usize, indices: &[PosPair]) {
-        let pairs: Vec<BigramPair> = indices
+        let pairs = indices
             .iter()
             .map(|p| BigramPair { pair: *p, dist: 1 })
-            .collect();
+            .collect::<Vec<_>>();
 
-        self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, &layout, count, true);
+        self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, layout, count, true);
     }
 
     fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
@@ -535,14 +535,7 @@ impl Repl {
 
         println!("top {} pinky-ring bigrams for {name}:", count);
 
-        let pairs: Vec<BigramPair> = layout
-            .pinky_ring_indices
-            .pairs
-            .iter()
-            .map(|p| BigramPair { pair: *p, dist: 1 })
-            .collect();
-
-        self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, &layout, count, true);
+        self.percent_stat(&layout, count, &layout.pinky_ring_indices.pairs);
 
         Ok(())
     }
@@ -589,14 +582,7 @@ impl Repl {
 
         println!("top {} scissor pairs for {name}:", count);
 
-        let pairs: Vec<BigramPair> = layout
-            .scissor_indices
-            .pairs
-            .iter()
-            .map(|p| BigramPair { pair: *p, dist: 1 })
-            .collect();
-
-        self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, &layout, count, true);
+        self.percent_stat(&layout, count, &layout.scissor_indices.pairs);
 
         Ok(())
     }
