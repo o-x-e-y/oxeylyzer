@@ -82,7 +82,6 @@ pub struct Repl {
     thread_pool: rayon::ThreadPool,
 }
 
-// TODO: move everything out to its own function
 impl Repl {
     pub fn new<P>(generator_base_path: P) -> Result<Self>
     where
@@ -163,7 +162,6 @@ impl Repl {
         Ok(())
     }
 
-    // TODO: return Layout at one point
     pub fn layout(&self, name: &str) -> Result<FastLayout> {
         self.saved
             .get(&name.to_lowercase())
