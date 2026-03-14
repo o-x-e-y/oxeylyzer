@@ -502,7 +502,7 @@ impl Repl {
 
     fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
-        let count = top_n.unwrap_or(10);
+        let count = top_n.unwrap_or(10).min(layout.fspeed_indices.all.len());
 
         println!("top {} sfbs for {name}:", count);
 
@@ -519,7 +519,7 @@ impl Repl {
 
     fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
-        let count = top_n.unwrap_or(10);
+        let count = top_n.unwrap_or(10).min(layout.fspeed_indices.all.len());
 
         println!("top {} fspeed pairs for {name}:", count);
 
@@ -536,7 +536,9 @@ impl Repl {
 
     fn stretches(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
-        let count = top_n.unwrap_or(10);
+        let count = top_n
+            .unwrap_or(10)
+            .min(layout.stretch_indices.all_pairs.len());
 
         println!("top {} stretch pairs for {name}:", count);
 
@@ -553,7 +555,7 @@ impl Repl {
 
     fn scissors(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
-        let count = top_n.unwrap_or(10);
+        let count = top_n.unwrap_or(10).min(layout.scissor_indices.pairs.len());
 
         println!("top {} scissor pairs for {name}:", count);
 
