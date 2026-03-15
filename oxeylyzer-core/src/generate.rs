@@ -609,10 +609,7 @@ impl LayoutGeneration {
                     let u1 = layout.matrix[*a as usize];
                     let u2 = layout.matrix[*b as usize];
 
-                    // TODO: rework with duplicated bigram logic
-                    (self.data.get_stretch_weighted_bigram_u([u1, u2])
-                        + self.data.get_stretch_weighted_bigram_u([u2, u1]))
-                        * dist
+                    self.data.get_stretch_weighted_bigram_u([u1, u2]) * dist
                 },
             )
             .sum()
@@ -672,11 +669,7 @@ impl LayoutGeneration {
         if let Some(c1) = layout.char(*p1)
             && let Some(c2) = layout.char(*p2)
         {
-            // TODO: rework with duplicate bigram logic
-            let freq = self.data.get_same_finger_weighted_bigram_u([c1, c2])
-                + self.data.get_same_finger_weighted_bigram_u([c2, c1]);
-
-            freq * dist
+            self.data.get_same_finger_weighted_bigram_u([c1, c2]) * dist
         } else {
             0
         }
@@ -716,10 +709,7 @@ impl LayoutGeneration {
         if let Some(c1) = layout.char(*p1)
             && let Some(c2) = layout.char(*p2)
         {
-            // TODO: rework with duplicate bigram logic
-            (self.data.get_stretch_weighted_bigram_u([c1, c2])
-                + self.data.get_stretch_weighted_bigram_u([c2, c1]))
-                * dist
+            self.data.get_stretch_weighted_bigram_u([c1, c2]) * dist
         } else {
             0
         }
