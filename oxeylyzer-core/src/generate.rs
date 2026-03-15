@@ -7,9 +7,9 @@ use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::analyzer_data::AnalyzerData;
-use crate::cached_layout::{Layout as _, *};
 use crate::char_mapping::CharMapping;
 use crate::data::Data;
+use crate::fast_layout::*;
 use crate::layout::{Layout, PosPair};
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::weights::{AnalyzerWeights, Config};
@@ -45,7 +45,7 @@ pub struct TrigramAccumulator {
 
 impl TrigramAccumulator {
     fn to_stats(&self, trigram_total: i64) -> TrigramStats {
-        let div_total = |stat| (stat as f64) / (trigram_total as f64);
+        let div_total = |stat| ((stat as f64) / (trigram_total as f64)) * 100.0;
 
         TrigramStats {
             alternates: div_total(self.alternates),
@@ -86,63 +86,6 @@ pub struct TrigramStats {
     pub invalid: f64,
 }
 
-impl std::fmt::Display for TrigramStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Inrolls: {:.3}%\n\
-			Outrolls: {:.3}%\n\
-			Total Rolls: {:.3}%\n\
-			Onehands: {:.3}%\n\n\
-			Alternates: {:.3}%\n\
-			Alternates (sfs): {:.3}%\n\
-			Total Alternates: {:.3}%\n\n\
-			Redirects: {:.3}%\n\
-			Redirects Sfs: {:.3}%\n\
-			Bad Redirects: {:.3}%\n\
-			Bad Redirects Sfs: {:.3}%\n\
-			Total Redirects: {:.3}%\n\n\
-			Bad Sfbs: {:.3}%\n\
-			Sft: {:.3}%\n",
-            self.inrolls * 100.0,
-            self.outrolls * 100.0,
-            (self.inrolls + self.outrolls) * 100.0,
-            self.onehands * 100.0,
-            self.alternates * 100.0,
-            self.alternates_sfs * 100.0,
-            (self.alternates + self.alternates_sfs) * 100.0,
-            self.redirects * 100.0,
-            self.redirects_sfs * 100.0,
-            self.bad_redirects * 100.0,
-            self.bad_redirects_sfs * 100.0,
-            (self.redirects + self.redirects_sfs + self.bad_redirects + self.bad_redirects_sfs)
-                * 100.0,
-            self.bad_sfbs * 100.0,
-            self.sfts * 100.0
-        )
-    }
-}
-
-pub fn format_fspeed(finger_speed: &[f64]) -> String {
-    let f = |v| format!("{:.3}", v * 10.0);
-
-    let mut left_hand = Vec::new();
-    for v in finger_speed.iter().take(5) {
-        left_hand.push(f(v))
-    }
-
-    let mut right_hand = Vec::new();
-    for v in finger_speed.iter().rev().take(5) {
-        right_hand.push(f(v))
-    }
-
-    let legend = "   Pinky   Ring    Middle  Index   Thumb\n";
-    let left_hand = format!("L: {}\n", left_hand.join(", "));
-    let right_hand = format!("R: {}\n", right_hand.join(", "));
-
-    format!("{legend}{left_hand}{right_hand}")
-}
-
 #[derive(Clone)]
 pub struct LayoutStats {
     pub sfb: f64,
@@ -156,34 +99,11 @@ pub struct LayoutStats {
     pub trigram_stats: TrigramStats,
     pub fspeed: f64,
     pub finger_speed: [f64; 10],
-}
-
-impl std::fmt::Display for LayoutStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            concat!(
-                "Sfb:  {:.3}%\nDsfb: {:.3}%\n\nFinger Speed: {:.3}\n",
-                "{}\nStretches: {:.3}%\nScissors: {:.3}%\nLsbs: {:.3}%\n",
-                "Pinky Ring Bigrams: {:.3}%\n\n{}"
-            ),
-            self.sfb * 100.0,
-            self.dsfb * 100.0,
-            self.fspeed * 10.0,
-            format_fspeed(&self.finger_speed),
-            self.stretches * 10.0,
-            self.scissors * 100.0,
-            self.lsbs * 100.0,
-            self.pinky_ring * 100.0,
-            self.trigram_stats
-        )
-    }
+    pub score: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct LayoutCache {
-    // effort: [f64; 30],
-    // effort_total: f64,
     pinky_ring: i64,
 
     usage: [i64; 10],
@@ -192,11 +112,8 @@ pub struct LayoutCache {
     fspeed: [i64; 10],
     fspeed_total: i64,
 
-    // trigrams: HashMap<(char, Option<char>), f64>,
     stretch_total: i64,
     trigrams_total: i64,
-
-    total_score: i64,
 }
 
 impl LayoutCache {
@@ -211,26 +128,27 @@ impl LayoutCache {
 
 type PerCharTrigrams = HashMap<[u8; 2], TrigramData>;
 
-pub struct LayoutGeneration {
+pub struct Oxeylyzer {
     pub language: String,
     pub data: AnalyzerData,
     pub mapping: Arc<CharMapping>,
     pub trigram_precision: usize,
-    pub trigram_patterns: Box<[TrigramPattern; 1000]>,
+    pub trigram_patterns: Arc<[TrigramPattern; 1000]>,
 
     per_char_trigrams: PerCharTrigrams,
 
     pub weights: AnalyzerWeights,
 }
 
-impl LayoutGeneration {
-    pub fn new<P>(language: &str, base_path: P, config: Option<Config>) -> Result<Self>
+impl Oxeylyzer {
+    pub fn new<P>(language: &str, base_path: P) -> Result<Self>
     where
         P: AsRef<Path>,
     {
-        let config = config.unwrap_or_else(|| {
-            Config::with_loaded_weights(concat!(std::env!("CARGO_MANIFEST_DIR"), "/../config.toml"))
-        });
+        let config = Config::with_loaded_weights(concat!(
+            std::env!("CARGO_MANIFEST_DIR"),
+            "/../config.toml"
+        ));
         let data_path = base_path
             .as_ref()
             .join("language_data")
@@ -266,7 +184,6 @@ impl LayoutGeneration {
             .map(|&c| self.data.mapping.get_u(c))
             .collect::<Box<_>>();
 
-        // let name = layout.name;
         let matrix_fingers = layout.fingers.clone();
         let shape = layout.shape.clone();
         let mapping = self.mapping.clone();
@@ -285,8 +202,6 @@ impl LayoutGeneration {
             .enumerate()
             .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
 
-        // let unweighted_sfb_indices =
-        //     FspeedIndices::new(&fingers, &keyboard, &FingerWeights::default());
         let fspeed_indices = FSpeedIndices::new(
             &matrix_fingers,
             &matrix_physical,
@@ -295,15 +210,15 @@ impl LayoutGeneration {
         let scissor_indices = ScissorIndices::new(&matrix_fingers, &matrix_physical);
         let lsb_indices = LsbIndices::new(&matrix_fingers, &matrix_physical);
         let pinky_ring_indices = PinkyRingIndices::new(&matrix_fingers);
-        let stretch_indices = StretchCache::new(&layout.keys, &matrix_fingers, &matrix_physical);
+        let stretch_indices = StretchIndices::new(&layout.keys, &matrix_fingers, &matrix_physical);
         let usage_indices = UsageIndices::new(&matrix_fingers);
 
         FastLayout {
             name,
-            matrix,
+            keys: matrix,
             char_to_finger,
-            matrix_fingers,
-            matrix_physical,
+            fingers: matrix_fingers,
+            keyboard: matrix_physical,
             fspeed_indices,
             scissor_indices,
             lsb_indices,
@@ -324,20 +239,23 @@ impl LayoutGeneration {
         let dsfb3 = self.bigram_percent(layout, self.data.skipgrams3(), self.data.skipgram3_total);
 
         let cache = self.initialize_cache(layout);
-        let fspeed = cache.fspeed_total as f64 / self.data.bigram_total as f64 / 100.0;
+        let fspeed = (cache.fspeed_total as f64 / self.data.bigram_total as f64) / 10.0;
         let finger_speed = cache
             .fspeed
-            .map(|v| v as f64 / self.data.bigram_total as f64 / 100.0);
+            .map(|v| (v as f64 / self.data.bigram_total as f64) / 10.0);
 
-        let stretches = self.stretch_score(layout) as f64 / self.data.bigram_total as f64;
-        let scissors = (self.scissor_percent(layout) as f64) / self.data.bigram_total as f64;
-        let lsbs = (self.lsb_percent(layout) as f64) / self.data.bigram_total as f64;
-        let pinky_ring = (self.pinky_ring_score(layout) as f64
+        let stretches = (self.stretch_score(layout) as f64 / self.data.bigram_total as f64) * 10.0;
+        let scissors =
+            ((self.scissor_percent(layout) as f64) / self.data.bigram_total as f64) * 100.0;
+        let lsbs = ((self.lsb_percent(layout) as f64) / self.data.bigram_total as f64) * 100.0;
+        let pinky_ring = ((self.pinky_ring_score(layout) as f64
             / self.weights.pinky_ring_bigrams as f64)
-            / self.data.bigram_total as f64;
+            / self.data.bigram_total as f64)
+            * 100.0;
         let trigram_stats = self
             .trigram_stats(layout, usize::MAX)
             .to_stats(self.data.trigram_total);
+        let score = self.score_with_precision(layout, usize::MAX);
 
         LayoutStats {
             sfb,
@@ -351,6 +269,7 @@ impl LayoutGeneration {
             lsbs,
             pinky_ring,
             trigram_stats,
+            score,
         }
     }
 
@@ -366,7 +285,7 @@ impl LayoutGeneration {
             res += data.get(c2 * len + c1).copied().unwrap_or_default();
         }
 
-        res as f64 / (total as f64)
+        (res as f64 / (total as f64)) * 100.0
     }
 
     pub fn get_trigram_pattern(
@@ -426,10 +345,6 @@ impl LayoutGeneration {
         #[cfg(test)]
         ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        // let effort = (0..layout.matrix.len())
-        //     .map(|i| self.char_effort(layout, i))
-        //     .sum::<f64>();
-
         let fspeed_usage = Finger::FINGERS
             .into_iter()
             .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
@@ -438,42 +353,8 @@ impl LayoutGeneration {
         let pinky_ring = self.pinky_ring_score(layout);
         let trigram_score = self.trigram_score_iter(layout, self.data.gen_trigrams());
 
-        trigram_score /* - effort */ + fspeed_usage + pinky_ring
+        trigram_score + fspeed_usage + pinky_ring
     }
-
-    // fn weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
-    //     let len = data.characters.len();
-    //     let chars = 0..len;
-
-    //     chars
-    //         .clone()
-    //         .cartesian_product(chars)
-    //         .map(|(c1, c2)| {
-    //             let bigram = c1 * len + c2;
-    //             let sfb = data.bigrams.get(bigram).unwrap_or(&0.0);
-    //             let dsfb = data.skipgrams.get(bigram).unwrap_or(&0.0) * weights.dsfb_ratio;
-    //             let dsfb2 = data.skipgrams2.get(bigram).unwrap_or(&0.0) * weights.dsfb_ratio2;
-    //             let dsfb3 = data.skipgrams3.get(bigram).unwrap_or(&0.0) * weights.dsfb_ratio3;
-    //             (sfb + dsfb + dsfb2 + dsfb3) * weights.fspeed
-    //         })
-    //         .collect()
-    // }
-
-    // fn stretch_weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
-    //     data.bigrams
-    //         .iter()
-    //         .zip(&data.skipgrams)
-    //         .zip(&data.skipgrams2)
-    //         .zip(&data.skipgrams3)
-    //         .map(|(((&b, s), s2), s3)| {
-    //             let sfb = b;
-    //             let sfs = s * weights.dsfb_ratio;
-    //             let sfs2 = s2 * weights.dsfb_ratio2;
-    //             let sfs3 = s3 * weights.dsfb_ratio3;
-    //             (sfb + sfs + sfs2 + sfs3) * weights.stretches
-    //         })
-    //         .collect::<Box<_>>()
-    // }
 
     fn per_char_trigrams(
         trigrams: &[([u8; 3], i64)],
@@ -606,13 +487,10 @@ impl LayoutGeneration {
                      dist,
                      pair: PosPair(a, b),
                  }| {
-                    let u1 = layout.matrix[*a as usize];
-                    let u2 = layout.matrix[*b as usize];
+                    let u1 = layout.keys[*a as usize];
+                    let u2 = layout.keys[*b as usize];
 
-                    // TODO: rework with duplicated bigram logic
-                    (self.data.get_stretch_weighted_bigram_u([u1, u2])
-                        + self.data.get_stretch_weighted_bigram_u([u2, u1]))
-                        * dist
+                    self.data.get_stretch_weighted_bigram_u([u1, u2]) * dist
                 },
             )
             .sum()
@@ -623,7 +501,7 @@ impl LayoutGeneration {
             .usage_indices
             .get(finger)
             .iter()
-            .map(|&i| self.data.get_char_u(layout.matrix[i]))
+            .map(|&i| self.data.get_char_u(layout.keys[i]))
             .sum::<i64>();
 
         self.weights.max_finger_use.penalty
@@ -672,11 +550,7 @@ impl LayoutGeneration {
         if let Some(c1) = layout.char(*p1)
             && let Some(c2) = layout.char(*p2)
         {
-            // TODO: rework with duplicate bigram logic
-            let freq = self.data.get_same_finger_weighted_bigram_u([c1, c2])
-                + self.data.get_same_finger_weighted_bigram_u([c2, c1]);
-
-            freq * dist
+            self.data.get_same_finger_weighted_bigram_u([c1, c2]) * dist
         } else {
             0
         }
@@ -716,10 +590,7 @@ impl LayoutGeneration {
         if let Some(c1) = layout.char(*p1)
             && let Some(c2) = layout.char(*p2)
         {
-            // TODO: rework with duplicate bigram logic
-            (self.data.get_stretch_weighted_bigram_u([c1, c2])
-                + self.data.get_stretch_weighted_bigram_u([c2, c1]))
-                * dist
+            self.data.get_stretch_weighted_bigram_u([c1, c2]) * dist
         } else {
             0
         }
@@ -746,8 +617,6 @@ impl LayoutGeneration {
             layout,
             self.data.gen_trigrams().iter().take(self.trigram_precision),
         );
-
-        res.total_score = res.total_score();
 
         res
     }
@@ -900,9 +769,7 @@ impl LayoutGeneration {
             cache.pinky_ring = self.pinky_ring_score(layout);
         }
 
-        cache.total_score = cache.total_score();
-
-        Some(cache.total_score)
+        Some(cache.total_score())
     }
 
     pub fn best_swap_cached(
@@ -965,7 +832,8 @@ impl LayoutGeneration {
         if !pins.is_empty() {
             layout.possible_swaps = layout
                 .possible_swaps
-                .into_iter()
+                .iter()
+                .copied()
                 .filter(|&PosPair(a, b)| {
                     !pins.contains(&(a as usize)) && !pins.contains(&(b as usize))
                 })
@@ -994,7 +862,8 @@ impl LayoutGeneration {
         if !pins.is_empty() {
             layout.possible_swaps = layout
                 .possible_swaps
-                .into_iter()
+                .iter()
+                .copied()
                 .filter(|&PosPair(a, b)| {
                     !pins.contains(&(a as usize)) && !pins.contains(&(b as usize))
                 })
@@ -1008,7 +877,6 @@ impl LayoutGeneration {
 }
 
 mod obsolete;
-// mod iterative;
 
 #[cfg(test)]
 mod tests {
@@ -1018,8 +886,7 @@ mod tests {
     use rayon::iter::ParallelIterator;
     use std::{collections::HashSet, sync::atomic::Ordering};
 
-    static GEN: Lazy<LayoutGeneration> =
-        Lazy::new(|| LayoutGeneration::new("english", "static", None).unwrap());
+    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| Oxeylyzer::new("english", "static").unwrap());
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
         let dof_str = r#"
@@ -1124,12 +991,11 @@ mod tests {
                 )
             );
             assert_eq!(cache.pinky_ring, GEN.pinky_ring_score(&qwerty));
-            assert_eq!(cache.total_score, cache.total_score());
             assert_eq!(
-                cache.total_score,
+                cache.total_score(),
                 GEN.score_with_precision(&qwerty, GEN.trigram_precision)
             );
-            assert_eq!(Some(cache.total_score), accepted_score);
+            assert_eq!(Some(cache.total_score()), accepted_score);
             assert_eq!(GEN.initialize_cache(&qwerty), cache);
         }
     }

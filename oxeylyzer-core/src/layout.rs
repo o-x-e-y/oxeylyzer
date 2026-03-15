@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use libdof::{combos::Combos, magic::Magic, prelude::*};
 use serde::{Deserialize, Serialize};
 
-use crate::{cached_layout::FastLayout, *};
+use crate::{fast_layout::FastLayout, *};
 
 pub type Pos = u8;
 
@@ -43,9 +43,9 @@ pub struct LayoutMetadata {
 #[serde(from = "Dof", into = "Dof")]
 pub struct Layout {
     pub name: String,
-    pub keys: Box<[char]>,
-    pub fingers: Box<[Finger]>,
-    pub keyboard: Box<[PhysicalKey]>,
+    pub keys: Arc<[char]>,
+    pub fingers: Arc<[Finger]>,
+    pub keyboard: Arc<[PhysicalKey]>,
     pub shape: Shape,
     pub metadata: Arc<LayoutMetadata>,
 }
@@ -152,7 +152,7 @@ impl From<Layout> for Dof {
             ..
         } = layout.metadata.as_ref().clone();
 
-        let mut key_iter = layout.keys.into_iter();
+        let mut key_iter = layout.keys.iter();
         let main_layer = layout
             .shape
             .inner()
@@ -161,7 +161,7 @@ impl From<Layout> for Dof {
                 key_iter
                     .by_ref()
                     .take(len)
-                    .map(|c| match c {
+                    .map(|c| match *c {
                         REPLACEMENT_CHAR => Key::Empty,
                         REPEAT_KEY => Key::Special(SpecialKey::Repeat),
                         SPACE_CHAR => Key::Special(SpecialKey::Space),
@@ -172,20 +172,20 @@ impl From<Layout> for Dof {
             })
             .collect::<Vec<_>>();
 
-        let mut finger_iter = layout.fingers.into_iter();
+        let mut finger_iter = layout.fingers.iter();
         let fingering = layout
             .shape
             .inner()
             .iter()
-            .map(|&len| finger_iter.by_ref().take(len).collect::<Vec<_>>())
+            .map(|&len| finger_iter.by_ref().take(len).copied().collect::<Vec<_>>())
             .collect::<Vec<_>>();
 
-        let mut board_iter = layout.keyboard.into_iter();
+        let mut board_iter = layout.keyboard.iter();
         let board = layout
             .shape
             .inner()
             .iter()
-            .map(|&len| board_iter.by_ref().take(len).collect::<Vec<_>>())
+            .map(|&len| board_iter.by_ref().take(len).cloned().collect::<Vec<_>>())
             .collect::<Vec<_>>();
 
         let internal = DofInternal {
@@ -215,7 +215,7 @@ impl From<FastLayout> for Layout {
         let name = match layout.name {
             Some(name) => name,
             None => layout
-                .matrix
+                .keys
                 .iter()
                 .copied()
                 .skip(10) // TODO: maybe make more accurate based on board shape + anchor
@@ -227,12 +227,12 @@ impl From<FastLayout> for Layout {
         Self {
             name,
             keys: layout
-                .matrix
+                .keys
                 .iter()
                 .map(|&u| layout.mapping.get_c(u))
                 .collect(),
-            fingers: layout.matrix_fingers,
-            keyboard: layout.matrix_physical,
+            fingers: layout.fingers,
+            keyboard: layout.keyboard,
             shape: layout.shape,
             metadata: layout.metadata.clone(),
         }
