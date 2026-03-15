@@ -6,7 +6,7 @@ use serde_with::{serde_as, serde_conv};
 // fxhash seems to be much faster than ahash for this purpose
 use fxhash::FxHashMap as HashMap;
 
-use crate::{OxeylyzerError, REPLACEMENT_CHAR, corpus_cleaner::CorpusCleanerIterator};
+use crate::{corpus_cleaner::CorpusCleanerIterator, *};
 
 #[cfg(not(target_arch = "wasm32"))]
 mod exclude_wasm {
@@ -35,7 +35,7 @@ serde_conv!(
     BigramAsStr,
     [char; 2],
     |trigram: &[char; 2]| String::from_iter(trigram),
-    |value: String| -> Result<_, OxeylyzerError> {
+    |value: String| -> Result<_> {
         value
             .chars()
             .collect::<Vec<_>>()
@@ -48,7 +48,7 @@ serde_conv!(
     TrigramAsStr,
     [char; 3],
     |trigram: &[char; 3]| String::from_iter(trigram),
-    |value: String| -> Result<_, OxeylyzerError> {
+    |value: String| -> Result<_> {
         value
             .chars()
             .collect::<Vec<_>>()
@@ -115,9 +115,9 @@ impl Data {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Data {
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, OxeylyzerError> {
-        let content = std::fs::read_to_string(path)?;
-        let data = serde_json::from_str::<Self>(&content)?;
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let content = std::fs::read_to_string(&path).path_context(path)?;
+        let data = serde_json::from_str::<Self>(&content).str_context(content)?;
         Ok(data)
     }
 
@@ -125,7 +125,7 @@ impl Data {
         paths: &[P],
         name: &str,
         cleaner: &CorpusCleaner,
-    ) -> Result<Self, OxeylyzerError> {
+    ) -> Result<Self> {
         let paths = paths
             .iter()
             .map(|p| p.as_ref().to_path_buf())
@@ -135,15 +135,16 @@ impl Data {
             .into_par_iter()
             .map(|path| {
                 if path.is_file() {
-                    let f = std::fs::File::open(path)?;
+                    let f = std::fs::File::open(&path).path_context(path)?;
                     IntermediateData::from_file(f, name, cleaner)
                 } else if path.is_dir() {
-                    let mut new = std::fs::read_dir(path)?
+                    let mut new = std::fs::read_dir(&path)
+                        .path_context(path)?
                         .flatten()
                         .par_bridge()
                         .filter(|entry| entry.path().is_file())
                         .flat_map(|entry| {
-                            let f = std::fs::File::open(entry.path())?;
+                            let f = std::fs::File::open(entry.path()).path_context(entry.path())?;
                             IntermediateData::from_file(f, name, cleaner)
                         })
                         .reduce(IntermediateData::default, |a, b| a + b);
@@ -155,7 +156,7 @@ impl Data {
                     Err(OxeylyzerError::NotAFile(path))
                 }
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(result
             .into_iter()
@@ -164,20 +165,16 @@ impl Data {
             .into())
     }
 
-    pub fn from_file(
-        file: File,
-        name: &str,
-        cleaner: &CorpusCleaner,
-    ) -> Result<Data, OxeylyzerError> {
+    pub fn from_file(file: File, name: &str, cleaner: &CorpusCleaner) -> Result<Data> {
         IntermediateData::from_file(file, name, cleaner).map(Into::into)
     }
 
-    pub fn save<P: AsRef<Path>>(&self, folder: P) -> Result<(), OxeylyzerError> {
+    pub fn save<P: AsRef<Path>>(&self, folder: P) -> Result<()> {
         if self.name.is_empty() {
             return Err(OxeylyzerError::MissingDataName);
         }
 
-        std::fs::create_dir_all(&folder)?;
+        std::fs::create_dir_all(&folder).path_context(&folder)?;
 
         let path = folder.as_ref().join(&self.name).with_extension("json");
 
@@ -185,13 +182,16 @@ impl Data {
             .write(true)
             .truncate(true)
             .create(true)
-            .open(path)?;
+            .open(&path)
+            .path_context(&path)?;
 
         let formatter = PrettyFormatter::with_indent(b"\t");
         let mut ser = serde_json::ser::Serializer::with_formatter(vec![], formatter);
-        self.serialize(&mut ser)?;
+        self.serialize(&mut ser)
+            .map_err(|_| OxeylyzerError::CouldNotSerializeData(self.name.clone()))?;
 
-        f.write_all(ser.into_inner().as_slice())?;
+        f.write_all(ser.into_inner().as_slice())
+            .path_context(path)?;
 
         Ok(())
     }
@@ -351,10 +351,10 @@ impl IntermediateData {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl IntermediateData {
-    fn from_file(file: File, name: &str, cleaner: &CorpusCleaner) -> Result<Self, OxeylyzerError> {
+    fn from_file(file: File, name: &str, cleaner: &CorpusCleaner) -> Result<Self> {
         let chunker = FileChunker::new(&file).map_err(|_| OxeylyzerError::ChunkerInitError)?;
 
-        let file_len = file.metadata()?.len() as usize;
+        let file_len = file.metadata().str_context(name)?.len() as usize;
         let chunk_count = (file_len / CHUNK_SIZE).clamp(1, num_cpus::get() - 1);
 
         let chunks = chunker

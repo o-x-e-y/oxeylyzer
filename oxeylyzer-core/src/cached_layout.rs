@@ -6,7 +6,10 @@ use libdof::prelude::{Finger, PhysicalKey, Shape};
 use serde::Serialize;
 
 use crate::{
-    char_mapping::CharMapping, layout::LayoutMetadata, utility::*, weights::FingerWeights,
+    char_mapping::CharMapping,
+    layout::{LayoutMetadata, Pos, PosPair},
+    utility::*,
+    weights::FingerWeights,
 };
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
@@ -16,15 +19,11 @@ pub trait Layout<T: Copy + Default> {
 
     fn random_with_pins(&self, pins: &[usize]) -> Self;
 
-    fn char(&self, i: usize) -> Option<T>;
+    fn char(&self, i: Pos) -> Option<T>;
 
-    fn swap(&mut self, i1: usize, i2: usize) -> Option<()>;
+    fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()>;
 
     fn swap_pair(&mut self, pair: &PosPair) -> Option<()>;
-
-    fn swap_cols(&mut self, col1: usize, col2: usize) -> Option<()>;
-
-    fn swap_indexes(&mut self);
 
     fn get_index(&self, index: usize) -> [T; 6];
 }
@@ -38,6 +37,9 @@ pub struct FastLayout {
     pub matrix_fingers: Box<[Finger]>,
     pub matrix_physical: Box<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
+    pub scissor_indices: ScissorIndices,
+    pub lsb_indices: LsbIndices,
+    pub pinky_ring_indices: PinkyRingIndices,
     pub stretch_indices: StretchCache,
     pub usage_indices: UsageIndices,
     pub possible_swaps: Box<[PosPair]>,
@@ -47,6 +49,10 @@ pub struct FastLayout {
 }
 
 impl FastLayout {
+    pub fn finger(&self, pos: Pos) -> Option<Finger> {
+        self.matrix_fingers.get(pos as usize).copied()
+    }
+
     pub fn layout_str(&self) -> String {
         self.mapping.map_us(&self.matrix).collect()
     }
@@ -99,28 +105,8 @@ impl Layout<u8> for FastLayout {
     }
 
     #[inline(always)]
-    fn char(&self, i: usize) -> Option<u8> {
-        self.matrix.get(i).copied()
-    }
-
-    fn swap_cols(&mut self, col1: usize, col2: usize) -> Option<()> {
-        if col1 == col2 {
-            return Some(());
-        }
-        if col1 > 9 || col2 > 9 {
-            return None;
-        }
-        // TODO: handle errors properly here
-        self.swap(col1, col2).unwrap();
-        self.swap(col1 + 10, col2 + 10).unwrap();
-        self.swap(col1 + 20, col2 + 20).unwrap();
-
-        Some(())
-    }
-
-    fn swap_indexes(&mut self) {
-        self.swap_cols(3, 6);
-        self.swap_cols(4, 5);
+    fn char(&self, i: Pos) -> Option<u8> {
+        self.matrix.get(i as usize).copied()
     }
 
     /// Gets all keys in a certain index column. 0 = left index, 1 = right index.
@@ -136,15 +122,17 @@ impl Layout<u8> for FastLayout {
     }
 
     #[inline(always)]
-    fn swap(&mut self, i1: usize, i2: usize) -> Option<()> {
+    fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()> {
         let char1 = self.char(i1)?;
         let char2 = self.char(i2)?;
 
-        *self.matrix.get_mut(i1)? = char2;
-        *self.matrix.get_mut(i2)? = char1;
+        *self.matrix.get_mut(i1 as usize)? = char2;
+        *self.matrix.get_mut(i2 as usize)? = char1;
 
-        *self.char_to_finger.get_mut(char1 as usize)? = Some(*self.matrix_fingers.get(i2)?);
-        *self.char_to_finger.get_mut(char2 as usize)? = Some(*self.matrix_fingers.get(i1)?);
+        *self.char_to_finger.get_mut(char1 as usize)? =
+            Some(*self.matrix_fingers.get(i2 as usize)?);
+        *self.char_to_finger.get_mut(char2 as usize)? =
+            Some(*self.matrix_fingers.get(i1 as usize)?);
 
         Some(())
     }
@@ -195,7 +183,7 @@ impl FSpeedIndices {
                 fingers
                     .iter()
                     .zip(keyboard)
-                    .zip(0usize..)
+                    .zip(0u8..)
                     .filter_map(|((f, k), i)| (f == &finger).then_some((k, i)))
                     .tuple_combinations::<(_, _)>()
                     .map(|((k1, i1), (k2, i2))| {
@@ -222,13 +210,231 @@ impl FSpeedIndices {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+pub struct ScissorIndices {
+    pub pairs: Box<[PosPair]>,
+    pub keys_in_scissor: Box<[bool]>,
+}
+
+impl ScissorIndices {
+    pub fn new(fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
+        assert!(
+            fingers.len() <= u8::MAX as usize,
+            "Too many keys to index with u8, max is {}",
+            u8::MAX
+        );
+        assert_eq!(
+            fingers.len(),
+            keyboard.len(),
+            "finger len is not the same as keyboard len: "
+        );
+
+        fn adjacent_fingers_same_hand(f1: Finger, f2: Finger) -> bool {
+            use Finger::*;
+
+            if f1.hand() != f2.hand() {
+                return false;
+            }
+
+            matches!(
+                (f1, f2),
+                (LP, LR)
+                    | (LR, LP)
+                    | (LR, LM)
+                    | (LM, LR)
+                    | (LM, LI)
+                    | (LI, LM)
+                    | (RI, RM)
+                    | (RM, RI)
+                    | (RM, RR)
+                    | (RR, RM)
+                    | (RR, RP)
+                    | (RP, RR)
+            )
+        }
+
+        let pairs = fingers
+            .iter()
+            .zip(keyboard)
+            .enumerate()
+            .map(|(i, t)| (i as u8, t))
+            .tuple_combinations::<(_, _)>()
+            .flat_map(|((i1, (&f1, k1)), (i2, (&f2, k2)))| {
+                if !adjacent_fingers_same_hand(f1, f2) {
+                    return None;
+                }
+
+                let (_, dy) = ((k1.x() - k2.x()).abs(), (k1.y() - k2.y()).abs());
+
+                if dy.abs() <= 1.9 {
+                    return None;
+                }
+
+                if f1.is_index() && f2.is_middle() && k1.y() >= k2.y() {
+                    return None;
+                }
+                if f2.is_index() && f1.is_middle() && k1.y() <= k2.y() {
+                    return None;
+                }
+
+                Some(PosPair(i1, i2))
+            })
+            .collect::<Box<_>>();
+
+        let mut keys_in_scissor = vec![false; fingers.len()].into_boxed_slice();
+        for PosPair(i1, i2) in &pairs {
+            if let Some(v) = keys_in_scissor.get_mut(*i1 as usize) {
+                *v = true;
+            }
+            if let Some(v) = keys_in_scissor.get_mut(*i2 as usize) {
+                *v = true;
+            }
+        }
+
+        Self {
+            pairs,
+            keys_in_scissor,
+        }
+    }
+
+    #[inline]
+    pub fn affects_scissor_idx(&self, pos: Pos) -> bool {
+        self.keys_in_scissor
+            .get(pos as usize)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    #[inline]
+    pub fn affects_scissor(&self, PosPair(a, b): PosPair) -> bool {
+        self.affects_scissor_idx(a) || self.affects_scissor_idx(b)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LsbIndices {
+    pub pairs: Box<[PosPair]>,
+}
+
+impl LsbIndices {
+    pub fn new(fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
+        assert!(
+            fingers.len() <= u8::MAX as usize,
+            "Too many keys to index with u8, max is {}",
+            u8::MAX
+        );
+        assert_eq!(
+            fingers.len(),
+            keyboard.len(),
+            "finger len is not the same as keyboard len: "
+        );
+
+        let pairs = fingers
+            .iter()
+            .zip(keyboard)
+            .enumerate()
+            .map(|(i, t)| (i as u8, t))
+            .tuple_combinations::<(_, _)>()
+            .filter_map(|((i1, (&f1, k1)), (i2, (&f2, k2)))| {
+                if f1.hand() != f2.hand() {
+                    return None;
+                }
+
+                if f1.is_middle() && f2.is_index() || f2.is_middle() && f1.is_index() {
+                    let (dx, _) = dx_dy(k1, k2, f1, f2);
+                    if dx.abs() >= 1.5 {
+                        Some(PosPair(i1, i2))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<Box<_>>();
+
+        Self { pairs }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PinkyRingIndices {
+    pub pairs: Box<[PosPair]>,
+    pub keys_in_pinky_ring: Box<[bool]>,
+}
+
+impl PinkyRingIndices {
+    pub fn new(fingers: &[Finger]) -> Self {
+        assert!(
+            fingers.len() <= u8::MAX as usize,
+            "Too many keys to index with u8, max is {}",
+            u8::MAX
+        );
+
+        use Finger::*;
+
+        let is_pinky = |f: Finger| matches!(f, LP | RP);
+        let is_ring = |f: Finger| matches!(f, LR | RR);
+
+        let pairs = fingers
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (i as u8, t))
+            .tuple_combinations::<(_, _)>()
+            .filter_map(|((i1, &f1), (i2, &f2))| {
+                // same hand only
+                if f1.hand() != f2.hand() {
+                    return None;
+                }
+
+                let (a_pinky_b_ring, a_ring_b_pinky) =
+                    (is_pinky(f1) && is_ring(f2), is_ring(f1) && is_pinky(f2));
+
+                if a_pinky_b_ring || a_ring_b_pinky {
+                    Some(PosPair(i1, i2))
+                } else {
+                    None
+                }
+            })
+            .collect::<Box<_>>();
+
+        let mut keys_in_pinky_ring = vec![false; fingers.len()].into_boxed_slice();
+        for PosPair(i1, i2) in &pairs {
+            if let Some(v) = keys_in_pinky_ring.get_mut(*i1 as usize) {
+                *v = true;
+            }
+            if let Some(v) = keys_in_pinky_ring.get_mut(*i2 as usize) {
+                *v = true;
+            }
+        }
+
+        Self {
+            pairs,
+            keys_in_pinky_ring,
+        }
+    }
+
+    #[inline]
+    pub fn affects_pinky_ring_idx(&self, pos: Pos) -> bool {
+        self.keys_in_pinky_ring
+            .get(pos as usize)
+            .copied()
+            .unwrap_or(false)
+    }
+
+    #[inline]
+    pub fn affects_pinky_ring(&self, PosPair(a, b): PosPair) -> bool {
+        self.affects_pinky_ring_idx(a) || self.affects_pinky_ring_idx(b)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct StretchCache {
     pub all_pairs: Box<[BigramPair]>,
     pub per_key_pair: HashMap<PosPair, Box<[BigramPair]>>,
 }
 
 impl StretchCache {
-    pub fn new(keys: &[u8], fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
+    pub fn new(keys: &[char], fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
         assert!(
             fingers.len() <= u8::MAX as usize,
             "Too many keys to index with u8, max is {}",
@@ -245,6 +451,7 @@ impl StretchCache {
             .zip(fingers)
             .zip(keys)
             .enumerate()
+            .map(|(i, t)| (i as u8, t))
             .tuple_combinations::<(_, _)>()
             .filter(|((_, ((_, f1), _)), (_, ((_, f2), _)))| f1 != f2 && (f1.hand() == f2.hand()))
             .filter_map(|((i1, ((k1, &f1), _c1)), (i2, ((k2, &f2), _c2)))| {
@@ -272,8 +479,8 @@ impl StretchCache {
 
         // println!("pair count: {}", all_pairs.len());
 
-        let per_keypair = (0..(fingers.len()))
-            .cartesian_product(0..(fingers.len()))
+        let per_keypair = (0..(fingers.len() as u8))
+            .cartesian_product(0..(fingers.len() as u8))
             .map(|(i1, i2)| {
                 let is = [i1, i2];
 
@@ -554,17 +761,6 @@ mod tests {
         assert_eq!(
             qwerty.layout_str(),
             "qwertyuiodaspfghjkl;zxcvbnm,./".to_string()
-        );
-    }
-
-    #[test]
-    fn swap_cols_no_bounds() {
-        let mut qwerty = QWERTY.clone();
-
-        qwerty.swap_cols(1, 9).unwrap();
-        assert_eq!(
-            qwerty.layout_str(),
-            "qpertyuiowa;dfghjklsz/cvbnm,.x".to_string()
         );
     }
 

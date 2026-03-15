@@ -270,13 +270,13 @@ where
         }
 
         if self.use_window {
-            self.window.push(c);
+            let last = self.window[0];
 
-            let (c1, c2) = (self.window[0], self.window[1]);
-
-            if self.cleaner.repeat_key && c1 == c2 && self.cleaner.map.contains_key(&c1) {
-                self.window.push(REPEAT_KEY); // TODO: this works for now, consider changing later
+            if self.cleaner.repeat_key && c == last && self.cleaner.map.contains_key(&c) {
+                self.window.push(REPEAT_KEY);
                 return Some(vec![REPEAT_KEY]);
+            } else {
+                self.window.push(c)
             }
         }
 

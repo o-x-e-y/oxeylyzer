@@ -188,7 +188,7 @@ impl Trigram {
     }
 }
 
-pub fn get_trigram_combinations() -> Box<[TrigramPattern]> {
+pub fn get_trigram_combinations() -> Box<[TrigramPattern; 1000]> {
     let mut combinations = [TrigramPattern::Other; 1000];
 
     for f3 in Finger::FINGERS {

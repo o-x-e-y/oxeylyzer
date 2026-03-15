@@ -6,7 +6,7 @@ mod languages;
 use std::hint::black_box;
 
 use diol::prelude::*;
-use oxeylyzer_core::{corpus_cleaner::CorpusCleaner, data::Data, generate::*, utility::PosPair};
+use oxeylyzer_core::{corpus_cleaner::CorpusCleaner, data::Data, generate::*, layout::PosPair};
 
 fn main() -> diol::Result<()> {
     let g = LayoutGeneration::new("english", "./static/", None).unwrap();
