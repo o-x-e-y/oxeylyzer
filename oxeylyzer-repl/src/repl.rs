@@ -5,6 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use itertools::{EitherOrBoth, Itertools};
+use oxeylyzer_core::OxeylyzerError;
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
 use oxeylyzer_core::{
@@ -52,8 +53,8 @@ pub enum ReplError {
     XflagsError(#[from] xflags::Error),
     #[error(transparent)]
     IoError(#[from] std::io::Error),
-    // #[error("{0}")]
-    // OxeylyzerDataError(#[from] OxeylyzerError),
+    #[error(transparent)]
+    OxeylyzerError(#[from] OxeylyzerError),
     // #[error(transparent)]
     // DofError(#[from] libdof::DofError),
     // #[error(transparent)]

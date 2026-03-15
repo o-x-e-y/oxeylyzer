@@ -3,9 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use libdof::{combos::Combos, magic::Magic, prelude::*};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    REPEAT_KEY, REPLACEMENT_CHAR, Result, SHIFT_CHAR, SPACE_CHAR, cached_layout::FastLayout,
-};
+use crate::{cached_layout::FastLayout, *};
 
 pub type Pos = u8;
 
@@ -66,11 +64,11 @@ fn thing() {
 impl Layout {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
-        let s = std::fs::read_to_string(path)?;
+        let s = std::fs::read_to_string(&path).path_context(path)?;
 
         serde_json::from_str::<Dof>(&s)
             .map(Into::into)
-            .map_err(Into::into)
+            .str_context(s)
     }
 
     #[cfg(target_arch = "wasm32")]

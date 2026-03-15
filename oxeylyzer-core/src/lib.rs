@@ -9,12 +9,11 @@ pub mod trigram_patterns;
 pub mod utility;
 pub mod weights;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub use rayon;
 pub use serde;
 
-use libdof::DofError;
 use thiserror::Error;
 
 pub const REPLACEMENT_CHAR: char = char::REPLACEMENT_CHARACTER;
@@ -37,21 +36,49 @@ pub enum OxeylyzerError {
     NotAFile(PathBuf),
     #[error("Specifying a name for the corpus is required")]
     MissingDataName,
+    #[error("Failed to serialize data for language '{0}'")]
+    CouldNotSerializeData(String),
 
-    #[error("{0}")]
-    IoError(#[from] std::io::Error),
-    #[error("{0}")]
-    JsonError(#[from] serde_json::Error),
-    #[error("{0}")]
-    UTF8Error(#[from] std::str::Utf8Error),
-    #[error("{0}")]
-    DofError(#[from] DofError),
-    #[error("{0}")]
-    TomlDeserializationError(#[from] toml::de::Error),
-
+    #[error(transparent)]
+    AnyhowError(#[from] anyhow::Error),
+    // #[error("{0}")]
+    // IoError(#[from] std::io::Error),
+    // #[error("{0}")]
+    // JsonError(#[from] serde_json::Error),
+    // #[error("{0}")]
+    // UTF8Error(#[from] std::str::Utf8Error),
+    // #[error("{0}")]
+    // DofError(#[from] DofError),
+    // #[error("{0}")]
+    // TomlDeserializationError(#[from] toml::de::Error),
     #[cfg(target_arch = "wasm32")]
     #[error("{0}")]
     GlooError(#[from] gloo_net::Error),
 }
 
 pub type Result<T> = std::result::Result<T, OxeylyzerError>;
+
+pub trait OxeylyzerResultExt<T> {
+    fn path_context<P: AsRef<Path>>(self, path: P) -> Result<T>;
+
+    fn str_context<S: ToString>(self, s: S) -> Result<T>;
+}
+
+impl<T, E> OxeylyzerResultExt<T> for std::result::Result<T, E>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    fn path_context<P: AsRef<Path>>(self, path: P) -> Result<T> {
+        use anyhow::Context;
+
+        self.context(path.as_ref().display().to_string())
+            .map_err(OxeylyzerError::AnyhowError)
+    }
+
+    fn str_context<S: ToString>(self, s: S) -> Result<T> {
+        use anyhow::Context;
+
+        self.context(s.to_string())
+            .map_err(OxeylyzerError::AnyhowError)
+    }
+}

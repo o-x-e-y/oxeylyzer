@@ -2,7 +2,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
-use anyhow::{Context, Result};
 use itertools::Itertools;
 use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -14,6 +13,7 @@ use crate::data::Data;
 use crate::layout::{Layout, PosPair};
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::weights::{AnalyzerWeights, Config};
+use crate::{OxeylyzerResultExt, Result};
 
 pub type CharacterData = Box<[f64]>;
 pub type BigramData = Box<[f64]>;
@@ -237,7 +237,7 @@ impl LayoutGeneration {
             .join(language)
             .with_extension("json");
 
-        let data = Data::load(&data_path).with_context(|| data_path.display().to_string())?;
+        let data = Data::load(&data_path).path_context(data_path)?;
 
         let data = AnalyzerData::new(data, &config.weights);
 
