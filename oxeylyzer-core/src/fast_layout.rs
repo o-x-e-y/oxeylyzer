@@ -26,7 +26,7 @@ pub struct FastLayout {
     pub scissor_indices: ScissorIndices,
     pub lsb_indices: LsbIndices,
     pub pinky_ring_indices: PinkyRingIndices,
-    pub stretch_indices: StretchCache,
+    pub stretch_indices: StretchIndices,
     pub usage_indices: UsageIndices,
     pub possible_swaps: Arc<[PosPair]>,
     pub mapping: Arc<CharMapping>,
@@ -399,12 +399,12 @@ impl PinkyRingIndices {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct StretchCache {
+pub struct StretchIndices {
     pub all_pairs: Box<[BigramPair]>,
     pub per_key_pair: HashMap<PosPair, Box<[BigramPair]>>,
 }
 
-impl StretchCache {
+impl StretchIndices {
     pub fn new(keys: &[char], fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
         assert!(
             fingers.len() <= u8::MAX as usize,

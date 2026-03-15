@@ -7,9 +7,9 @@ use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::analyzer_data::AnalyzerData;
-use crate::fast_layout::*;
 use crate::char_mapping::CharMapping;
 use crate::data::Data;
+use crate::fast_layout::*;
 use crate::layout::{Layout, PosPair};
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::weights::{AnalyzerWeights, Config};
@@ -295,7 +295,7 @@ impl LayoutGeneration {
         let scissor_indices = ScissorIndices::new(&matrix_fingers, &matrix_physical);
         let lsb_indices = LsbIndices::new(&matrix_fingers, &matrix_physical);
         let pinky_ring_indices = PinkyRingIndices::new(&matrix_fingers);
-        let stretch_indices = StretchCache::new(&layout.keys, &matrix_fingers, &matrix_physical);
+        let stretch_indices = StretchIndices::new(&layout.keys, &matrix_fingers, &matrix_physical);
         let usage_indices = UsageIndices::new(&matrix_fingers);
 
         FastLayout {
