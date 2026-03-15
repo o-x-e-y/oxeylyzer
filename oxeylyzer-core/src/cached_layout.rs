@@ -21,7 +21,7 @@ pub struct FastLayout {
     pub keys: Box<[u8]>,
     pub char_to_finger: Box<[Option<Finger>]>,
     pub fingers: Box<[Finger]>,
-    pub matrix_physical: Box<[PhysicalKey]>,
+    pub keyboard: Box<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
     pub scissor_indices: ScissorIndices,
     pub lsb_indices: LsbIndices,
@@ -692,7 +692,7 @@ mod tests {
         assert_eq!(random.stretch_indices, QWERTY.stretch_indices);
         assert_eq!(random.mapping, QWERTY.mapping);
         assert_eq!(random.fingers, QWERTY.fingers);
-        assert_eq!(random.matrix_physical, QWERTY.matrix_physical);
+        assert_eq!(random.keyboard, QWERTY.keyboard);
         assert_eq!(random.possible_swaps, QWERTY.possible_swaps);
         assert_eq!(random.shape, QWERTY.shape);
 

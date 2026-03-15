@@ -232,7 +232,7 @@ impl From<FastLayout> for Layout {
                 .map(|&u| layout.mapping.get_c(u))
                 .collect(),
             fingers: layout.fingers,
-            keyboard: layout.matrix_physical,
+            keyboard: layout.keyboard,
             shape: layout.shape,
             metadata: layout.metadata.clone(),
         }
