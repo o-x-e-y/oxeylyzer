@@ -14,53 +14,84 @@ use crate::{
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
-pub trait Layout<T: Copy + Default> {
-    fn random(&self) -> Self;
-
-    fn random_with_pins(&self, pins: &[usize]) -> Self;
-
-    fn char(&self, i: Pos) -> Option<T>;
-
-    fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()>;
-
-    fn swap_pair(&mut self, pair: &PosPair) -> Option<()>;
-
-    fn get_index(&self, index: usize) -> [T; 6];
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(into = "crate::layout::Layout")]
 pub struct FastLayout {
     pub name: Option<String>,
-    pub matrix: Box<[u8]>,
+    pub keys: Box<[u8]>,
     pub char_to_finger: Box<[Option<Finger>]>,
-    pub matrix_fingers: Box<[Finger]>,
-    pub matrix_physical: Box<[PhysicalKey]>,
+    pub fingers: Arc<[Finger]>,
+    pub keyboard: Arc<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
     pub scissor_indices: ScissorIndices,
     pub lsb_indices: LsbIndices,
     pub pinky_ring_indices: PinkyRingIndices,
-    pub stretch_indices: StretchCache,
+    pub stretch_indices: StretchIndices,
     pub usage_indices: UsageIndices,
-    pub possible_swaps: Box<[PosPair]>,
+    pub possible_swaps: Arc<[PosPair]>,
     pub mapping: Arc<CharMapping>,
     pub metadata: Arc<LayoutMetadata>,
     pub shape: Shape,
 }
 
 impl FastLayout {
+    #[inline(always)]
+    pub fn char(&self, i: Pos) -> Option<u8> {
+        self.keys.get(i as usize).copied()
+    }
+
+    #[inline(always)]
     pub fn finger(&self, pos: Pos) -> Option<Finger> {
-        self.matrix_fingers.get(pos as usize).copied()
+        self.fingers.get(pos as usize).copied()
+    }
+
+    #[inline(always)]
+    pub fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()> {
+        let char1 = self.char(i1)?;
+        let char2 = self.char(i2)?;
+
+        *self.keys.get_mut(i1 as usize)? = char2;
+        *self.keys.get_mut(i2 as usize)? = char1;
+
+        *self.char_to_finger.get_mut(char1 as usize)? = Some(*self.fingers.get(i2 as usize)?);
+        *self.char_to_finger.get_mut(char2 as usize)? = Some(*self.fingers.get(i1 as usize)?);
+
+        Some(())
+    }
+
+    #[inline(always)]
+    pub fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
+        self.swap(pair.0, pair.1)
+    }
+
+    pub fn random(&self) -> Self {
+        self.random_with_pins(&[])
+    }
+
+    pub fn random_with_pins(&self, pins: &[usize]) -> Self {
+        let mut res = self.clone();
+
+        res.name = None;
+        res.char_to_finger = Box::new([None; 60]);
+
+        shuffle_pins(&mut res.keys, pins);
+
+        res.keys
+            .iter()
+            .enumerate()
+            .for_each(|(i, &c)| res.char_to_finger[c as usize] = Some(res.fingers[i]));
+
+        res
     }
 
     pub fn layout_str(&self) -> String {
-        self.mapping.map_us(&self.matrix).collect()
+        self.mapping.map_us(&self.keys).collect()
     }
 
     pub fn formatted_string(&self) -> String {
         let mut res = String::new();
 
-        let mut iter = self.matrix.iter();
+        let mut iter = self.keys.iter();
 
         for &l in self.shape.inner().iter() {
             let mut i = 0;
@@ -80,66 +111,6 @@ impl FastLayout {
         }
 
         res.trim().to_string()
-    }
-}
-
-impl Layout<u8> for FastLayout {
-    fn random(&self) -> Self {
-        self.random_with_pins(&[])
-    }
-
-    fn random_with_pins(&self, pins: &[usize]) -> Self {
-        let mut res = self.clone();
-
-        res.name = None;
-        res.char_to_finger = Box::new([None; 60]);
-
-        shuffle_pins(&mut res.matrix, pins);
-
-        res.matrix
-            .iter()
-            .enumerate()
-            .for_each(|(i, &c)| res.char_to_finger[c as usize] = Some(res.matrix_fingers[i]));
-
-        res
-    }
-
-    #[inline(always)]
-    fn char(&self, i: Pos) -> Option<u8> {
-        self.matrix.get(i as usize).copied()
-    }
-
-    /// Gets all keys in a certain index column. 0 = left index, 1 = right index.
-    fn get_index(&self, index: usize) -> [u8; 6] {
-        let mut new_index = [0; 6];
-        let start_pos = index * 2 + 3;
-        for i in 0..2 {
-            for j in 0..3 {
-                new_index[2 * j + i] = self.matrix[start_pos + i + 10 * j];
-            }
-        }
-        new_index
-    }
-
-    #[inline(always)]
-    fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()> {
-        let char1 = self.char(i1)?;
-        let char2 = self.char(i2)?;
-
-        *self.matrix.get_mut(i1 as usize)? = char2;
-        *self.matrix.get_mut(i2 as usize)? = char1;
-
-        *self.char_to_finger.get_mut(char1 as usize)? =
-            Some(*self.matrix_fingers.get(i2 as usize)?);
-        *self.char_to_finger.get_mut(char2 as usize)? =
-            Some(*self.matrix_fingers.get(i1 as usize)?);
-
-        Some(())
-    }
-
-    #[inline(always)]
-    fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
-        self.swap(pair.0, pair.1)
     }
 }
 
@@ -428,12 +399,12 @@ impl PinkyRingIndices {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct StretchCache {
+pub struct StretchIndices {
     pub all_pairs: Box<[BigramPair]>,
     pub per_key_pair: HashMap<PosPair, Box<[BigramPair]>>,
 }
 
-impl StretchCache {
+impl StretchIndices {
     pub fn new(keys: &[char], fingers: &[Finger], keyboard: &[PhysicalKey]) -> Self {
         assert!(
             fingers.len() <= u8::MAX as usize,
@@ -611,13 +582,12 @@ impl UsageIndices {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::{cached_layout::Layout as _, generate::LayoutGeneration, layout::Layout};
+    use crate::{generate::Oxeylyzer, layout::Layout};
 
     use super::*;
     use once_cell::sync::Lazy;
 
-    static GEN: Lazy<LayoutGeneration> =
-        Lazy::new(|| LayoutGeneration::new("english", "static", None).unwrap());
+    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| Oxeylyzer::new("english", "static").unwrap());
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
         let dof_str = r#"
@@ -700,7 +670,7 @@ mod tests {
         );
 
         assert_eq!(
-            GEN.mapping.map_us(&QWERTY.matrix).collect::<Vec<_>>(),
+            GEN.mapping.map_us(&QWERTY.keys).collect::<Vec<_>>(),
             vec![
                 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h',
                 'j', 'k', 'l', ';', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'
@@ -720,8 +690,8 @@ mod tests {
         assert_eq!(random.fspeed_indices, QWERTY.fspeed_indices);
         assert_eq!(random.stretch_indices, QWERTY.stretch_indices);
         assert_eq!(random.mapping, QWERTY.mapping);
-        assert_eq!(random.matrix_fingers, QWERTY.matrix_fingers);
-        assert_eq!(random.matrix_physical, QWERTY.matrix_physical);
+        assert_eq!(random.fingers, QWERTY.fingers);
+        assert_eq!(random.keyboard, QWERTY.keyboard);
         assert_eq!(random.possible_swaps, QWERTY.possible_swaps);
         assert_eq!(random.shape, QWERTY.shape);
 
@@ -732,8 +702,8 @@ mod tests {
 
         assert_eq!(r_hs, q_hs);
 
-        for (i, &u) in random.matrix.iter().enumerate() {
-            let qwerty_eq = QWERTY.matrix[i];
+        for (i, &u) in random.keys.iter().enumerate() {
+            let qwerty_eq = QWERTY.keys[i];
 
             assert_eq!(
                 random.char_to_finger[u as usize],

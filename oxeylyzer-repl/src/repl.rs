@@ -4,13 +4,13 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use itertools::{EitherOrBoth, Itertools};
+use itertools::Itertools;
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
 use oxeylyzer_core::{OxeylyzerError, OxeylyzerResultExt};
 use oxeylyzer_core::{
-    cached_layout::{Layout as _, *},
-    generate::LayoutGeneration,
+    fast_layout::*,
+    generate::Oxeylyzer,
     layout::{Layout, PosPair},
     rayon,
     weights::Config,
@@ -24,7 +24,7 @@ use serde_json::ser::PrettyFormatter;
 use thiserror::Error;
 
 use crate::corpus_transposition::CorpusConfig;
-use crate::tui::*;
+use crate::display::*;
 
 const EXIT_MESSAGE: &str = "Exiting analyzer...";
 
@@ -49,7 +49,7 @@ pub enum ReplError {
     )]
     MissingLanguageFlag,
     #[error("Could not serialize layout:\n{}\n", .0.formatted_string())]
-    CouldNotSerializeLayout(FastLayout),
+    CouldNotSerializeLayout(Box<FastLayout>),
     #[error("Could not find corpus config for corpus '{0}'")]
     CouldNotFindCorpusConfig(String),
 
@@ -71,7 +71,7 @@ pub enum ReplStatus {
 
 pub struct Repl {
     language: String,
-    layout_gen: LayoutGeneration,
+    layout_gen: Oxeylyzer,
     saved: HashMap<String, Layout>,
     temp_generated: Vec<FastLayout>,
     thread_pool: rayon::ThreadPool,
@@ -91,10 +91,9 @@ impl Repl {
             .build()
             .unwrap();
 
-        let layout_gen = LayoutGeneration::new(
+        let layout_gen = Oxeylyzer::new(
             config.language.clone().as_str(),
             generator_base_path.as_ref(),
-            Some(config),
         )?;
 
         Ok(Self {
@@ -202,7 +201,7 @@ impl Repl {
         let m = HashSet::<char>::from_iter(pin_chars.chars());
 
         layout
-            .matrix
+            .keys
             .iter()
             .map(|u| self.layout_gen.mapping.get_c(*u))
             .enumerate()
@@ -234,7 +233,7 @@ impl Repl {
     fn placeholder_name(&self, layout: &FastLayout) -> Result<String> {
         for i in 1..1000usize {
             let new_name = layout
-                .matrix
+                .keys
                 .iter()
                 .skip(10)
                 .take(4)
@@ -275,7 +274,7 @@ impl Repl {
         let mut ser = Serializer::with_formatter(vec![], formatter);
         layout
             .serialize(&mut ser)
-            .map_err(|_| ReplError::CouldNotSerializeLayout(layout.clone()))?;
+            .map_err(|_| ReplError::CouldNotSerializeLayout(Box::new(layout.clone())))?;
 
         f.write_all(ser.into_inner().as_slice())
             .path_context(path)?;
@@ -288,14 +287,12 @@ impl Repl {
     }
 
     pub fn analyze_layout(&self, layout: &FastLayout) {
-        let fmt_score = |base| (base as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
-
         let stats = self.layout_gen.get_layout_stats(layout);
-        let score = self.layout_gen.score(layout);
 
         let layout_str = heatmap_string(layout, &self.layout_gen.data);
 
-        println!("{}\n{}\nScore: {:.3}", layout_str, stats, fmt_score(score));
+        println!("{layout_str}\n");
+        print_layout_stats(&stats, &self.layout_gen.data);
     }
 
     pub fn compare(&self, name1: &str, name2: &str) -> Result<()> {
@@ -303,102 +300,12 @@ impl Repl {
         let l2 = self.layout(name2)?;
 
         println!("\n{: <32}{}", name1, name2);
-
-        heatmap_string(&l1, &self.layout_gen.data)
-            .split('\n')
-            .zip(l1.formatted_string().split('\n'))
-            .zip_longest(heatmap_string(&l2, &self.layout_gen.data).split('\n'))
-            .for_each(|z| match z {
-                EitherOrBoth::Both((r1, f), r2) => {
-                    let spaces = std::iter::repeat_n(' ', 32 - f.len()).collect::<String>();
-                    println!("{r1}{spaces}{r2}");
-                }
-                EitherOrBoth::Left((r1, _)) => println!("{r1}",),
-                EitherOrBoth::Right(r2) => println!("{: <32}{r2}", ""),
-            });
+        print_compare_layouts(&l1, &l2, &self.layout_gen.data);
 
         let s1 = self.layout_gen.get_layout_stats(&l1);
         let s2 = self.layout_gen.get_layout_stats(&l2);
-        let ts1 = s1.trigram_stats;
-        let ts2 = s2.trigram_stats;
 
-        let fmt_score = |base| (base as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
-
-        println!(
-            concat!(
-                "\n",
-                "Sfb:                {: <11} Sfb:                {:.3}%\n",
-                "Dsfb:               {: <11} Dsfb:               {:.3}%\n",
-                "Finger Speed:       {: <11} Finger Speed:       {:.3}\n",
-                "Stretches:          {: <11} Stretches:          {:.3}\n",
-                "Scissors:           {: <11} Scissors:           {:.3}%\n",
-                "Lsbs:               {: <11} Lsbs:               {:.3}%\n",
-                "Pinky Ring Bigrams: {: <11} Pinky Ring Bigrams: {:.3}%\n\n",
-                "Inrolls:            {: <11} Inrolls:            {:.2}%\n",
-                "Outrolls:           {: <11} Outrolls:           {:.2}%\n",
-                "Total Rolls:        {: <11} Total Rolls:        {:.2}%\n",
-                "Onehands:           {: <11} Onehands:           {:.3}%\n\n",
-                "Alternates:         {: <11} Alternates:         {:.2}%\n",
-                "Alternates Sfs:     {: <11} Alternates Sfs:     {:.2}%\n",
-                "Total Alternates:   {: <11} Total Alternates:   {:.2}%\n\n",
-                "Redirects:          {: <11} Redirects:          {:.3}%\n",
-                "Redirects Sfs:      {: <11} Redirects Sfs:      {:.3}%\n",
-                "Bad Redirects:      {: <11} Bad Redirects:      {:.3}%\n",
-                "Bad Redirects Sfs:  {: <11} Bad Redirects Sfs:  {:.3}%\n",
-                "Total Redirects:    {: <11} Total Redirects:    {:.3}%\n\n",
-                "Bad Sfbs:           {: <11} Bad Sfbs:           {:.3}%\n",
-                "Sft:                {: <11} Sft:                {:.3}%\n\n",
-                "Score:              {: <11} Score:              {:.3}\n"
-            ),
-            format!("{:.3}%", s1.sfb * 100.0),
-            s2.sfb * 100.0,
-            format!("{:.3}%", s1.dsfb * 100.0),
-            s2.dsfb * 100.0,
-            format!("{:.3}", s1.fspeed * 10.0),
-            s2.fspeed * 10.0,
-            format!("{:.3}", s1.stretches * 10.0),
-            s2.stretches * 10.0,
-            format!("{:.3}%", s1.scissors * 100.0),
-            s2.scissors * 100.0,
-            format!("{:.3}%", s1.lsbs * 100.0),
-            s2.lsbs * 100.0,
-            format!("{:.3}%", s1.pinky_ring * 100.0),
-            s2.pinky_ring * 100.0,
-            format!("{:.2}%", ts1.inrolls * 100.0),
-            ts2.inrolls * 100.0,
-            format!("{:.2}%", ts1.outrolls * 100.0),
-            ts2.outrolls * 100.0,
-            format!("{:.2}%", (ts1.inrolls + ts1.outrolls) * 100.0),
-            (ts2.inrolls + ts2.outrolls) * 100.0,
-            format!("{:.3}%", ts1.onehands * 100.0),
-            ts2.onehands * 100.0,
-            format!("{:.2}%", ts1.alternates * 100.0),
-            ts2.alternates * 100.0,
-            format!("{:.2}%", ts1.alternates_sfs * 100.0),
-            ts2.alternates_sfs * 100.0,
-            format!("{:.2}%", (ts1.alternates + ts1.alternates_sfs) * 100.0),
-            (ts2.alternates + ts2.alternates_sfs) * 100.0,
-            format!("{:.3}%", ts1.redirects * 100.0),
-            ts2.redirects * 100.0,
-            format!("{:.3}%", ts1.redirects_sfs * 100.0),
-            ts2.redirects_sfs * 100.0,
-            format!("{:.3}%", ts1.bad_redirects * 100.0),
-            ts2.bad_redirects * 100.0,
-            format!("{:.3}%", ts1.bad_redirects_sfs * 100.0),
-            ts2.bad_redirects_sfs * 100.0,
-            format!(
-                "{:.3}%",
-                (ts1.redirects + ts1.redirects_sfs + ts1.bad_redirects + ts1.bad_redirects_sfs)
-                    * 100.0
-            ),
-            (ts2.redirects + ts2.redirects_sfs + ts2.bad_redirects + ts2.bad_redirects_sfs) * 100.0,
-            format!("{:.3}%", ts1.bad_sfbs * 100.0),
-            ts2.bad_sfbs * 100.0,
-            format!("{:.3}%", ts1.sfts * 100.0),
-            ts2.sfts * 100.0,
-            format!("{:.3}", fmt_score(self.layout_gen.score(&l1))),
-            fmt_score(self.layout_gen.score(&l2))
-        );
+        print_compare_stats(&s1, &s2, &self.layout_gen.data);
 
         Ok(())
     }
@@ -412,11 +319,11 @@ impl Repl {
             .flat_map(|swap| swap.chars().zip(swap.chars().skip(1)).collect::<Vec<_>>())
             .for_each(|(c1, c2)| {
                 let p1 = layout
-                    .matrix
+                    .keys
                     .iter()
                     .position(|&k| k == self.layout_gen.mapping.get_u(c1));
                 let p2 = layout
-                    .matrix
+                    .keys
                     .iter()
                     .position(|&k| k == self.layout_gen.mapping.get_u(c2));
 
@@ -450,7 +357,7 @@ impl Repl {
     fn bigram_stat(
         &self,
         pairs: &[BigramPair],
-        freq: impl Fn(&LayoutGeneration, &FastLayout, &BigramPair) -> i64,
+        freq: impl Fn(&Oxeylyzer, &FastLayout, &BigramPair) -> i64,
         layout: &FastLayout,
         count: usize,
         is_percent: bool,
@@ -504,7 +411,7 @@ impl Repl {
             .map(|p| BigramPair { pair: *p, dist: 1 })
             .collect::<Vec<_>>();
 
-        self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, layout, count, true);
+        self.bigram_stat(&pairs, Oxeylyzer::pair_sfb, layout, count, true);
     }
 
     fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
@@ -515,7 +422,7 @@ impl Repl {
 
         self.bigram_stat(
             &layout.fspeed_indices.all,
-            LayoutGeneration::pair_sfb,
+            Oxeylyzer::pair_sfb,
             &layout,
             count,
             true,
@@ -545,7 +452,7 @@ impl Repl {
 
         self.bigram_stat(
             &layout.fspeed_indices.all,
-            LayoutGeneration::pair_fspeed,
+            Oxeylyzer::pair_fspeed,
             &layout,
             count,
             false,
@@ -564,7 +471,7 @@ impl Repl {
 
         self.bigram_stat(
             &layout.stretch_indices.all_pairs,
-            LayoutGeneration::pair_stretch,
+            Oxeylyzer::pair_stretch,
             &layout,
             count,
             false,
@@ -686,7 +593,7 @@ impl Repl {
 
         match (all, raw) {
             (true, true) => {
-                for dir_entry in std::fs::read_dir(&base_path)
+                for dir_entry in std::fs::read_dir(base_path)
                     .path_context(base_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
@@ -701,7 +608,7 @@ impl Repl {
                 }
             }
             (true, false) => {
-                for dir_entry in std::fs::read_dir(&base_path)
+                for dir_entry in std::fs::read_dir(base_path)
                     .path_context(base_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
@@ -792,10 +699,9 @@ impl Repl {
     }
 
     fn reset_with_language(&mut self, language: &str) -> Result<()> {
-        let config = Config::with_loaded_weights("config.toml");
         let layouts_path = PathBuf::from("./static/layouts").join(language);
 
-        let generator = LayoutGeneration::new(language, "static", Some(config))?;
+        let generator = Oxeylyzer::new(language, "static")?;
         let saved = load_layouts(layouts_path)?;
 
         self.layout_gen = generator;
