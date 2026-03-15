@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use libdof::{combos::Combos, magic::Magic, prelude::*};
 use serde::{Deserialize, Serialize};
 
-use crate::{cached_layout::FastLayout, *};
+use crate::{fast_layout::FastLayout, *};
 
 pub type Pos = u8;
 

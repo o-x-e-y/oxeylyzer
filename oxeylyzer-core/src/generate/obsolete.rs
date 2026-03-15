@@ -1,7 +1,7 @@
 use libdof::prelude::Finger;
 
 use crate::{
-    cached_layout::*,
+    fast_layout::*,
     generate::{LayoutGeneration, SMALLEST_SCORE},
     layout::PosPair,
 };

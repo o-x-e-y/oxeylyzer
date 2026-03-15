@@ -7,7 +7,7 @@ use libdof::prelude::Finger;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::analyzer_data::AnalyzerData;
-use crate::cached_layout::*;
+use crate::fast_layout::*;
 use crate::char_mapping::CharMapping;
 use crate::data::Data;
 use crate::layout::{Layout, PosPair};
