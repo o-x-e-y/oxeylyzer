@@ -302,7 +302,7 @@ impl LayoutGeneration {
             name,
             keys: matrix,
             char_to_finger,
-            matrix_fingers,
+            fingers: matrix_fingers,
             matrix_physical,
             fspeed_indices,
             scissor_indices,

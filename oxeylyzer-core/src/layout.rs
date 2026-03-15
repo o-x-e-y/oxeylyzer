@@ -231,7 +231,7 @@ impl From<FastLayout> for Layout {
                 .iter()
                 .map(|&u| layout.mapping.get_c(u))
                 .collect(),
-            fingers: layout.matrix_fingers,
+            fingers: layout.fingers,
             keyboard: layout.matrix_physical,
             shape: layout.shape,
             metadata: layout.metadata.clone(),

@@ -20,7 +20,7 @@ pub struct FastLayout {
     pub name: Option<String>,
     pub keys: Box<[u8]>,
     pub char_to_finger: Box<[Option<Finger>]>,
-    pub matrix_fingers: Box<[Finger]>,
+    pub fingers: Box<[Finger]>,
     pub matrix_physical: Box<[PhysicalKey]>,
     pub fspeed_indices: FSpeedIndices,
     pub scissor_indices: ScissorIndices,
@@ -42,7 +42,7 @@ impl FastLayout {
 
     #[inline(always)]
     pub fn finger(&self, pos: Pos) -> Option<Finger> {
-        self.matrix_fingers.get(pos as usize).copied()
+        self.fingers.get(pos as usize).copied()
     }
 
     #[inline(always)]
@@ -53,10 +53,8 @@ impl FastLayout {
         *self.keys.get_mut(i1 as usize)? = char2;
         *self.keys.get_mut(i2 as usize)? = char1;
 
-        *self.char_to_finger.get_mut(char1 as usize)? =
-            Some(*self.matrix_fingers.get(i2 as usize)?);
-        *self.char_to_finger.get_mut(char2 as usize)? =
-            Some(*self.matrix_fingers.get(i1 as usize)?);
+        *self.char_to_finger.get_mut(char1 as usize)? = Some(*self.fingers.get(i2 as usize)?);
+        *self.char_to_finger.get_mut(char2 as usize)? = Some(*self.fingers.get(i1 as usize)?);
 
         Some(())
     }
@@ -81,7 +79,7 @@ impl FastLayout {
         res.keys
             .iter()
             .enumerate()
-            .for_each(|(i, &c)| res.char_to_finger[c as usize] = Some(res.matrix_fingers[i]));
+            .for_each(|(i, &c)| res.char_to_finger[c as usize] = Some(res.fingers[i]));
 
         res
     }
@@ -693,7 +691,7 @@ mod tests {
         assert_eq!(random.fspeed_indices, QWERTY.fspeed_indices);
         assert_eq!(random.stretch_indices, QWERTY.stretch_indices);
         assert_eq!(random.mapping, QWERTY.mapping);
-        assert_eq!(random.matrix_fingers, QWERTY.matrix_fingers);
+        assert_eq!(random.fingers, QWERTY.fingers);
         assert_eq!(random.matrix_physical, QWERTY.matrix_physical);
         assert_eq!(random.possible_swaps, QWERTY.possible_swaps);
         assert_eq!(random.shape, QWERTY.shape);
