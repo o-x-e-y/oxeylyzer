@@ -97,7 +97,7 @@ pub fn print_layout_stats(stats: &LayoutStats, data: &AnalyzerData) {
         concat!(
             "Sfb:  {:.3}%\nDsfb: {:.3}%\n\nFinger Speed: {:.3}\n",
             "{}\nStretches: {:.3}%\nScissors: {:.3}%\nLsbs: {:.3}%\n",
-            "Pinky Ring Bigrams: {:.3}%\nScore: {:.3}",
+            "Pinky Ring Bigrams: {:.3}%\n",
         ),
         stats.sfb,
         stats.dsfb,
@@ -107,7 +107,6 @@ pub fn print_layout_stats(stats: &LayoutStats, data: &AnalyzerData) {
         stats.scissors,
         stats.lsbs,
         stats.pinky_ring,
-        fmt_score(stats.score),
     );
 
     let t = &stats.trigram_stats;
@@ -126,7 +125,8 @@ pub fn print_layout_stats(stats: &LayoutStats, data: &AnalyzerData) {
 			Bad Redirects Sfs: {:.3}%\n\
 			Total Redirects: {:.3}%\n\n\
 			Bad Sfbs: {:.3}%\n\
-			Sft: {:.3}%",
+			Sft: {:.3}%\n\
+			Score: {:.3}",
         t.inrolls,
         t.outrolls,
         (t.inrolls + t.outrolls),
@@ -140,7 +140,8 @@ pub fn print_layout_stats(stats: &LayoutStats, data: &AnalyzerData) {
         t.bad_redirects_sfs,
         (t.redirects + t.redirects_sfs + t.bad_redirects + t.bad_redirects_sfs),
         t.bad_sfbs,
-        t.sfts
+        t.sfts,
+        fmt_score(stats.score),
     )
 }
 

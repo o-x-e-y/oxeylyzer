@@ -212,13 +212,11 @@ mod tests {
     use crate::{fast_layout::FastLayout, generate::Oxeylyzer, layout::Layout};
     use once_cell::sync::Lazy;
 
-    static GEN: Lazy<Oxeylyzer> =
-        Lazy::new(|| Oxeylyzer::new("english", "./static", None).unwrap());
+    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| Oxeylyzer::new("english", "./static").unwrap());
 
     static DVORAK: Lazy<FastLayout> = Lazy::new(|| {
-        let config = crate::weights::Config::with_defaults();
         let base_path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../static");
-        let g = Oxeylyzer::new("english", base_path, Some(config)).unwrap();
+        let g = Oxeylyzer::new("english", base_path).unwrap();
 
         let dof_str = r#"
             {

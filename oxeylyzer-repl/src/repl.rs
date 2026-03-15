@@ -94,7 +94,6 @@ impl Repl {
         let layout_gen = Oxeylyzer::new(
             config.language.clone().as_str(),
             generator_base_path.as_ref(),
-            Some(config),
         )?;
 
         Ok(Self {
@@ -700,10 +699,9 @@ impl Repl {
     }
 
     fn reset_with_language(&mut self, language: &str) -> Result<()> {
-        let config = Config::with_loaded_weights("config.toml");
         let layouts_path = PathBuf::from("./static/layouts").join(language);
 
-        let generator = Oxeylyzer::new(language, "static", Some(config))?;
+        let generator = Oxeylyzer::new(language, "static")?;
         let saved = load_layouts(layouts_path)?;
 
         self.layout_gen = generator;

@@ -141,13 +141,14 @@ pub struct Oxeylyzer {
 }
 
 impl Oxeylyzer {
-    pub fn new<P>(language: &str, base_path: P, config: Option<Config>) -> Result<Self>
+    pub fn new<P>(language: &str, base_path: P) -> Result<Self>
     where
         P: AsRef<Path>,
     {
-        let config = config.unwrap_or_else(|| {
-            Config::with_loaded_weights(concat!(std::env!("CARGO_MANIFEST_DIR"), "/../config.toml"))
-        });
+        let config = Config::with_loaded_weights(concat!(
+            std::env!("CARGO_MANIFEST_DIR"),
+            "/../config.toml"
+        ));
         let data_path = base_path
             .as_ref()
             .join("language_data")
@@ -885,7 +886,7 @@ mod tests {
     use rayon::iter::ParallelIterator;
     use std::{collections::HashSet, sync::atomic::Ordering};
 
-    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| Oxeylyzer::new("english", "static", None).unwrap());
+    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| Oxeylyzer::new("english", "static").unwrap());
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
         let dof_str = r#"
