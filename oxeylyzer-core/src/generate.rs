@@ -133,7 +133,7 @@ pub struct LayoutGeneration {
     pub data: AnalyzerData,
     pub mapping: Arc<CharMapping>,
     pub trigram_precision: usize,
-    pub trigram_patterns: Box<[TrigramPattern; 1000]>,
+    pub trigram_patterns: Arc<[TrigramPattern; 1000]>,
 
     per_char_trigrams: PerCharTrigrams,
 

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use libdof::dofinitions::{Finger, Finger::*, Hand, Hand::*};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -188,7 +190,7 @@ impl Trigram {
     }
 }
 
-pub fn get_trigram_combinations() -> Box<[TrigramPattern; 1000]> {
+pub fn get_trigram_combinations() -> Arc<[TrigramPattern; 1000]> {
     let mut combinations = [TrigramPattern::Other; 1000];
 
     for f3 in Finger::FINGERS {
@@ -201,7 +203,7 @@ pub fn get_trigram_combinations() -> Box<[TrigramPattern; 1000]> {
         }
     }
 
-    Box::new(combinations)
+    Arc::new(combinations)
 }
 
 #[cfg(test)]
