@@ -49,7 +49,7 @@ pub enum ReplError {
     )]
     MissingLanguageFlag,
     #[error("Could not serialize layout:\n{}\n", .0.formatted_string())]
-    CouldNotSerializeLayout(FastLayout),
+    CouldNotSerializeLayout(Box<FastLayout>),
     #[error("Could not find corpus config for corpus '{0}'")]
     CouldNotFindCorpusConfig(String),
 
@@ -275,7 +275,7 @@ impl Repl {
         let mut ser = Serializer::with_formatter(vec![], formatter);
         layout
             .serialize(&mut ser)
-            .map_err(|_| ReplError::CouldNotSerializeLayout(layout.clone()))?;
+            .map_err(|_| ReplError::CouldNotSerializeLayout(Box::new(layout.clone())))?;
 
         f.write_all(ser.into_inner().as_slice())
             .path_context(path)?;
@@ -686,7 +686,7 @@ impl Repl {
 
         match (all, raw) {
             (true, true) => {
-                for dir_entry in std::fs::read_dir(&base_path)
+                for dir_entry in std::fs::read_dir(base_path)
                     .path_context(base_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
@@ -701,7 +701,7 @@ impl Repl {
                 }
             }
             (true, false) => {
-                for dir_entry in std::fs::read_dir(&base_path)
+                for dir_entry in std::fs::read_dir(base_path)
                     .path_context(base_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
