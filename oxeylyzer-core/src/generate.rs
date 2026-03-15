@@ -182,8 +182,6 @@ impl std::fmt::Display for LayoutStats {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct LayoutCache {
-    // effort: [f64; 30],
-    // effort_total: f64,
     pinky_ring: i64,
 
     usage: [i64; 10],
@@ -192,7 +190,6 @@ pub struct LayoutCache {
     fspeed: [i64; 10],
     fspeed_total: i64,
 
-    // trigrams: HashMap<(char, Option<char>), f64>,
     stretch_total: i64,
     trigrams_total: i64,
 }
@@ -264,7 +261,6 @@ impl LayoutGeneration {
             .map(|&c| self.data.mapping.get_u(c))
             .collect::<Box<_>>();
 
-        // let name = layout.name;
         let matrix_fingers = layout.fingers.clone();
         let shape = layout.shape.clone();
         let mapping = self.mapping.clone();
@@ -283,8 +279,6 @@ impl LayoutGeneration {
             .enumerate()
             .for_each(|(i, &c)| char_to_finger[c as usize] = Some(matrix_fingers[i]));
 
-        // let unweighted_sfb_indices =
-        //     FspeedIndices::new(&fingers, &keyboard, &FingerWeights::default());
         let fspeed_indices = FSpeedIndices::new(
             &matrix_fingers,
             &matrix_physical,
@@ -424,10 +418,6 @@ impl LayoutGeneration {
         #[cfg(test)]
         ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-        // let effort = (0..layout.matrix.len())
-        //     .map(|i| self.char_effort(layout, i))
-        //     .sum::<f64>();
-
         let fspeed_usage = Finger::FINGERS
             .into_iter()
             .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
@@ -436,7 +426,7 @@ impl LayoutGeneration {
         let pinky_ring = self.pinky_ring_score(layout);
         let trigram_score = self.trigram_score_iter(layout, self.data.gen_trigrams());
 
-        trigram_score /* - effort */ + fspeed_usage + pinky_ring
+        trigram_score + fspeed_usage + pinky_ring
     }
 
     fn per_char_trigrams(
@@ -960,7 +950,6 @@ impl LayoutGeneration {
 }
 
 mod obsolete;
-// mod iterative;
 
 #[cfg(test)]
 mod tests {
