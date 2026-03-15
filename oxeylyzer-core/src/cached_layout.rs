@@ -36,8 +36,54 @@ pub struct FastLayout {
 
 impl FastLayout {
     #[inline(always)]
+    pub fn char(&self, i: Pos) -> Option<u8> {
+        self.matrix.get(i as usize).copied()
+    }
+
+    #[inline(always)]
     pub fn finger(&self, pos: Pos) -> Option<Finger> {
         self.matrix_fingers.get(pos as usize).copied()
+    }
+
+    #[inline(always)]
+    pub fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()> {
+        let char1 = self.char(i1)?;
+        let char2 = self.char(i2)?;
+
+        *self.matrix.get_mut(i1 as usize)? = char2;
+        *self.matrix.get_mut(i2 as usize)? = char1;
+
+        *self.char_to_finger.get_mut(char1 as usize)? =
+            Some(*self.matrix_fingers.get(i2 as usize)?);
+        *self.char_to_finger.get_mut(char2 as usize)? =
+            Some(*self.matrix_fingers.get(i1 as usize)?);
+
+        Some(())
+    }
+
+    #[inline(always)]
+    pub fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
+        self.swap(pair.0, pair.1)
+    }
+
+    pub fn random(&self) -> Self {
+        self.random_with_pins(&[])
+    }
+
+    pub fn random_with_pins(&self, pins: &[usize]) -> Self {
+        let mut res = self.clone();
+
+        res.name = None;
+        res.char_to_finger = Box::new([None; 60]);
+
+        shuffle_pins(&mut res.matrix, pins);
+
+        res.matrix
+            .iter()
+            .enumerate()
+            .for_each(|(i, &c)| res.char_to_finger[c as usize] = Some(res.matrix_fingers[i]));
+
+        res
     }
 
     pub fn layout_str(&self) -> String {
@@ -67,52 +113,6 @@ impl FastLayout {
         }
 
         res.trim().to_string()
-    }
-
-    pub fn random(&self) -> Self {
-        self.random_with_pins(&[])
-    }
-
-    pub fn random_with_pins(&self, pins: &[usize]) -> Self {
-        let mut res = self.clone();
-
-        res.name = None;
-        res.char_to_finger = Box::new([None; 60]);
-
-        shuffle_pins(&mut res.matrix, pins);
-
-        res.matrix
-            .iter()
-            .enumerate()
-            .for_each(|(i, &c)| res.char_to_finger[c as usize] = Some(res.matrix_fingers[i]));
-
-        res
-    }
-
-    #[inline(always)]
-    pub fn char(&self, i: Pos) -> Option<u8> {
-        self.matrix.get(i as usize).copied()
-    }
-
-    #[inline(always)]
-    pub fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()> {
-        let char1 = self.char(i1)?;
-        let char2 = self.char(i2)?;
-
-        *self.matrix.get_mut(i1 as usize)? = char2;
-        *self.matrix.get_mut(i2 as usize)? = char1;
-
-        *self.char_to_finger.get_mut(char1 as usize)? =
-            Some(*self.matrix_fingers.get(i2 as usize)?);
-        *self.char_to_finger.get_mut(char2 as usize)? =
-            Some(*self.matrix_fingers.get(i1 as usize)?);
-
-        Some(())
-    }
-
-    #[inline(always)]
-    pub fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
-        self.swap(pair.0, pair.1)
     }
 }
 
