@@ -439,40 +439,6 @@ impl LayoutGeneration {
         trigram_score /* - effort */ + fspeed_usage + pinky_ring
     }
 
-    // fn weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
-    //     let len = data.characters.len();
-    //     let chars = 0..len;
-
-    //     chars
-    //         .clone()
-    //         .cartesian_product(chars)
-    //         .map(|(c1, c2)| {
-    //             let bigram = c1 * len + c2;
-    //             let sfb = data.bigrams.get(bigram).unwrap_or(&0.0);
-    //             let dsfb = data.skipgrams.get(bigram).unwrap_or(&0.0) * weights.dsfb_ratio;
-    //             let dsfb2 = data.skipgrams2.get(bigram).unwrap_or(&0.0) * weights.dsfb_ratio2;
-    //             let dsfb3 = data.skipgrams3.get(bigram).unwrap_or(&0.0) * weights.dsfb_ratio3;
-    //             (sfb + dsfb + dsfb2 + dsfb3) * weights.fspeed
-    //         })
-    //         .collect()
-    // }
-
-    // fn stretch_weighted_bigrams(data: &LanguageData, weights: &Weights) -> BigramData {
-    //     data.bigrams
-    //         .iter()
-    //         .zip(&data.skipgrams)
-    //         .zip(&data.skipgrams2)
-    //         .zip(&data.skipgrams3)
-    //         .map(|(((&b, s), s2), s3)| {
-    //             let sfb = b;
-    //             let sfs = s * weights.dsfb_ratio;
-    //             let sfs2 = s2 * weights.dsfb_ratio2;
-    //             let sfs3 = s3 * weights.dsfb_ratio3;
-    //             (sfb + sfs + sfs2 + sfs3) * weights.stretches
-    //         })
-    //         .collect::<Box<_>>()
-    // }
-
     fn per_char_trigrams(
         trigrams: &[([u8; 3], i64)],
         highest: u8,
