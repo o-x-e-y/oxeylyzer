@@ -707,6 +707,10 @@ impl Repl {
         self.layout_gen = generator;
         self.language = language.to_string();
         self.saved = saved;
+        self.temp_generated.iter_mut().for_each(|l| {
+            let layout = Layout::from(l.clone());
+            *l = self.layout_gen.fast_layout(&layout, &[]);
+        });
 
         Ok(())
     }
