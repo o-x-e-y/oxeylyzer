@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use itertools::{EitherOrBoth, Itertools};
+use itertools::Itertools;
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
 use oxeylyzer_core::{OxeylyzerError, OxeylyzerResultExt};
@@ -288,16 +288,12 @@ impl Repl {
     }
 
     pub fn analyze_layout(&self, layout: &FastLayout) {
-        let fmt_score = |base| (base as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
-
         let stats = self.layout_gen.get_layout_stats(layout);
-        let score = self.layout_gen.score(layout);
 
         let layout_str = heatmap_string(layout, &self.layout_gen.data);
 
-        println!("{layout_str}");
-        print_layout_stats(&stats);
-        println!("Score: {:.3}", fmt_score(score));
+        println!("{layout_str}\n");
+        print_layout_stats(&stats, &self.layout_gen.data);
     }
 
     pub fn compare(&self, name1: &str, name2: &str) -> Result<()> {
@@ -305,30 +301,12 @@ impl Repl {
         let l2 = self.layout(name2)?;
 
         println!("\n{: <32}{}", name1, name2);
-
-        heatmap_string(&l1, &self.layout_gen.data)
-            .split('\n')
-            .zip(l1.formatted_string().split('\n'))
-            .zip_longest(heatmap_string(&l2, &self.layout_gen.data).split('\n'))
-            .for_each(|z| match z {
-                EitherOrBoth::Both((r1, f), r2) => {
-                    let spaces = std::iter::repeat_n(' ', 32 - f.len()).collect::<String>();
-                    println!("{r1}{spaces}{r2}");
-                }
-                EitherOrBoth::Left((r1, _)) => println!("{r1}",),
-                EitherOrBoth::Right(r2) => println!("{: <32}{r2}", ""),
-            });
+        print_compare_layouts(&l1, &l2, &self.layout_gen.data);
 
         let s1 = self.layout_gen.get_layout_stats(&l1);
         let s2 = self.layout_gen.get_layout_stats(&l2);
-        let fmt_score = |base| (base as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
 
-        print_compare_stats(
-            &s1,
-            &s2,
-            fmt_score(self.layout_gen.score(&l1)),
-            fmt_score(self.layout_gen.score(&l2)),
-        );
+        print_compare_stats(&s1, &s2, &self.layout_gen.data);
 
         Ok(())
     }

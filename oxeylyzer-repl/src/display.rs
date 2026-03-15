@@ -1,3 +1,4 @@
+use itertools::{EitherOrBoth, Itertools};
 use oxeylyzer_core::fast_layout::*;
 use oxeylyzer_core::generate::LayoutStats;
 use oxeylyzer_core::rayon::iter::ParallelIterator;
@@ -89,12 +90,14 @@ fn format_fspeed(finger_speed: &[f64]) -> String {
     format!("{legend}{left_hand}{right_hand}")
 }
 
-pub fn print_layout_stats(stats: &LayoutStats) {
+pub fn print_layout_stats(stats: &LayoutStats, data: &AnalyzerData) {
+    let fmt_score = |base| (base as f64) / (data.char_total as f64) / 100.0;
+
     println!(
         concat!(
             "Sfb:  {:.3}%\nDsfb: {:.3}%\n\nFinger Speed: {:.3}\n",
             "{}\nStretches: {:.3}%\nScissors: {:.3}%\nLsbs: {:.3}%\n",
-            "Pinky Ring Bigrams: {:.3}%\n"
+            "Pinky Ring Bigrams: {:.3}%\nScore: {:.3}",
         ),
         stats.sfb,
         stats.dsfb,
@@ -104,6 +107,7 @@ pub fn print_layout_stats(stats: &LayoutStats) {
         stats.scissors,
         stats.lsbs,
         stats.pinky_ring,
+        fmt_score(stats.score),
     );
 
     let t = &stats.trigram_stats;
@@ -140,7 +144,24 @@ pub fn print_layout_stats(stats: &LayoutStats) {
     )
 }
 
-pub fn print_compare_stats(s1: &LayoutStats, s2: &LayoutStats, score1: f64, score2: f64) {
+pub fn print_compare_layouts(l1: &FastLayout, l2: &FastLayout, data: &AnalyzerData) {
+    heatmap_string(l1, data)
+        .split('\n')
+        .zip(l1.formatted_string().split('\n'))
+        .zip_longest(heatmap_string(l2, data).split('\n'))
+        .for_each(|z| match z {
+            EitherOrBoth::Both((r1, f), r2) => {
+                let spaces = std::iter::repeat_n(' ', 32 - f.len()).collect::<String>();
+                println!("{r1}{spaces}{r2}");
+            }
+            EitherOrBoth::Left((r1, _)) => println!("{r1}",),
+            EitherOrBoth::Right(r2) => println!("{: <32}{r2}", ""),
+        });
+}
+
+pub fn print_compare_stats(s1: &LayoutStats, s2: &LayoutStats, data: &AnalyzerData) {
+    let fmt_score = |base| (base as f64) / (data.char_total as f64) / 100.0;
+
     let ts1 = &s1.trigram_stats;
     let ts2 = &s2.trigram_stats;
 
@@ -215,7 +236,7 @@ pub fn print_compare_stats(s1: &LayoutStats, s2: &LayoutStats, score1: f64, scor
         ts2.bad_sfbs * 100.0,
         format!("{:.3}%", ts1.sfts * 100.0),
         ts2.sfts * 100.0,
-        format!("{:.3}", score1),
-        score2,
+        format!("{:.3}", fmt_score(s1.score)),
+        fmt_score(s2.score),
     );
 }

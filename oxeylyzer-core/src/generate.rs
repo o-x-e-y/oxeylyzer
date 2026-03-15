@@ -99,6 +99,7 @@ pub struct LayoutStats {
     pub trigram_stats: TrigramStats,
     pub fspeed: f64,
     pub finger_speed: [f64; 10],
+    pub score: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -253,6 +254,7 @@ impl LayoutGeneration {
         let trigram_stats = self
             .trigram_stats(layout, usize::MAX)
             .to_stats(self.data.trigram_total);
+        let score = self.score_with_precision(layout, usize::MAX);
 
         LayoutStats {
             sfb,
@@ -266,6 +268,7 @@ impl LayoutGeneration {
             lsbs,
             pinky_ring,
             trigram_stats,
+            score,
         }
     }
 
