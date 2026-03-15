@@ -2,11 +2,11 @@ use libdof::prelude::Finger;
 
 use crate::{
     fast_layout::*,
-    generate::{LayoutGeneration, SMALLEST_SCORE},
+    generate::{Oxeylyzer, SMALLEST_SCORE},
     layout::PosPair,
 };
 
-impl LayoutGeneration {
+impl Oxeylyzer {
     #[allow(dead_code)]
     pub(crate) fn score_with_precision(
         &self,

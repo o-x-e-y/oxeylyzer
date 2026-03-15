@@ -128,7 +128,7 @@ impl LayoutCache {
 
 type PerCharTrigrams = HashMap<[u8; 2], TrigramData>;
 
-pub struct LayoutGeneration {
+pub struct Oxeylyzer {
     pub language: String,
     pub data: AnalyzerData,
     pub mapping: Arc<CharMapping>,
@@ -140,7 +140,7 @@ pub struct LayoutGeneration {
     pub weights: AnalyzerWeights,
 }
 
-impl LayoutGeneration {
+impl Oxeylyzer {
     pub fn new<P>(language: &str, base_path: P, config: Option<Config>) -> Result<Self>
     where
         P: AsRef<Path>,
@@ -885,8 +885,7 @@ mod tests {
     use rayon::iter::ParallelIterator;
     use std::{collections::HashSet, sync::atomic::Ordering};
 
-    static GEN: Lazy<LayoutGeneration> =
-        Lazy::new(|| LayoutGeneration::new("english", "static", None).unwrap());
+    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| Oxeylyzer::new("english", "static", None).unwrap());
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
         let dof_str = r#"

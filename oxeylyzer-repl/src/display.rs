@@ -2,7 +2,7 @@ use itertools::{EitherOrBoth, Itertools};
 use oxeylyzer_core::fast_layout::*;
 use oxeylyzer_core::generate::LayoutStats;
 use oxeylyzer_core::rayon::iter::ParallelIterator;
-use oxeylyzer_core::{analyzer_data::AnalyzerData, generate::LayoutGeneration};
+use oxeylyzer_core::{analyzer_data::AnalyzerData, generate::Oxeylyzer};
 
 use ansi_rgb::{Colorable, rgb};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
@@ -28,7 +28,7 @@ pub fn heatmap_string(layout: &FastLayout, data: &AnalyzerData) -> String {
 }
 
 pub fn generate_n_with_pins(
-    layout_gen: &LayoutGeneration,
+    layout_gen: &Oxeylyzer,
     amount: usize,
     based_on: FastLayout,
     pins: &[usize],

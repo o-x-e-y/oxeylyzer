@@ -582,13 +582,12 @@ impl UsageIndices {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::{generate::LayoutGeneration, layout::Layout};
+    use crate::{generate::Oxeylyzer, layout::Layout};
 
     use super::*;
     use once_cell::sync::Lazy;
 
-    static GEN: Lazy<LayoutGeneration> =
-        Lazy::new(|| LayoutGeneration::new("english", "static", None).unwrap());
+    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| Oxeylyzer::new("english", "static", None).unwrap());
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
         let dof_str = r#"

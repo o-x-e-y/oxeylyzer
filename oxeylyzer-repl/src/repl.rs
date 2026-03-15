@@ -10,7 +10,7 @@ use oxeylyzer_core::data::Data;
 use oxeylyzer_core::{OxeylyzerError, OxeylyzerResultExt};
 use oxeylyzer_core::{
     fast_layout::*,
-    generate::LayoutGeneration,
+    generate::Oxeylyzer,
     layout::{Layout, PosPair},
     rayon,
     weights::Config,
@@ -71,7 +71,7 @@ pub enum ReplStatus {
 
 pub struct Repl {
     language: String,
-    layout_gen: LayoutGeneration,
+    layout_gen: Oxeylyzer,
     saved: HashMap<String, Layout>,
     temp_generated: Vec<FastLayout>,
     thread_pool: rayon::ThreadPool,
@@ -91,7 +91,7 @@ impl Repl {
             .build()
             .unwrap();
 
-        let layout_gen = LayoutGeneration::new(
+        let layout_gen = Oxeylyzer::new(
             config.language.clone().as_str(),
             generator_base_path.as_ref(),
             Some(config),
@@ -358,7 +358,7 @@ impl Repl {
     fn bigram_stat(
         &self,
         pairs: &[BigramPair],
-        freq: impl Fn(&LayoutGeneration, &FastLayout, &BigramPair) -> i64,
+        freq: impl Fn(&Oxeylyzer, &FastLayout, &BigramPair) -> i64,
         layout: &FastLayout,
         count: usize,
         is_percent: bool,
@@ -412,7 +412,7 @@ impl Repl {
             .map(|p| BigramPair { pair: *p, dist: 1 })
             .collect::<Vec<_>>();
 
-        self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, layout, count, true);
+        self.bigram_stat(&pairs, Oxeylyzer::pair_sfb, layout, count, true);
     }
 
     fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
@@ -423,7 +423,7 @@ impl Repl {
 
         self.bigram_stat(
             &layout.fspeed_indices.all,
-            LayoutGeneration::pair_sfb,
+            Oxeylyzer::pair_sfb,
             &layout,
             count,
             true,
@@ -453,7 +453,7 @@ impl Repl {
 
         self.bigram_stat(
             &layout.fspeed_indices.all,
-            LayoutGeneration::pair_fspeed,
+            Oxeylyzer::pair_fspeed,
             &layout,
             count,
             false,
@@ -472,7 +472,7 @@ impl Repl {
 
         self.bigram_stat(
             &layout.stretch_indices.all_pairs,
-            LayoutGeneration::pair_stretch,
+            Oxeylyzer::pair_stretch,
             &layout,
             count,
             false,
@@ -703,7 +703,7 @@ impl Repl {
         let config = Config::with_loaded_weights("config.toml");
         let layouts_path = PathBuf::from("./static/layouts").join(language);
 
-        let generator = LayoutGeneration::new(language, "static", Some(config))?;
+        let generator = Oxeylyzer::new(language, "static", Some(config))?;
         let saved = load_layouts(layouts_path)?;
 
         self.layout_gen = generator;
