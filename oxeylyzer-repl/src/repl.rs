@@ -9,7 +9,7 @@ use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
 use oxeylyzer_core::{OxeylyzerError, OxeylyzerResultExt};
 use oxeylyzer_core::{
-    cached_layout::{Layout as _, *},
+    cached_layout::*,
     generate::LayoutGeneration,
     layout::{Layout, PosPair},
     rayon,

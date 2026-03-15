@@ -14,20 +14,6 @@ use crate::{
 
 const KEY_EDGE_OFFSET: f64 = 0.5;
 
-pub trait Layout<T: Copy + Default> {
-    fn random(&self) -> Self;
-
-    fn random_with_pins(&self, pins: &[usize]) -> Self;
-
-    fn char(&self, i: Pos) -> Option<T>;
-
-    fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()>;
-
-    fn swap_pair(&mut self, pair: &PosPair) -> Option<()>;
-
-    fn get_index(&self, index: usize) -> [T; 6];
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(into = "crate::layout::Layout")]
 pub struct FastLayout {
@@ -49,6 +35,7 @@ pub struct FastLayout {
 }
 
 impl FastLayout {
+    #[inline(always)]
     pub fn finger(&self, pos: Pos) -> Option<Finger> {
         self.matrix_fingers.get(pos as usize).copied()
     }
@@ -81,14 +68,12 @@ impl FastLayout {
 
         res.trim().to_string()
     }
-}
 
-impl Layout<u8> for FastLayout {
-    fn random(&self) -> Self {
+    pub fn random(&self) -> Self {
         self.random_with_pins(&[])
     }
 
-    fn random_with_pins(&self, pins: &[usize]) -> Self {
+    pub fn random_with_pins(&self, pins: &[usize]) -> Self {
         let mut res = self.clone();
 
         res.name = None;
@@ -105,24 +90,12 @@ impl Layout<u8> for FastLayout {
     }
 
     #[inline(always)]
-    fn char(&self, i: Pos) -> Option<u8> {
+    pub fn char(&self, i: Pos) -> Option<u8> {
         self.matrix.get(i as usize).copied()
     }
 
-    /// Gets all keys in a certain index column. 0 = left index, 1 = right index.
-    fn get_index(&self, index: usize) -> [u8; 6] {
-        let mut new_index = [0; 6];
-        let start_pos = index * 2 + 3;
-        for i in 0..2 {
-            for j in 0..3 {
-                new_index[2 * j + i] = self.matrix[start_pos + i + 10 * j];
-            }
-        }
-        new_index
-    }
-
     #[inline(always)]
-    fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()> {
+    pub fn swap(&mut self, i1: Pos, i2: Pos) -> Option<()> {
         let char1 = self.char(i1)?;
         let char2 = self.char(i2)?;
 
@@ -138,7 +111,7 @@ impl Layout<u8> for FastLayout {
     }
 
     #[inline(always)]
-    fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
+    pub fn swap_pair(&mut self, pair: &PosPair) -> Option<()> {
         self.swap(pair.0, pair.1)
     }
 }
@@ -611,7 +584,7 @@ impl UsageIndices {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::{cached_layout::Layout as _, generate::LayoutGeneration, layout::Layout};
+    use crate::{generate::LayoutGeneration, layout::Layout};
 
     use super::*;
     use once_cell::sync::Lazy;
