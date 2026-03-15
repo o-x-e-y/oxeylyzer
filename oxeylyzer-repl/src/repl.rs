@@ -7,10 +7,11 @@ use std::path::{Path, PathBuf};
 use itertools::{EitherOrBoth, Itertools};
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
+use oxeylyzer_core::{OxeylyzerError, OxeylyzerResultExt};
 use oxeylyzer_core::{
     cached_layout::{Layout as _, *},
     generate::LayoutGeneration,
-    layout::Layout,
+    layout::{Layout, PosPair},
     rayon,
     weights::Config,
 };
@@ -47,21 +48,15 @@ pub enum ReplError {
         "`--all`.\nRun `load help` for more information about the command."
     )]
     MissingLanguageFlag,
+    #[error("Could not serialize layout:\n{}\n", .0.formatted_string())]
+    CouldNotSerializeLayout(FastLayout),
+    #[error("Could not find corpus config for corpus '{0}'")]
+    CouldNotFindCorpusConfig(String),
 
     #[error(transparent)]
     XflagsError(#[from] xflags::Error),
     #[error(transparent)]
-    IoError(#[from] std::io::Error),
-    // #[error("{0}")]
-    // OxeylyzerDataError(#[from] OxeylyzerError),
-    // #[error(transparent)]
-    // DofError(#[from] libdof::DofError),
-    // #[error(transparent)]
-    // TomlSerializeError(#[from] toml::ser::Error),
-    // #[error(transparent)]
-    // TomlDeserializeError(#[from] toml::de::Error),
-    #[error(transparent)]
-    AnyhowError(#[from] anyhow::Error),
+    OxeylyzerError(#[from] OxeylyzerError),
     #[error(transparent)]
     ReadlineError(#[from] rustyline::error::ReadlineError),
 }
@@ -82,7 +77,6 @@ pub struct Repl {
     thread_pool: rayon::ThreadPool,
 }
 
-// TODO: move everything out to its own function
 impl Repl {
     pub fn new<P>(generator_base_path: P) -> Result<Self>
     where
@@ -163,7 +157,6 @@ impl Repl {
         Ok(())
     }
 
-    // TODO: return Layout at one point
     pub fn layout(&self, name: &str) -> Result<FastLayout> {
         self.saved
             .get(&name.to_lowercase())
@@ -266,21 +259,26 @@ impl Repl {
 
         layout.name = Some(new_name.clone());
         let name_path = new_name.replace(' ', "_").to_lowercase();
+        let path = PathBuf::from("static/layouts")
+            .join(&self.language)
+            .join(name_path)
+            .with_extension("dof");
 
         let mut f = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!(
-                "static/layouts/{}/{}.dof",
-                self.language, name_path
-            ))?;
+            .open(&path)
+            .path_context(&path)?;
 
         let formatter = PrettyFormatter::with_indent(b"    ");
         let mut ser = Serializer::with_formatter(vec![], formatter);
-        layout.serialize(&mut ser).map_err(|e| anyhow::anyhow!(e))?;
+        layout
+            .serialize(&mut ser)
+            .map_err(|_| ReplError::CouldNotSerializeLayout(layout.clone()))?;
 
-        f.write_all(ser.into_inner().as_slice())?;
+        f.write_all(ser.into_inner().as_slice())
+            .path_context(path)?;
 
         println!("saved {}\n{}", new_name, layout.formatted_string());
 
@@ -423,7 +421,7 @@ impl Repl {
                     .position(|&k| k == self.layout_gen.mapping.get_u(c2));
 
                 match (p1, p2) {
-                    (Some(p1), Some(p2)) => assert!(layout.swap(p1, p2).is_some()),
+                    (Some(p1), Some(p2)) => assert!(layout.swap(p1 as u8, p2 as u8).is_some()),
                     (Some(_), None) => {
                         println!("Couldn't swap {c1}{c2} because {c1} is not on the layout.")
                     }
@@ -455,8 +453,15 @@ impl Repl {
         freq: impl Fn(&LayoutGeneration, &FastLayout, &BigramPair) -> i64,
         layout: &FastLayout,
         count: usize,
+        is_percent: bool,
     ) {
-        let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
+        let fmt_freq = |v| {
+            let f = v as f64 / self.layout_gen.data.bigram_total as f64;
+            match is_percent {
+                true => format!("{:.3}%", f),
+                false => format!("{:.3}", f),
+            }
+        };
 
         pairs
             .iter()
@@ -478,18 +483,33 @@ impl Repl {
 
                 let fmt = format!("{bigram}/{bigram2}");
 
-                let freq = freq(&self.layout_gen, layout, pair);
+                let freq = match is_percent {
+                    true => 100 * freq(&self.layout_gen, layout, pair),
+                    false => freq(&self.layout_gen, layout, pair),
+                };
 
-                Some((fmt, fmt_freq(freq)))
+                Some((fmt, freq))
             })
-            .sorted_by(|(_, a), (_, b)| a.total_cmp(b))
+            .sorted_by(|(_, f1), (_, f2)| match is_percent {
+                true => f2.cmp(f1),
+                false => f1.cmp(f2),
+            })
             .take(count)
-            .for_each(|(bigram, freq)| println!("{bigram}: {:.3}", freq));
+            .for_each(|(bigram, freq)| println!("{bigram}: {}", fmt_freq(freq)));
+    }
+
+    fn percent_stat(&self, layout: &FastLayout, count: usize, indices: &[PosPair]) {
+        let pairs = indices
+            .iter()
+            .map(|p| BigramPair { pair: *p, dist: 1 })
+            .collect::<Vec<_>>();
+
+        self.bigram_stat(&pairs, LayoutGeneration::pair_sfb, layout, count, true);
     }
 
     fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
-        let count = top_n.unwrap_or(10);
+        let count = top_n.unwrap_or(10).min(layout.fspeed_indices.all.len());
 
         println!("top {} sfbs for {name}:", count);
 
@@ -498,14 +518,28 @@ impl Repl {
             LayoutGeneration::pair_sfb,
             &layout,
             count,
+            true,
         );
+
+        Ok(())
+    }
+
+    fn pinky_ring(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+        let layout = self.layout(name)?;
+        let count = top_n
+            .unwrap_or(10)
+            .min(layout.pinky_ring_indices.pairs.len());
+
+        println!("top {} pinky-ring bigrams for {name}:", count);
+
+        self.percent_stat(&layout, count, &layout.pinky_ring_indices.pairs);
 
         Ok(())
     }
 
     fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
-        let count = top_n.unwrap_or(10);
+        let count = top_n.unwrap_or(10).min(layout.fspeed_indices.all.len());
 
         println!("top {} fspeed pairs for {name}:", count);
 
@@ -514,6 +548,7 @@ impl Repl {
             LayoutGeneration::pair_fspeed,
             &layout,
             count,
+            false,
         );
 
         Ok(())
@@ -521,7 +556,9 @@ impl Repl {
 
     fn stretches(&self, name: &str, top_n: Option<usize>) -> Result<()> {
         let layout = self.layout(name)?;
-        let count = top_n.unwrap_or(10);
+        let count = top_n
+            .unwrap_or(10)
+            .min(layout.stretch_indices.all_pairs.len());
 
         println!("top {} stretch pairs for {name}:", count);
 
@@ -530,7 +567,30 @@ impl Repl {
             LayoutGeneration::pair_stretch,
             &layout,
             count,
+            false,
         );
+
+        Ok(())
+    }
+
+    fn scissors(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+        let layout = self.layout(name)?;
+        let count = top_n.unwrap_or(10).min(layout.scissor_indices.pairs.len());
+
+        println!("top {} scissor pairs for {name}:", count);
+
+        self.percent_stat(&layout, count, &layout.scissor_indices.pairs);
+
+        Ok(())
+    }
+
+    fn lsbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+        let layout = self.layout(name)?;
+        let count = top_n.unwrap_or(10).min(layout.lsb_indices.pairs.len());
+
+        println!("top {} lsbs for {name}:", count);
+
+        self.percent_stat(&layout, count, &layout.lsb_indices.pairs);
 
         Ok(())
     }
@@ -574,7 +634,9 @@ impl Repl {
     }
 
     pub fn languages(&self) -> Result<()> {
-        std::fs::read_dir("static/language_data")?
+        let path = "static/language_data";
+        std::fs::read_dir(path)
+            .path_context(path)?
             .flatten()
             .for_each(|p| {
                 let name = p
@@ -624,7 +686,8 @@ impl Repl {
 
         match (all, raw) {
             (true, true) => {
-                for dir_entry in std::fs::read_dir(base_path)?
+                for dir_entry in std::fs::read_dir(&base_path)
+                    .path_context(base_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
                 {
@@ -638,7 +701,8 @@ impl Repl {
                 }
             }
             (true, false) => {
-                for dir_entry in std::fs::read_dir(base_path)?
+                for dir_entry in std::fs::read_dir(&base_path)
+                    .path_context(base_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
                 {
@@ -766,6 +830,9 @@ impl Repl {
             Sfbs(s) => self.sfbs(&s.name, s.count)?,
             Fspeed(s) => self.fspeed(&s.name, s.count)?,
             Stretches(s) => self.stretches(&s.name, s.count)?,
+            Scissors(s) => self.scissors(&s.name, s.count)?,
+            Lsbs(s) => self.lsbs(&s.name, s.count)?,
+            Pinkyring(s) => self.pinky_ring(&s.name, s.count)?,
             Language(l) => self.language(l.language)?,
             Include(l) => self.include(&l.languages)?,
             Languages(_) => self.languages()?,

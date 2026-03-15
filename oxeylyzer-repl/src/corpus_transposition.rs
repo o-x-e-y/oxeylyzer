@@ -6,9 +6,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+use oxeylyzer_core::{OxeylyzerResultExt, corpus_cleaner::CorpusCleaner};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, serde_conv};
+
+use crate::repl::ReplError;
 
 serde_conv!(
     StringAsCharArray,
@@ -91,7 +93,7 @@ pub struct CorpusConfig {
 }
 
 impl CorpusConfig {
-    pub fn load(language: &str, preferred_folder: Option<&str>) -> Result<Self, String> {
+    pub fn load(language: &str, preferred_folder: Option<&str>) -> Result<Self, ReplError> {
         let preferred_folder = if let Some(folder) = preferred_folder {
             Ok(PathBuf::from(folder))
         } else {
@@ -105,18 +107,15 @@ impl CorpusConfig {
                 .join(preferred_folder)
                 .join(file_name);
 
-            let mut f = File::open(path)
-                .map_err(|e| format!("Couldn't open file because it does not exist: {e}"))?;
-
+            let mut f = File::open(&path).path_context(&path)?;
             let mut buf = String::new();
-            f.read_to_string(&mut buf)
-                .map_err(|e| format!("Toml contains non-utf8 characters, aborting... {e}"))?;
+            f.read_to_string(&mut buf).path_context(&path)?;
 
-            toml::from_str(buf.as_str()).map_err(|e| {
-                format!("Toml contains invalid elements. Check the readme for what is allowed: {e}")
-            })
+            let config = toml::from_str(buf.as_str()).path_context(path)?;
+
+            Ok(config)
         } else {
-            Err("No config file found!".to_string())
+            Err(ReplError::CouldNotFindCorpusConfig(language.to_string()))
         }
     }
 
@@ -158,7 +157,7 @@ impl CorpusConfig {
         }
     }
 
-    fn check_for_language(language: &str) -> Result<PathBuf, String> {
+    fn check_for_language(language: &str) -> Result<PathBuf, ReplError> {
         let try_find_path = glob::glob("static/corpus_configs/*/*.toml")
             .unwrap()
             .flatten()
@@ -175,7 +174,7 @@ impl CorpusConfig {
 
             Ok(PathBuf::from(res))
         } else {
-            Err("Could not find a fitting config".to_string())
+            Err(ReplError::CouldNotFindCorpusConfig(language.to_string()))
         }
     }
 }
