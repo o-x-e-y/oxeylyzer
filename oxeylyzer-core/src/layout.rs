@@ -43,9 +43,9 @@ pub struct LayoutMetadata {
 #[serde(from = "Dof", into = "Dof")]
 pub struct Layout {
     pub name: String,
-    pub keys: Box<[char]>,
-    pub fingers: Box<[Finger]>,
-    pub keyboard: Box<[PhysicalKey]>,
+    pub keys: Arc<[char]>,
+    pub fingers: Arc<[Finger]>,
+    pub keyboard: Arc<[PhysicalKey]>,
     pub shape: Shape,
     pub metadata: Arc<LayoutMetadata>,
 }
@@ -152,7 +152,7 @@ impl From<Layout> for Dof {
             ..
         } = layout.metadata.as_ref().clone();
 
-        let mut key_iter = layout.keys.into_iter();
+        let mut key_iter = layout.keys.iter();
         let main_layer = layout
             .shape
             .inner()
@@ -161,7 +161,7 @@ impl From<Layout> for Dof {
                 key_iter
                     .by_ref()
                     .take(len)
-                    .map(|c| match c {
+                    .map(|c| match *c {
                         REPLACEMENT_CHAR => Key::Empty,
                         REPEAT_KEY => Key::Special(SpecialKey::Repeat),
                         SPACE_CHAR => Key::Special(SpecialKey::Space),
@@ -172,20 +172,20 @@ impl From<Layout> for Dof {
             })
             .collect::<Vec<_>>();
 
-        let mut finger_iter = layout.fingers.into_iter();
+        let mut finger_iter = layout.fingers.iter();
         let fingering = layout
             .shape
             .inner()
             .iter()
-            .map(|&len| finger_iter.by_ref().take(len).collect::<Vec<_>>())
+            .map(|&len| finger_iter.by_ref().take(len).copied().collect::<Vec<_>>())
             .collect::<Vec<_>>();
 
-        let mut board_iter = layout.keyboard.into_iter();
+        let mut board_iter = layout.keyboard.iter();
         let board = layout
             .shape
             .inner()
             .iter()
-            .map(|&len| board_iter.by_ref().take(len).collect::<Vec<_>>())
+            .map(|&len| board_iter.by_ref().take(len).cloned().collect::<Vec<_>>())
             .collect::<Vec<_>>();
 
         let internal = DofInternal {

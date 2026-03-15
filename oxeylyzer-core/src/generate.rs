@@ -955,7 +955,8 @@ impl LayoutGeneration {
         if !pins.is_empty() {
             layout.possible_swaps = layout
                 .possible_swaps
-                .into_iter()
+                .iter()
+                .copied()
                 .filter(|&PosPair(a, b)| {
                     !pins.contains(&(a as usize)) && !pins.contains(&(b as usize))
                 })
@@ -984,7 +985,8 @@ impl LayoutGeneration {
         if !pins.is_empty() {
             layout.possible_swaps = layout
                 .possible_swaps
-                .into_iter()
+                .iter()
+                .copied()
                 .filter(|&PosPair(a, b)| {
                     !pins.contains(&(a as usize)) && !pins.contains(&(b as usize))
                 })

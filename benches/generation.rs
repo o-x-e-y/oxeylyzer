@@ -16,7 +16,8 @@ fn main() -> diol::Result<()> {
     let swaps = g
         .fast_layout(&saved.values().next().unwrap(), &[])
         .possible_swaps
-        .into_iter()
+        .iter()
+        .copied()
         .enumerate()
         .filter_map(|(i, swap)| ((i + 17) % 50 == 0).then_some(swap))
         .collect::<Vec<_>>();
