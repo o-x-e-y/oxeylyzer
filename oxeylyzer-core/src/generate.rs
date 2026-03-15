@@ -195,8 +195,6 @@ pub struct LayoutCache {
     // trigrams: HashMap<(char, Option<char>), f64>,
     stretch_total: i64,
     trigrams_total: i64,
-
-    total_score: i64,
 }
 
 impl LayoutCache {
@@ -737,8 +735,6 @@ impl LayoutGeneration {
             self.data.gen_trigrams().iter().take(self.trigram_precision),
         );
 
-        res.total_score = res.total_score();
-
         res
     }
 
@@ -890,9 +886,7 @@ impl LayoutGeneration {
             cache.pinky_ring = self.pinky_ring_score(layout);
         }
 
-        cache.total_score = cache.total_score();
-
-        Some(cache.total_score)
+        Some(cache.total_score())
     }
 
     pub fn best_swap_cached(
@@ -1116,12 +1110,11 @@ mod tests {
                 )
             );
             assert_eq!(cache.pinky_ring, GEN.pinky_ring_score(&qwerty));
-            assert_eq!(cache.total_score, cache.total_score());
             assert_eq!(
-                cache.total_score,
+                cache.total_score(),
                 GEN.score_with_precision(&qwerty, GEN.trigram_precision)
             );
-            assert_eq!(Some(cache.total_score), accepted_score);
+            assert_eq!(Some(cache.total_score()), accepted_score);
             assert_eq!(GEN.initialize_cache(&qwerty), cache);
         }
     }
