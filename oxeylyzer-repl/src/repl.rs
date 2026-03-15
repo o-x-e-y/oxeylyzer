@@ -24,7 +24,7 @@ use serde_json::ser::PrettyFormatter;
 use thiserror::Error;
 
 use crate::corpus_transposition::CorpusConfig;
-use crate::tui::*;
+use crate::display::*;
 
 const EXIT_MESSAGE: &str = "Exiting analyzer...";
 
