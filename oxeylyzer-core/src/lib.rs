@@ -21,7 +21,6 @@ pub const SPACE_CHAR: char = '␣';
 pub const SHIFT_CHAR: char = '⇑';
 pub const REPEAT_KEY: char = '↻';
 
-// TODO: reassess each error field, maybe add more context
 #[derive(Debug, Error)]
 pub enum OxeylyzerError {
     #[error("Bigrams should contain 2 characters, bigram with length {0} encountered.")]
@@ -41,16 +40,7 @@ pub enum OxeylyzerError {
 
     #[error(transparent)]
     AnyhowError(#[from] anyhow::Error),
-    // #[error("{0}")]
-    // IoError(#[from] std::io::Error),
-    // #[error("{0}")]
-    // JsonError(#[from] serde_json::Error),
-    // #[error("{0}")]
-    // UTF8Error(#[from] std::str::Utf8Error),
-    // #[error("{0}")]
-    // DofError(#[from] DofError),
-    // #[error("{0}")]
-    // TomlDeserializationError(#[from] toml::de::Error),
+
     #[cfg(target_arch = "wasm32")]
     #[error("{0}")]
     GlooError(#[from] gloo_net::Error),

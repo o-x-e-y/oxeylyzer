@@ -5,9 +5,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use itertools::{EitherOrBoth, Itertools};
-use oxeylyzer_core::OxeylyzerError;
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
+use oxeylyzer_core::{OxeylyzerError, OxeylyzerResultExt};
 use oxeylyzer_core::{
     cached_layout::{Layout as _, *},
     generate::LayoutGeneration,
@@ -48,21 +48,15 @@ pub enum ReplError {
         "`--all`.\nRun `load help` for more information about the command."
     )]
     MissingLanguageFlag,
+    #[error("Could not serialize layout:\n{}\n", .0.formatted_string())]
+    CouldNotSerializeLayout(FastLayout),
+    #[error("Could not find corpus config for corpus '{0}'")]
+    CouldNotFindCorpusConfig(String),
 
     #[error(transparent)]
     XflagsError(#[from] xflags::Error),
     #[error(transparent)]
-    IoError(#[from] std::io::Error),
-    #[error(transparent)]
     OxeylyzerError(#[from] OxeylyzerError),
-    // #[error(transparent)]
-    // DofError(#[from] libdof::DofError),
-    // #[error(transparent)]
-    // TomlSerializeError(#[from] toml::ser::Error),
-    // #[error(transparent)]
-    // TomlDeserializeError(#[from] toml::de::Error),
-    #[error(transparent)]
-    AnyhowError(#[from] anyhow::Error),
     #[error(transparent)]
     ReadlineError(#[from] rustyline::error::ReadlineError),
 }
@@ -265,21 +259,26 @@ impl Repl {
 
         layout.name = Some(new_name.clone());
         let name_path = new_name.replace(' ', "_").to_lowercase();
+        let path = PathBuf::from("static/layouts")
+            .join(&self.language)
+            .join(name_path)
+            .with_extension("dof");
 
         let mut f = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!(
-                "static/layouts/{}/{}.dof",
-                self.language, name_path
-            ))?;
+            .open(&path)
+            .path_context(&path)?;
 
         let formatter = PrettyFormatter::with_indent(b"    ");
         let mut ser = Serializer::with_formatter(vec![], formatter);
-        layout.serialize(&mut ser).map_err(|e| anyhow::anyhow!(e))?;
+        layout
+            .serialize(&mut ser)
+            .map_err(|_| ReplError::CouldNotSerializeLayout(layout.clone()))?;
 
-        f.write_all(ser.into_inner().as_slice())?;
+        f.write_all(ser.into_inner().as_slice())
+            .path_context(path)?;
 
         println!("saved {}\n{}", new_name, layout.formatted_string());
 
@@ -635,7 +634,9 @@ impl Repl {
     }
 
     pub fn languages(&self) -> Result<()> {
-        std::fs::read_dir("static/language_data")?
+        let path = "static/language_data";
+        std::fs::read_dir(path)
+            .path_context(path)?
             .flatten()
             .for_each(|p| {
                 let name = p
@@ -685,7 +686,8 @@ impl Repl {
 
         match (all, raw) {
             (true, true) => {
-                for dir_entry in std::fs::read_dir(base_path)?
+                for dir_entry in std::fs::read_dir(&base_path)
+                    .path_context(base_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
                 {
@@ -699,7 +701,8 @@ impl Repl {
                 }
             }
             (true, false) => {
-                for dir_entry in std::fs::read_dir(base_path)?
+                for dir_entry in std::fs::read_dir(&base_path)
+                    .path_context(base_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
                 {
