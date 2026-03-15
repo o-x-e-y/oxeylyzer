@@ -18,7 +18,7 @@ const KEY_EDGE_OFFSET: f64 = 0.5;
 #[serde(into = "crate::layout::Layout")]
 pub struct FastLayout {
     pub name: Option<String>,
-    pub matrix: Box<[u8]>,
+    pub keys: Box<[u8]>,
     pub char_to_finger: Box<[Option<Finger>]>,
     pub matrix_fingers: Box<[Finger]>,
     pub matrix_physical: Box<[PhysicalKey]>,
@@ -37,7 +37,7 @@ pub struct FastLayout {
 impl FastLayout {
     #[inline(always)]
     pub fn char(&self, i: Pos) -> Option<u8> {
-        self.matrix.get(i as usize).copied()
+        self.keys.get(i as usize).copied()
     }
 
     #[inline(always)]
@@ -50,8 +50,8 @@ impl FastLayout {
         let char1 = self.char(i1)?;
         let char2 = self.char(i2)?;
 
-        *self.matrix.get_mut(i1 as usize)? = char2;
-        *self.matrix.get_mut(i2 as usize)? = char1;
+        *self.keys.get_mut(i1 as usize)? = char2;
+        *self.keys.get_mut(i2 as usize)? = char1;
 
         *self.char_to_finger.get_mut(char1 as usize)? =
             Some(*self.matrix_fingers.get(i2 as usize)?);
@@ -76,9 +76,9 @@ impl FastLayout {
         res.name = None;
         res.char_to_finger = Box::new([None; 60]);
 
-        shuffle_pins(&mut res.matrix, pins);
+        shuffle_pins(&mut res.keys, pins);
 
-        res.matrix
+        res.keys
             .iter()
             .enumerate()
             .for_each(|(i, &c)| res.char_to_finger[c as usize] = Some(res.matrix_fingers[i]));
@@ -87,13 +87,13 @@ impl FastLayout {
     }
 
     pub fn layout_str(&self) -> String {
-        self.mapping.map_us(&self.matrix).collect()
+        self.mapping.map_us(&self.keys).collect()
     }
 
     pub fn formatted_string(&self) -> String {
         let mut res = String::new();
 
-        let mut iter = self.matrix.iter();
+        let mut iter = self.keys.iter();
 
         for &l in self.shape.inner().iter() {
             let mut i = 0;
@@ -673,7 +673,7 @@ mod tests {
         );
 
         assert_eq!(
-            GEN.mapping.map_us(&QWERTY.matrix).collect::<Vec<_>>(),
+            GEN.mapping.map_us(&QWERTY.keys).collect::<Vec<_>>(),
             vec![
                 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 'a', 's', 'd', 'f', 'g', 'h',
                 'j', 'k', 'l', ';', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'
@@ -705,8 +705,8 @@ mod tests {
 
         assert_eq!(r_hs, q_hs);
 
-        for (i, &u) in random.matrix.iter().enumerate() {
-            let qwerty_eq = QWERTY.matrix[i];
+        for (i, &u) in random.keys.iter().enumerate() {
+            let qwerty_eq = QWERTY.keys[i];
 
             assert_eq!(
                 random.char_to_finger[u as usize],

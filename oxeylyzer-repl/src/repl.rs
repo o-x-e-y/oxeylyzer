@@ -202,7 +202,7 @@ impl Repl {
         let m = HashSet::<char>::from_iter(pin_chars.chars());
 
         layout
-            .matrix
+            .keys
             .iter()
             .map(|u| self.layout_gen.mapping.get_c(*u))
             .enumerate()
@@ -234,7 +234,7 @@ impl Repl {
     fn placeholder_name(&self, layout: &FastLayout) -> Result<String> {
         for i in 1..1000usize {
             let new_name = layout
-                .matrix
+                .keys
                 .iter()
                 .skip(10)
                 .take(4)
@@ -412,11 +412,11 @@ impl Repl {
             .flat_map(|swap| swap.chars().zip(swap.chars().skip(1)).collect::<Vec<_>>())
             .for_each(|(c1, c2)| {
                 let p1 = layout
-                    .matrix
+                    .keys
                     .iter()
                     .position(|&k| k == self.layout_gen.mapping.get_u(c1));
                 let p2 = layout
-                    .matrix
+                    .keys
                     .iter()
                     .position(|&k| k == self.layout_gen.mapping.get_u(c2));
 

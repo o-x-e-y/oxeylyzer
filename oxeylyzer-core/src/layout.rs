@@ -215,7 +215,7 @@ impl From<FastLayout> for Layout {
         let name = match layout.name {
             Some(name) => name,
             None => layout
-                .matrix
+                .keys
                 .iter()
                 .copied()
                 .skip(10) // TODO: maybe make more accurate based on board shape + anchor
@@ -227,7 +227,7 @@ impl From<FastLayout> for Layout {
         Self {
             name,
             keys: layout
-                .matrix
+                .keys
                 .iter()
                 .map(|&u| layout.mapping.get_c(u))
                 .collect(),

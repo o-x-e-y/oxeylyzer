@@ -300,7 +300,7 @@ impl LayoutGeneration {
 
         FastLayout {
             name,
-            matrix,
+            keys: matrix,
             char_to_finger,
             matrix_fingers,
             matrix_physical,
@@ -606,8 +606,8 @@ impl LayoutGeneration {
                      dist,
                      pair: PosPair(a, b),
                  }| {
-                    let u1 = layout.matrix[*a as usize];
-                    let u2 = layout.matrix[*b as usize];
+                    let u1 = layout.keys[*a as usize];
+                    let u2 = layout.keys[*b as usize];
 
                     self.data.get_stretch_weighted_bigram_u([u1, u2]) * dist
                 },
@@ -620,7 +620,7 @@ impl LayoutGeneration {
             .usage_indices
             .get(finger)
             .iter()
-            .map(|&i| self.data.get_char_u(layout.matrix[i]))
+            .map(|&i| self.data.get_char_u(layout.keys[i]))
             .sum::<i64>();
 
         self.weights.max_finger_use.penalty
