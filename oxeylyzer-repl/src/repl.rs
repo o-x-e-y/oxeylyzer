@@ -52,6 +52,8 @@ pub enum ReplError {
     CouldNotSerializeLayout(Box<FastLayout>),
     #[error("Could not find corpus config for corpus '{0}'")]
     CouldNotFindCorpusConfig(String),
+    #[error("Shift key can only be a single char, found '{}' with length {}", .0, .0.chars().count())]
+    WrongShiftKeyLength(String),
 
     #[error(transparent)]
     XflagsError(#[from] xflags::Error),

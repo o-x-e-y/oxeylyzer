@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use oxeylyzer_core::{OxeylyzerResultExt, corpus_cleaner::CorpusCleaner};
+use oxeylyzer_core::{OxeylyzerResultExt, SHIFT_CHAR, corpus_cleaner::CorpusCleaner};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, serde_conv};
 
@@ -73,12 +73,48 @@ impl std::ops::Add for OneToOne {
     }
 }
 
+serde_conv!(
+    ShiftCharacter,
+    Option<char>,
+    |v: &Option<char>| match v {
+        Some(SHIFT_CHAR) => None,
+        Some(c) => Some(c.to_string()),
+        None => Some("null".to_string()),
+    },
+    |shift_char: Option<String>| -> Result<_, ReplError> {
+        println!("deserializing this bullshit!");
+        match shift_char.as_deref() {
+            None => Ok(Some(SHIFT_CHAR)),
+            Some("null") => Ok(None),
+            Some(c) if c.chars().count() == 1 => Ok(Some(c.chars().next().unwrap())),
+            Some(s) => Err(ReplError::WrongShiftKeyLength(s.to_string())),
+        }
+    }
+);
+
+#[serde_as]
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct ShiftKey(#[serde_as(as = "ShiftCharacter")] Option<char>);
+
+impl ShiftKey {
+    pub fn key(&self) -> Option<char> {
+        self.0
+    }
+}
+
+impl std::default::Default for ShiftKey {
+    fn default() -> Self {
+        Self(Some(SHIFT_CHAR))
+    }
+}
+
 // TODO: adapt for cleaner
 #[serde_as]
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct CorpusConfig {
     inherits: Vec<String>,
+    #[serde(default)]
     #[serde_as(as = "StringAsCharArray")]
     letters_to_lowercase: Vec<char>,
     #[serde_as(as = "StringAsCharArray")]
@@ -87,6 +123,7 @@ pub struct CorpusConfig {
     multiple: Vec<(char, String)>,
     one_to_one: OneToOne,
     punct_unshifted: OneToOne,
+    shift_key: ShiftKey,
     repeat_key: bool,
     #[serde(skip)]
     inherits_visited: HashSet<String>,
@@ -199,6 +236,7 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
             .into_iter()
             .chain(rhs.inherits_visited)
             .collect();
+        let shift_key = ShiftKey(self.shift_key.key().or(rhs.shift_key.key()));
 
         CorpusConfig {
             inherits,
@@ -207,6 +245,7 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
             keep,
             multiple,
             one_to_one,
+            shift_key,
             repeat_key,
             inherits_visited,
         }
@@ -242,6 +281,7 @@ impl From<CorpusConfig> for CorpusCleaner {
                     .into_iter()
                     .map(|(c, s)| (c, s.chars().collect())),
             )
+            .shift_char(config.shift_key.key())
             .repeat_key(config.repeat_key)
             .build()
     }
@@ -380,6 +420,21 @@ mod tests {
                 to: concat!("dofs", "lol").chars().collect::<Vec<_>>()
             }
         );
+    }
+
+    #[test]
+    fn shift_char() {
+        let config1 = r#"shift_key = "a" "#;
+        let config2 = r#""#;
+        let config3 = r#"shift_key = "abc" "#;
+
+        let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
+        let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
+
+        assert_eq!(config1.shift_key.key(), Some('a'));
+        assert_eq!(config2.shift_key.key(), Some(SHIFT_CHAR));
+
+        assert!(toml::from_str::<CorpusConfig>(config3).is_err());
     }
 
     #[test]
