@@ -1,4 +1,5 @@
-language = "shai"
+corpus = "./static/language_data/shai.json"
+layouts = [ "./static/layouts/english" ]
 trigram_precision = 1000
 max_cores = 32
 

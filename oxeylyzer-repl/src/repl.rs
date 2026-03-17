@@ -27,6 +27,7 @@ use crate::corpus_transposition::CorpusConfig;
 use crate::display::*;
 
 const EXIT_MESSAGE: &str = "Exiting analyzer...";
+const BASE_PATH: &str = concat!(std::env!("CARGO_MANIFEST_DIR"), "/..");
 
 #[derive(Debug, Error)]
 pub enum ReplError {
@@ -54,6 +55,13 @@ pub enum ReplError {
     CouldNotFindCorpusConfig(String),
     #[error("Shift key can only be a single char, found '{}' with length {}", .0, .0.chars().count())]
     WrongShiftKeyLength(String),
+    #[error(
+        "{}\n{} '{}'",
+        "Failed to get corpus path: the process is ./path/corpus.json -> ./path/<new_lang>.json,",
+        "But this is not possible for",
+        .0.display()
+    )]
+    FailedToGetCorpusPath(PathBuf),
 
     #[error(transparent)]
     XflagsError(#[from] xflags::Error),
@@ -80,26 +88,35 @@ pub struct Repl {
 }
 
 impl Repl {
-    pub fn new<P>(generator_base_path: P) -> Result<Self>
+    pub fn new<P>(config_name: P) -> Result<Self>
     where
         P: AsRef<Path>,
     {
-        let config_path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../config.toml");
-        let config = Config::with_loaded_weights(config_path);
-        let language = config.language.clone();
+        let base = PathBuf::from(BASE_PATH);
+
+        let config = Config::with_loaded_weights(base.join(config_name))?;
+        let data = Data::load(base.join(&config.corpus)).unwrap();
+        let language = data.name.clone();
 
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(config.max_cores)
             .build()
             .unwrap();
 
-        let layout_gen = Oxeylyzer::new(
-            config.language.clone().as_str(),
-            generator_base_path.as_ref(),
-        )?;
+        let saved = config
+            .layouts
+            .iter()
+            .flat_map(|p| {
+                load_layouts(p)
+                    .inspect_err(|e| println!("Error loading layout at '{}': {e}", p.display()))
+            })
+            .flat_map(|h| h.into_iter())
+            .collect();
+
+        let layout_gen = Oxeylyzer::new(data, config);
 
         Ok(Self {
-            saved: load_layouts(generator_base_path.as_ref().join("layouts").join(&language))?,
+            saved,
             language,
             layout_gen,
             temp_generated: Vec::new(),
@@ -108,7 +125,7 @@ impl Repl {
     }
 
     pub fn run() -> Result<()> {
-        let mut env = Self::new("static")?;
+        let mut env = Self::new("config.toml")?;
 
         let mut rl = DefaultEditor::new()?;
 
@@ -701,10 +718,25 @@ impl Repl {
     }
 
     fn reset_with_language(&mut self, language: &str) -> Result<()> {
-        let layouts_path = PathBuf::from("./static/layouts").join(language);
+        let config = Config::with_loaded_weights(PathBuf::from(BASE_PATH).join("config.toml"))?;
+        let language_path = config
+            .corpus
+            .parent()
+            .ok_or_else(|| ReplError::FailedToGetCorpusPath(config.corpus.clone()))?;
 
-        let generator = Oxeylyzer::new(language, "static")?;
-        let saved = load_layouts(layouts_path)?;
+        let data = Data::load(language_path)?;
+
+        let saved = config
+            .layouts
+            .iter()
+            .flat_map(|p| {
+                load_layouts(p)
+                    .inspect_err(|e| println!("Error loading layout at '{}': {e}", p.display()))
+            })
+            .flat_map(|h| h.into_iter())
+            .collect();
+
+        let generator = Oxeylyzer::new(data, config);
 
         self.layout_gen = generator;
         self.language = language.to_string();
@@ -786,11 +818,7 @@ mod tests {
 
     use super::*;
 
-    static REPL: Lazy<Repl> = Lazy::new(|| {
-        let path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../static");
-
-        Repl::new(path).unwrap()
-    });
+    static REPL: Lazy<Repl> = Lazy::new(|| Repl::new("config.toml").unwrap());
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
         let dof_str = r#"

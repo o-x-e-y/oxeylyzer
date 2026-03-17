@@ -580,14 +580,20 @@ impl UsageIndices {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::{collections::HashSet, path::PathBuf};
 
-    use crate::{generate::Oxeylyzer, layout::Layout};
+    use crate::{data::Data, generate::Oxeylyzer, layout::Layout, weights::Config};
 
     use super::*;
     use once_cell::sync::Lazy;
 
-    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| Oxeylyzer::new("english", "static").unwrap());
+    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| {
+        let base = PathBuf::from(concat!(std::env!("CARGO_MANIFEST_DIR"), "/.."));
+        let config = Config::with_loaded_weights(base.join("config.toml")).unwrap();
+        let data = Data::load(base.join(&config.corpus)).unwrap();
+
+        Oxeylyzer::new(data, config)
+    });
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
         let dof_str = r#"

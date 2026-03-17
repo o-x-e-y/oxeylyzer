@@ -2,14 +2,17 @@
 
 mod data;
 mod languages;
+mod util;
 
 use std::hint::black_box;
 
 use diol::prelude::*;
-use oxeylyzer_core::{corpus_cleaner::CorpusCleaner, data::Data, generate::*, layout::PosPair};
+use oxeylyzer_core::{corpus_cleaner::CorpusCleaner, data::Data, layout::PosPair};
+
+use crate::util::oxeylyzer;
 
 fn main() -> diol::Result<()> {
-    let g = Oxeylyzer::new("english", "./static/").unwrap();
+    let g = oxeylyzer("english");
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
 
     let layout_names = saved.keys().take(5).cloned().collect::<Vec<_>>();
@@ -41,7 +44,7 @@ fn main() -> diol::Result<()> {
 }
 
 fn score_swap(bencher: Bencher, swap: PosPair) {
-    let g = Oxeylyzer::new("english", "./static/").unwrap();
+    let g = oxeylyzer("english");
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
 
     let (_name, mut layout) = saved
@@ -56,7 +59,7 @@ fn score_swap(bencher: Bencher, swap: PosPair) {
 }
 
 fn score_layout(bencher: Bencher, name: String) {
-    let g = Oxeylyzer::new("english", "./static/").unwrap();
+    let g = oxeylyzer("english");
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
 
     let layout = black_box(g.fast_layout(&saved.get(&name).unwrap(), &[]));
@@ -67,7 +70,7 @@ fn score_layout(bencher: Bencher, name: String) {
 }
 
 fn best_swap(bencher: Bencher, name: String) {
-    let g = black_box(Oxeylyzer::new("english", "./static/").unwrap());
+    let g = black_box(oxeylyzer("english"));
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
     let mut layout = black_box(g.fast_layout(saved.get(&name).unwrap(), &[]));
     let possible_swaps = std::mem::take(&mut layout.possible_swaps);
@@ -78,7 +81,7 @@ fn best_swap(bencher: Bencher, name: String) {
 }
 
 fn best_swap_cached(bencher: Bencher, name: String) {
-    let g = black_box(Oxeylyzer::new("english", "./static/").unwrap());
+    let g = black_box(oxeylyzer("english"));
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
     let mut layout = black_box(g.fast_layout(saved.get(&name).unwrap(), &[]));
 
@@ -91,7 +94,7 @@ fn best_swap_cached(bencher: Bencher, name: String) {
 }
 
 fn generate(bencher: Bencher, language: &str) {
-    let g = black_box(Oxeylyzer::new(language, "./static/").unwrap());
+    let g = black_box(oxeylyzer(language));
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
     let basis = black_box(g.fast_layout(saved.get("sturdy").unwrap(), &[]));
 
