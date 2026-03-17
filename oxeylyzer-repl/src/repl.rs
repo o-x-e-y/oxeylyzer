@@ -792,24 +792,20 @@ impl Repl {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_layouts<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Layout>> {
-    if let Ok(readdir) = std::fs::read_dir(&path) {
-        let map = readdir
-            .flatten()
-            .flat_map(|p| {
-                Layout::load(p.path()).inspect_err(|e| {
-                    println!("Error loading layout from '{}': {e}", p.path().display())
-                })
-            })
-            .map(|l| (l.name.to_lowercase(), l))
-            .collect();
+    let pattern = PathBuf::from(BASE_PATH).join(&path).join("*.dof");
+    let pattern_str = pattern.to_string_lossy();
 
-        Ok(map)
-    // } else if !path.exists() {
-    //     fs::create_dir_all(path)?;
-    //     Ok(HashMap::default())
-    } else {
-        Err(ReplError::NotADirectory(path.as_ref().into()))
-    }
+    let map = glob::glob(&pattern_str)
+        .str_context(&pattern_str)?
+        .flatten()
+        .flat_map(|p| {
+            Layout::load(&p)
+                .inspect_err(|e| println!("Error loading layout from '{}': {e}", p.display()))
+        })
+        .map(|l| (l.name.to_lowercase(), l))
+        .collect();
+
+    Ok(map)
 }
 
 #[cfg(test)]

@@ -68,7 +68,7 @@ impl Layout {
 
         serde_json::from_str::<Dof>(&s)
             .map(Into::into)
-            .str_context(s)
+            .map_err(|e| OxeylyzerError::AnyhowError(e.into()))
     }
 
     #[cfg(target_arch = "wasm32")]
