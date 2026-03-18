@@ -85,6 +85,8 @@ pub struct Repl {
     saved: HashMap<String, Layout>,
     temp_generated: Vec<FastLayout>,
     thread_pool: rayon::ThreadPool,
+    corpus_configs: PathBuf,
+    language_data: PathBuf,
 }
 
 impl Repl {
@@ -97,6 +99,13 @@ impl Repl {
         let config = Config::with_loaded_weights(base.join(config_name))?;
         let data = Data::load(base.join(&config.corpus)).unwrap();
         let language = data.name.clone();
+
+        let corpus_configs = config.corpus_configs.clone();
+        let language_data = config
+            .corpus
+            .parent()
+            .unwrap_or_else(|| Path::new("./"))
+            .to_path_buf();
 
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(config.max_cores)
@@ -121,6 +130,8 @@ impl Repl {
             layout_gen,
             temp_generated: Vec::new(),
             thread_pool,
+            corpus_configs,
+            language_data,
         })
     }
 
@@ -131,7 +142,8 @@ impl Repl {
 
         rl.set_history_ignore_space(true);
 
-        if rl.load_history("./static/history.txt").is_err() {
+        let history_path = PathBuf::from(BASE_PATH).join("static/history.txt");
+        if rl.load_history(&history_path).is_err() {
             println!("Welcome to Oxeylyzer!");
         }
 
@@ -166,7 +178,7 @@ impl Repl {
             }
         }
 
-        if let Err(e) = rl.save_history("./static/history.txt") {
+        if let Err(e) = rl.save_history(&history_path) {
             rl.history().iter().for_each(|line| println!("{line}"));
 
             println!("Could not save history: {e}");
@@ -585,8 +597,9 @@ impl Repl {
         cleaner: CorpusCleaner,
         corpus_paths: &[P],
     ) -> Result<()> {
+        let language_data_path = PathBuf::from(BASE_PATH).join(&self.language_data);
         match Data::from_paths(corpus_paths, language, &cleaner) {
-            Ok(data) => match data.save("./static/language_data") {
+            Ok(data) => match data.save(language_data_path) {
                 Ok(_) => println!("Saved data for {language}!"),
                 Err(e) => println!("Failed to save data for {language}: {e}"),
             },
@@ -603,22 +616,22 @@ impl Repl {
         all: bool,
         raw: bool,
     ) -> Result<()> {
-        let base_path = "./static/text/";
+        let text_path = PathBuf::from(BASE_PATH).join("static/text");
 
         let corpus_paths = match corpus_paths {
-            &[] => vec![PathBuf::from(base_path).join(&language)],
+            &[] => vec![PathBuf::from(&text_path).join(&language)],
             p @ &[_, ..] => p.iter().map(AsRef::as_ref).map(PathBuf::from).collect(),
         };
 
         match (all, raw) {
             (true, true) => {
-                for dir_entry in std::fs::read_dir(base_path)
-                    .path_context(base_path)?
+                for dir_entry in std::fs::read_dir(&text_path)
+                    .path_context(&text_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
                 {
                     let language = dir_entry.file_name().display().to_string();
-                    let corpus_path = PathBuf::from(base_path).join(&language);
+                    let corpus_path = PathBuf::from(&text_path).join(&language);
                     let cleaner = CorpusCleaner::raw();
 
                     println!("loading raw data for language: {language}...");
@@ -627,16 +640,29 @@ impl Repl {
                 }
             }
             (true, false) => {
-                for dir_entry in std::fs::read_dir(base_path)
-                    .path_context(base_path)?
+                for dir_entry in std::fs::read_dir(&text_path)
+                    .path_context(&text_path)?
                     .flatten()
                     .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
                 {
                     let language = dir_entry.file_name().display().to_string();
-                    let corpus_path = PathBuf::from(base_path).join(&language);
-                    let cleaner = CorpusConfig::new_translator(&language, None);
+                    let corpus_path = PathBuf::from(&text_path).join(&language);
 
-                    println!("loading data for language: {language}...");
+                    let cleaner = glob::glob(&self.corpus_configs.display().to_string())
+                        .path_context(&self.corpus_configs)?
+                        .into_iter()
+                        .flatten()
+                        .find_map(|p| {
+                            let path = p.join(&language).with_extension("toml");
+                            CorpusConfig::load(path).ok()
+                        })
+                        .map_or_else(
+                            || {
+                                println!("loading data for language: {language}...");
+                                Default::default()
+                            },
+                            Into::into,
+                        );
 
                     self.load_one_with_config(&language, cleaner, &[corpus_path])?;
                 }
@@ -649,7 +675,20 @@ impl Repl {
                 self.load_one_with_config(&language, cleaner, &corpus_paths)?;
             }
             (false, false) => {
-                let cleaner = CorpusConfig::new_translator(&language, None);
+                let config_path = PathBuf::from(BASE_PATH).join(&self.corpus_configs);
+                let cleaner = glob::glob(dbg!(&config_path.display().to_string()))
+                    .path_context(&self.corpus_configs)?
+                    .into_iter()
+                    .flatten()
+                    .find_map(|p| {
+                        let path = dbg!(p.join(&language).with_extension("toml"));
+                        CorpusConfig::load(path).ok()
+                    })
+                    .map(Into::into)
+                    .unwrap_or_else(|| {
+                        println!("Failed to find corpur config, using a raw translator instead.");
+                        Default::default()
+                    });
 
                 println!("loading data for {language}...");
 
@@ -719,12 +758,18 @@ impl Repl {
 
     fn reset_with_language(&mut self, language: &str) -> Result<()> {
         let config = Config::with_loaded_weights(PathBuf::from(BASE_PATH).join("config.toml"))?;
-        let language_path = config
+        let corpus_configs = config.corpus_configs.clone();
+        let language_data = config
             .corpus
             .parent()
-            .ok_or_else(|| ReplError::FailedToGetCorpusPath(config.corpus.clone()))?;
+            .ok_or_else(|| ReplError::FailedToGetCorpusPath(config.corpus.clone()))?
+            .to_path_buf();
+        let corpus_path = PathBuf::from(BASE_PATH)
+            .join(&language_data)
+            .join(language)
+            .with_extension("json");
 
-        let data = Data::load(language_path)?;
+        let data = Data::load(corpus_path)?;
 
         let saved = config
             .layouts
@@ -738,6 +783,8 @@ impl Repl {
 
         let generator = Oxeylyzer::new(data, config);
 
+        self.language_data = language_data;
+        self.corpus_configs = corpus_configs;
         self.layout_gen = generator;
         self.language = language.to_string();
         self.saved = saved;
