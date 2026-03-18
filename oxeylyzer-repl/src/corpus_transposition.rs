@@ -113,7 +113,7 @@ impl std::default::Default for ShiftKey {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct CorpusConfig {
-    inherits: Vec<String>,
+    inherits: Vec<PathBuf>,
     #[serde(default)]
     #[serde_as(as = "StringAsCharArray")]
     letters_to_lowercase: Vec<char>,
@@ -126,34 +126,16 @@ pub struct CorpusConfig {
     shift_key: ShiftKey,
     repeat_key: bool,
     #[serde(skip)]
-    inherits_visited: HashSet<String>,
+    inherits_visited: HashSet<PathBuf>,
 }
 
 impl CorpusConfig {
-    pub fn load(language: &str, preferred_folder: Option<&str>) -> Result<Self, ReplError> {
-        let preferred_folder = if let Some(folder) = preferred_folder {
-            Ok(PathBuf::from(folder))
-        } else {
-            Self::check_for_language(language)
-        };
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, ReplError> {
+        let content = std::fs::read_to_string(&path).path_context(&path)?;
 
-        if let Ok(preferred_folder) = preferred_folder {
-            let file_name = format!("{language}.toml");
-            let path = PathBuf::from("static")
-                .join("corpus_configs")
-                .join(preferred_folder)
-                .join(file_name);
+        let config = toml::from_str(&content).path_context(path)?;
 
-            let mut f = File::open(&path).path_context(&path)?;
-            let mut buf = String::new();
-            f.read_to_string(&mut buf).path_context(&path)?;
-
-            let config = toml::from_str(buf.as_str()).path_context(path)?;
-
-            Ok(config)
-        } else {
-            Err(ReplError::CouldNotFindCorpusConfig(language.to_string()))
-        }
+        Ok(config)
     }
 
     pub fn all<P: AsRef<Path>>(base_path: P) -> Vec<(String, Self)> {
@@ -184,35 +166,11 @@ impl CorpusConfig {
             .collect::<Vec<_>>()
     }
 
-    pub fn new_translator(language: &str, preferred_folder: Option<&str>) -> CorpusCleaner {
-        match Self::load(language, preferred_folder) {
-            Ok(config) => config.into(),
-            Err(error) => {
-                println!("{error}\nUsing a raw translator instead.");
-                CorpusCleaner::raw()
-            }
-        }
-    }
-
-    fn check_for_language(language: &str) -> Result<PathBuf, ReplError> {
-        let try_find_path = glob::glob("static/corpus_configs/*/*.toml")
-            .unwrap()
-            .flatten()
-            .find(|stem| stem.file_stem().unwrap_or_default() == language);
-
-        if let Some(path) = try_find_path {
-            let res = path
-                .parent()
-                .unwrap()
-                .components()
-                .next_back()
-                .unwrap()
-                .as_os_str();
-
-            Ok(PathBuf::from(res))
-        } else {
-            Err(ReplError::CouldNotFindCorpusConfig(language.to_string()))
-        }
+    pub fn new_cleaner<P: AsRef<Path>>(path: P) -> CorpusCleaner {
+        Self::load(path)
+            .map(Into::into)
+            .inspect_err(|e| println!("{e}\nUsing a raw translator instead."))
+            .unwrap_or_default()
     }
 }
 
@@ -254,11 +212,11 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
 
 impl From<CorpusConfig> for CorpusCleaner {
     fn from(mut config: CorpusConfig) -> Self {
-        for inherits in config.inherits.clone() {
-            if !config.inherits_visited.contains(&inherits)
-                && let Ok(new) = CorpusConfig::load(&inherits, None)
+        for path in config.inherits.clone() {
+            if !config.inherits_visited.contains(&path)
+                && let Ok(new) = CorpusConfig::load(&path)
             {
-                config.inherits_visited.insert(inherits);
+                config.inherits_visited.insert(path.clone());
                 config = config + new;
             }
         }
@@ -301,10 +259,13 @@ mod tests {
         let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
         let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
         assert_eq!(config1.inherits, vec!["dofsmie".to_string()]);
-        assert_eq!(config2.inherits, vec!["yeah"]);
+        assert_eq!(config2.inherits, vec![PathBuf::from("yeah")]);
 
         let config = config1 + config2;
-        assert_eq!(config.inherits, vec!["dofsmie", "yeah"]);
+        assert_eq!(
+            config.inherits,
+            vec![PathBuf::from("dofsmie"), PathBuf::from("yeah")]
+        );
     }
 
     #[test]

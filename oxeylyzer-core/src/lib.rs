@@ -37,6 +37,8 @@ pub enum OxeylyzerError {
     MissingDataName,
     #[error("Failed to serialize data for language '{0}'")]
     CouldNotSerializeData(String),
+    #[error("Corpus path '{}' is invalid as it does not end in a (.json) file.", .0.display())]
+    InvalidCorpusPath(PathBuf),
 
     #[error(transparent)]
     AnyhowError(#[from] anyhow::Error),
