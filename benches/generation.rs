@@ -30,13 +30,14 @@ fn main() -> diol::Result<()> {
 
     let bench = Bench::from_args()?;
 
-    bench.register("score_swap", score_swap, swaps);
-    bench.register("score_layout", score_layout, layout_names.clone());
+    bench.register("score swap", score_swap, swaps);
+    bench.register("score layout", score_layout, layout_names.clone());
     bench.register("generate", generate, languages);
-    bench.register("best_swap_cached", best_swap_cached, layout_names.clone());
-    bench.register("best_swap", best_swap, layout_names);
-    bench.register("language_data", language_data, corpora);
-    bench.register("shuffle_pins", shuffle_pins, (0..40).step_by(5));
+    bench.register("best swap cached", best_swap_cached, layout_names.clone());
+    bench.register("best swap", best_swap, layout_names);
+    bench.register("language data", language_data, corpora);
+    bench.register("shuffle pins", shuffle_pins, (0..40).step_by(5));
+    bench.register("load data", load_data, corpora);
 
     bench.run()?;
 
@@ -125,4 +126,10 @@ fn shuffle_pins(bencher: Bencher, pin_count: usize) {
     bencher.bench(|| {
         oxeylyzer_core::utility::shuffle_pins::<i32>(&mut arr, &pins);
     })
+}
+
+fn load_data(bencher: Bencher, language: &str) {
+    let path = format!("./static/language_data/{language}.json");
+
+    bencher.bench(|| Data::load(&path).unwrap().name)
 }
