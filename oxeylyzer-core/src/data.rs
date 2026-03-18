@@ -116,8 +116,8 @@ impl Data {
 #[cfg(not(target_arch = "wasm32"))]
 impl Data {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = std::fs::read_to_string(&path).path_context(path)?;
-        let data = serde_json::from_str::<Self>(&content).str_context(content)?;
+        let content = std::fs::read_to_string(&path).path_context(&path)?;
+        let data = serde_json::from_str::<Self>(&content).path_context(path)?;
         Ok(data)
     }
 
