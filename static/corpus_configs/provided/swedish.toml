@@ -1,3 +1,5 @@
-inherits = ["default"]
+sources = [ "../../text/swedish" ]
+
+inherits = [ "./default.toml" ]
 
 letters_to_lowercase = "äåö"

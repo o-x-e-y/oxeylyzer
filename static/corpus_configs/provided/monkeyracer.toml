@@ -1,1 +1,3 @@
-inherits = ["default"]
+sources = [ "../../text/monkeyracer" ]
+
+inherits = [ "./default.toml" ]

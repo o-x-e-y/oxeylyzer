@@ -1,4 +1,6 @@
-inherits = ["default"]
+sources = [ "../../text/latvian" ]
+
+inherits = [ "./default.toml" ]
 
 letters_to_lowercase = "āīēš"
 

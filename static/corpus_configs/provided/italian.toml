@@ -1,4 +1,6 @@
-inherits = ["default"]
+sources = [ "../../text/italian" ]
+
+inherits = [ "./default.toml" ]
 
 [multiple]
 uppercase_versions = true
