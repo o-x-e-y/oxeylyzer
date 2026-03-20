@@ -1,4 +1,6 @@
-inherits = ["default_punct"]
+sources = [ "../../text/korean" ]
+
+inherits = [ "./default_punct.toml" ]
 
 keep = "ㅣㅡㅜㅏㅊㅈㅅㅂㅁㄹㄷㄴㄱㅇㅋㅌㅍㅐㅑㅓㅕㅗㅎㅔㅛㅠ"
 

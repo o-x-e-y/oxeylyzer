@@ -1,11 +1,10 @@
 use std::{
     collections::HashSet,
     convert::Infallible,
-    fs::File,
-    io::Read,
     path::{Path, PathBuf},
 };
 
+use itertools::Itertools;
 use oxeylyzer_core::{OxeylyzerResultExt, SHIFT_CHAR, corpus_cleaner::CorpusCleaner};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, serde_conv};
@@ -113,7 +112,8 @@ impl std::default::Default for ShiftKey {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct CorpusConfig {
-    inherits: Vec<String>,
+    inherits: Vec<PathBuf>,
+    sources: Vec<PathBuf>,
     #[serde(default)]
     #[serde_as(as = "StringAsCharArray")]
     letters_to_lowercase: Vec<char>,
@@ -126,93 +126,36 @@ pub struct CorpusConfig {
     shift_key: ShiftKey,
     repeat_key: bool,
     #[serde(skip)]
-    inherits_visited: HashSet<String>,
+    inherits_visited: HashSet<PathBuf>,
 }
 
 impl CorpusConfig {
-    pub fn load(language: &str, preferred_folder: Option<&str>) -> Result<Self, ReplError> {
-        let preferred_folder = if let Some(folder) = preferred_folder {
-            Ok(PathBuf::from(folder))
-        } else {
-            Self::check_for_language(language)
-        };
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, ReplError> {
+        let dir = path
+            .as_ref()
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or(PathBuf::from("./"));
 
-        if let Ok(preferred_folder) = preferred_folder {
-            let file_name = format!("{language}.toml");
-            let path = PathBuf::from("static")
-                .join("corpus_configs")
-                .join(preferred_folder)
-                .join(file_name);
+        let content = std::fs::read_to_string(&path).path_context(&path)?;
 
-            let mut f = File::open(&path).path_context(&path)?;
-            let mut buf = String::new();
-            f.read_to_string(&mut buf).path_context(&path)?;
+        let mut config = toml::from_str::<Self>(&content).path_context(&path)?;
 
-            let config = toml::from_str(buf.as_str()).path_context(path)?;
+        config.inherits.iter_mut().for_each(|p| *p = dir.join(&p));
+        config.sources.iter_mut().for_each(|p| *p = dir.join(&p));
 
-            Ok(config)
-        } else {
-            Err(ReplError::CouldNotFindCorpusConfig(language.to_string()))
-        }
+        Ok(config)
     }
 
-    pub fn all<P: AsRef<Path>>(base_path: P) -> Vec<(String, Self)> {
-        let path = base_path.as_ref().join("static/corpus_configs");
-        let pattern = format!("{}/*/*.toml", path.display());
-
-        glob::glob(&pattern)
-            .unwrap()
-            .flatten()
-            .filter(|pb| pb.is_file())
-            .flat_map(|pb| {
-                File::open(&pb).map(|file| {
-                    let lang = pb
-                        .file_name()
-                        .unwrap()
-                        .to_string_lossy()
-                        .trim_end_matches(".toml")
-                        .to_string();
-
-                    (lang, file)
-                })
-            })
-            .flat_map(|(lang, mut f)| {
-                let mut buf = String::new();
-                f.read_to_string(&mut buf).map(|_| (lang, buf))
-            })
-            .flat_map(|(lang, contents)| toml::from_str(&contents).map(|config| (lang, config)))
-            .collect::<Vec<_>>()
+    pub fn sources(&self) -> &[PathBuf] {
+        &self.sources
     }
 
-    pub fn new_translator(language: &str, preferred_folder: Option<&str>) -> CorpusCleaner {
-        match Self::load(language, preferred_folder) {
-            Ok(config) => config.into(),
-            Err(error) => {
-                println!("{error}\nUsing a raw translator instead.");
-                CorpusCleaner::raw()
-            }
-        }
-    }
-
-    fn check_for_language(language: &str) -> Result<PathBuf, ReplError> {
-        let try_find_path = glob::glob("static/corpus_configs/*/*.toml")
-            .unwrap()
-            .flatten()
-            .find(|stem| stem.file_stem().unwrap_or_default() == language);
-
-        if let Some(path) = try_find_path {
-            let res = path
-                .parent()
-                .unwrap()
-                .components()
-                .next_back()
-                .unwrap()
-                .as_os_str();
-
-            Ok(PathBuf::from(res))
-        } else {
-            Err(ReplError::CouldNotFindCorpusConfig(language.to_string()))
-        }
+    pub fn new_cleaner<P: AsRef<Path>>(path: P) -> CorpusCleaner {
+        Self::load(path)
+            .map(Into::into)
+            .inspect_err(|e| println!("{e}\nUsing a raw translator instead."))
+            .unwrap_or_default()
     }
 }
 
@@ -221,6 +164,21 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
 
     fn add(self, rhs: CorpusConfig) -> Self::Output {
         let inherits = self.inherits.into_iter().chain(rhs.inherits).collect();
+        let sources = self
+            .sources
+            .into_iter()
+            .chain(rhs.sources)
+            .flat_map(|s| {
+                let canonical = s
+                    .canonicalize()
+                    .path_context(&s)
+                    .inspect_err(|e| eprintln!("{e}"))
+                    .ok()?;
+                Some((s, canonical))
+            })
+            .unique_by(|(_, canonical)| canonical.clone())
+            .map(|(s, _)| s)
+            .collect();
         let multiple = self.multiple.into_iter().chain(rhs.multiple).collect();
         let letters_to_lowercase = self
             .letters_to_lowercase
@@ -240,6 +198,7 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
 
         CorpusConfig {
             inherits,
+            sources,
             letters_to_lowercase,
             punct_unshifted,
             keep,
@@ -254,11 +213,11 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
 
 impl From<CorpusConfig> for CorpusCleaner {
     fn from(mut config: CorpusConfig) -> Self {
-        for inherits in config.inherits.clone() {
-            if !config.inherits_visited.contains(&inherits)
-                && let Ok(new) = CorpusConfig::load(&inherits, None)
+        for path in config.inherits.clone() {
+            if !config.inherits_visited.contains(&path)
+                && let Ok(new) = CorpusConfig::load(&path)
             {
-                config.inherits_visited.insert(inherits);
+                config.inherits_visited.insert(path.clone());
                 config = config + new;
             }
         }
@@ -301,10 +260,33 @@ mod tests {
         let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
         let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
         assert_eq!(config1.inherits, vec!["dofsmie".to_string()]);
-        assert_eq!(config2.inherits, vec!["yeah"]);
+        assert_eq!(config2.inherits, vec![PathBuf::from("yeah")]);
 
         let config = config1 + config2;
-        assert_eq!(config.inherits, vec!["dofsmie", "yeah"]);
+        assert_eq!(
+            config.inherits,
+            vec![PathBuf::from("dofsmie"), PathBuf::from("yeah")]
+        );
+    }
+
+    #[test]
+    fn sources() {
+        let config1 = r#"sources = ["../static"]"#;
+        let config2 = r#"sources = ["../target", "./../static"]"#;
+
+        let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
+        let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
+        assert_eq!(config1.sources, vec!["../static".to_string()]);
+        assert_eq!(
+            config2.sources,
+            vec!["../target".to_string(), "./../static".to_string()]
+        );
+
+        let config = config1 + config2;
+        assert_eq!(
+            config.sources,
+            vec![PathBuf::from("../static"), PathBuf::from("../target")]
+        );
     }
 
     #[test]
@@ -439,53 +421,67 @@ mod tests {
 
     #[test]
     fn existing_file_validity() {
-        for (lang, config) in CorpusConfig::all(concat!(std::env!("CARGO_MANIFEST_DIR"), "/..")) {
-            config.keep.into_iter().for_each(|c| {
-                assert_eq!(
-                    c.to_uppercase().to_string(),
-                    c.to_lowercase().to_string(),
-                    "Corpus config for lang {lang} has keep rule for {c} which has an uppercase"
-                );
-            });
+        let base_path = PathBuf::from(concat!(std::env!("CARGO_MANIFEST_DIR"), "/.."));
+        let corpus_config_paths = base_path.join("corpus_configs/**/*.toml");
 
-            let multiple_map = config.multiple.into_iter().collect::<HashMap<_, _>>();
+        glob::glob(&corpus_config_paths.to_string_lossy())
+            .path_context(&corpus_config_paths)
+            .unwrap()
+            .map(|p| p.unwrap())
+            .for_each(|path| {
+                let config = CorpusConfig::load(&path).unwrap();
+                let lang = path
+                    .file_name()
+                    .ok_or_else(|| ReplError::NoCorpusConfigFileName(path.clone()))
+                    .unwrap()
+                    .to_string_lossy();
 
-            multiple_map.iter().for_each(|(c, str)| {
-                let lower = c.to_lowercase().collect::<Vec<char>>();
-                let upper = c.to_uppercase().collect::<Vec<char>>();
-
-                if lower != upper && lower.len() == 1 && upper.len() == 1 {
-                    let (lower, upper) = (lower[0], upper[0]);
-
-                    let lower_to = multiple_map.get(&lower);
-                    let upper_to = multiple_map.get(&upper);
-
-                    assert!(
-                        lower_to.is_some(),
-                        concat!(
-                            "multiple mapping for language {} has character '{}' mapped to ",
-                            "\"{}\", but no such mapping exists for the lowercase variant {}",
-                        ),
-                        lang,
-                        upper,
-                        str,
-                        lower
+                config.keep.into_iter().for_each(|c| {
+                    assert_eq!(
+                        c.to_uppercase().to_string(),
+                        c.to_lowercase().to_string(),
+                        "Corpus config for lang {lang} has keep rule for {c} which has an uppercase"
                     );
+                });
 
-                    assert!(
-                        upper_to.is_some(),
-                        concat!(
-                            "multiple mapping for language {} has character '{}' mapped to ",
-                            "\"{}\", but no such mapping exists for the uppercase variant {}.\n",
-                            "Did you mean to enable `uppercase_versions = true`?"
-                        ),
-                        lang,
-                        lower,
-                        str,
-                        upper
-                    );
-                }
+                let multiple_map = config.multiple.into_iter().collect::<HashMap<_, _>>();
+
+                multiple_map.iter().for_each(|(c, str)| {
+                    let lower = c.to_lowercase().collect::<Vec<char>>();
+                    let upper = c.to_uppercase().collect::<Vec<char>>();
+
+                    if lower != upper && lower.len() == 1 && upper.len() == 1 {
+                        let (lower, upper) = (lower[0], upper[0]);
+
+                        let lower_to = multiple_map.get(&lower);
+                        let upper_to = multiple_map.get(&upper);
+
+                        assert!(
+                            lower_to.is_some(),
+                            concat!(
+                                "multiple mapping for language {} has character '{}' mapped to ",
+                                "\"{}\", but no such mapping exists for the lowercase variant {}",
+                            ),
+                            lang,
+                            upper,
+                            str,
+                            lower
+                        );
+
+                        assert!(
+                            upper_to.is_some(),
+                            concat!(
+                                "multiple mapping for language {} has character '{}' mapped to ",
+                                "\"{}\", but no such mapping exists for the uppercase variant {}.\n",
+                                "Did you mean to enable `uppercase_versions = true`?"
+                            ),
+                            lang,
+                            lower,
+                            str,
+                            upper
+                        );
+                    }
+                });
             });
-        }
     }
 }

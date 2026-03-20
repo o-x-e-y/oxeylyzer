@@ -1,4 +1,6 @@
-inherits = ["default", "welsh_pure"]
+sources = [ "../../text/welsh" ]
+
+inherits = [ "./default.toml", "./welsh_pure.toml" ]
 
 [one_to_one]
 from = "ΔⳐ"

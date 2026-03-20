@@ -1,3 +1,5 @@
-inherits = ["default"]
+sources = [ "../../text/turkish" ]
+
+inherits = [ "./default.toml" ]
 
 letters_to_lowercase = "ıüşçğöý"

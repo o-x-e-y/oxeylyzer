@@ -1,1 +1,3 @@
-inherits = ["default"]
+sources = [ "../../text/malay" ]
+
+inherits = [ "./default.toml" ]

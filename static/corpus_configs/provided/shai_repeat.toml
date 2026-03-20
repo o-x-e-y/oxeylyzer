@@ -1,4 +1,4 @@
-sources = [ "../../text/english" ]
+sources = [ "../../text/shai_repeat" ]
 
 inherits = [ "./default.toml" ]
 

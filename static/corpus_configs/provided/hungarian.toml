@@ -1,4 +1,6 @@
-inherits = ["default"]
+sources = [ "../../text/hungarian" ]
+
+inherits = [ "./default.toml" ]
 
 letters_to_lowercase = "áéöóő"
 

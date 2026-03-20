@@ -1,3 +1,5 @@
-inherits = ["default_punct"]
+sources = [ "../../text/ukranian" ]
+
+inherits = [ "./default_punct.toml" ]
 
 letters_to_lowercase = "абвгґдеєжзийіїклмнопрстуфхцчшщьюя" #ᲀᲃᲅᲁᲂ
