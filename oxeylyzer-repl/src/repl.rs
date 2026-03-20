@@ -680,7 +680,7 @@ impl Repl {
 
                 println!("loading raw data for language: {language}...");
 
-                self.load_one_with_cleaner(&language, cleaner, &sources)?;
+                self.load_one_with_cleaner(&language, cleaner, sources)?;
             }
             (false, false) => {
                 let config_path = glob::glob(&corpus_configs.to_string_lossy())
