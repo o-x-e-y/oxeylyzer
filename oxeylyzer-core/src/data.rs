@@ -152,8 +152,10 @@ impl Data {
                     new.name = name.to_string();
 
                     Ok(new)
-                } else {
+                } else if path.exists() {
                     Err(OxeylyzerError::NotAFile(path))
+                } else {
+                    Err(OxeylyzerError::PathDoesNotExist(path))
                 }
             })
             .collect::<Result<Vec<_>>>()?;

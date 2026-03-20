@@ -1,8 +1,6 @@
 use std::{
     collections::HashSet,
     convert::Infallible,
-    fs::File,
-    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -133,39 +131,24 @@ pub struct CorpusConfig {
 
 impl CorpusConfig {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, ReplError> {
+        let dir = path
+            .as_ref()
+            .parent()
+            .map(PathBuf::from)
+            .unwrap_or(PathBuf::from("./"));
+
         let content = std::fs::read_to_string(&path).path_context(&path)?;
 
-        let config = toml::from_str(&content).path_context(path)?;
+        let mut config = toml::from_str::<Self>(&content).path_context(&path)?;
+
+        config.inherits.iter_mut().for_each(|p| *p = dir.join(&p));
+        config.sources.iter_mut().for_each(|p| *p = dir.join(&p));
 
         Ok(config)
     }
 
-    pub fn all<P: AsRef<Path>>(base_path: P) -> Vec<(String, Self)> {
-        let path = base_path.as_ref().join("static/corpus_configs");
-        let pattern = format!("{}/*/*.toml", path.display());
-
-        glob::glob(&pattern)
-            .unwrap()
-            .flatten()
-            .filter(|pb| pb.is_file())
-            .flat_map(|pb| {
-                File::open(&pb).map(|file| {
-                    let lang = pb
-                        .file_name()
-                        .unwrap()
-                        .to_string_lossy()
-                        .trim_end_matches(".toml")
-                        .to_string();
-
-                    (lang, file)
-                })
-            })
-            .flat_map(|(lang, mut f)| {
-                let mut buf = String::new();
-                f.read_to_string(&mut buf).map(|_| (lang, buf))
-            })
-            .flat_map(|(lang, contents)| toml::from_str(&contents).map(|config| (lang, config)))
-            .collect::<Vec<_>>()
+    pub fn sources(&self) -> &[PathBuf] {
+        &self.sources
     }
 
     pub fn new_cleaner<P: AsRef<Path>>(path: P) -> CorpusCleaner {
@@ -438,53 +421,67 @@ mod tests {
 
     #[test]
     fn existing_file_validity() {
-        for (lang, config) in CorpusConfig::all(concat!(std::env!("CARGO_MANIFEST_DIR"), "/..")) {
-            config.keep.into_iter().for_each(|c| {
-                assert_eq!(
-                    c.to_uppercase().to_string(),
-                    c.to_lowercase().to_string(),
-                    "Corpus config for lang {lang} has keep rule for {c} which has an uppercase"
-                );
-            });
+        let base_path = PathBuf::from(concat!(std::env!("CARGO_MANIFEST_DIR"), "/.."));
+        let corpus_config_paths = base_path.join("corpus_configs/**/*.toml");
 
-            let multiple_map = config.multiple.into_iter().collect::<HashMap<_, _>>();
+        glob::glob(&corpus_config_paths.to_string_lossy())
+            .path_context(&corpus_config_paths)
+            .unwrap()
+            .map(|p| p.unwrap())
+            .for_each(|path| {
+                let config = CorpusConfig::load(&path).unwrap();
+                let lang = path
+                    .file_name()
+                    .ok_or_else(|| ReplError::NoCorpusConfigFileName(path.clone()))
+                    .unwrap()
+                    .to_string_lossy();
 
-            multiple_map.iter().for_each(|(c, str)| {
-                let lower = c.to_lowercase().collect::<Vec<char>>();
-                let upper = c.to_uppercase().collect::<Vec<char>>();
-
-                if lower != upper && lower.len() == 1 && upper.len() == 1 {
-                    let (lower, upper) = (lower[0], upper[0]);
-
-                    let lower_to = multiple_map.get(&lower);
-                    let upper_to = multiple_map.get(&upper);
-
-                    assert!(
-                        lower_to.is_some(),
-                        concat!(
-                            "multiple mapping for language {} has character '{}' mapped to ",
-                            "\"{}\", but no such mapping exists for the lowercase variant {}",
-                        ),
-                        lang,
-                        upper,
-                        str,
-                        lower
+                config.keep.into_iter().for_each(|c| {
+                    assert_eq!(
+                        c.to_uppercase().to_string(),
+                        c.to_lowercase().to_string(),
+                        "Corpus config for lang {lang} has keep rule for {c} which has an uppercase"
                     );
+                });
 
-                    assert!(
-                        upper_to.is_some(),
-                        concat!(
-                            "multiple mapping for language {} has character '{}' mapped to ",
-                            "\"{}\", but no such mapping exists for the uppercase variant {}.\n",
-                            "Did you mean to enable `uppercase_versions = true`?"
-                        ),
-                        lang,
-                        lower,
-                        str,
-                        upper
-                    );
-                }
+                let multiple_map = config.multiple.into_iter().collect::<HashMap<_, _>>();
+
+                multiple_map.iter().for_each(|(c, str)| {
+                    let lower = c.to_lowercase().collect::<Vec<char>>();
+                    let upper = c.to_uppercase().collect::<Vec<char>>();
+
+                    if lower != upper && lower.len() == 1 && upper.len() == 1 {
+                        let (lower, upper) = (lower[0], upper[0]);
+
+                        let lower_to = multiple_map.get(&lower);
+                        let upper_to = multiple_map.get(&upper);
+
+                        assert!(
+                            lower_to.is_some(),
+                            concat!(
+                                "multiple mapping for language {} has character '{}' mapped to ",
+                                "\"{}\", but no such mapping exists for the lowercase variant {}",
+                            ),
+                            lang,
+                            upper,
+                            str,
+                            lower
+                        );
+
+                        assert!(
+                            upper_to.is_some(),
+                            concat!(
+                                "multiple mapping for language {} has character '{}' mapped to ",
+                                "\"{}\", but no such mapping exists for the uppercase variant {}.\n",
+                                "Did you mean to enable `uppercase_versions = true`?"
+                            ),
+                            lang,
+                            lower,
+                            str,
+                            upper
+                        );
+                    }
+                });
             });
-        }
     }
 }

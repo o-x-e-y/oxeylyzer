@@ -53,7 +53,9 @@ pub enum ReplError {
     CouldNotSerializeLayout(Box<FastLayout>),
     #[error("Could not find corpus config for corpus '{0}'")]
     CouldNotFindCorpusConfig(String),
-    #[error("Shift key can only be a single char, found '{}' with length {}", .0, .0.chars().count())]
+    #[error(
+        "Shift key can only be a single char, found '{}' with length {}", .0, .0.chars().count()
+    )]
     WrongShiftKeyLength(String),
     #[error(
         "{}\n{} '{}'",
@@ -62,6 +64,10 @@ pub enum ReplError {
         .0.display()
     )]
     FailedToGetCorpusPath(PathBuf),
+    #[error(
+        "Could not get file name for corpus config file '{}'. Is it even a file?", .0.display()
+    )]
+    NoCorpusConfigFileName(PathBuf),
 
     #[error(transparent)]
     XflagsError(#[from] xflags::Error),
@@ -593,7 +599,7 @@ impl Repl {
         Ok(())
     }
 
-    fn load_one_with_config<P: AsRef<Path>>(
+    fn load_one_with_cleaner<P: AsRef<Path>>(
         &mut self,
         language: &str,
         cleaner: CorpusCleaner,
@@ -611,88 +617,89 @@ impl Repl {
         Ok(())
     }
 
-    pub fn load<P: AsRef<Path>>(
-        &mut self,
-        language: String,
-        corpus_paths: &[P],
-        all: bool,
-        raw: bool,
-    ) -> Result<()> {
-        let text_path = PathBuf::from(BASE_PATH).join("static/text");
-
-        let corpus_paths = match corpus_paths {
-            &[] => vec![PathBuf::from(&text_path).join(&language)],
-            p @ &[_, ..] => p.iter().map(AsRef::as_ref).map(PathBuf::from).collect(),
-        };
+    pub fn load(&mut self, language: String, all: bool, raw: bool) -> Result<()> {
+        let corpus_configs = PathBuf::from(BASE_PATH).join(&self.corpus_configs);
 
         match (all, raw) {
             (true, true) => {
-                for dir_entry in std::fs::read_dir(&text_path)
-                    .path_context(&text_path)?
-                    .flatten()
-                    .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
-                {
-                    let language = dir_entry.file_name().display().to_string();
-                    let corpus_path = PathBuf::from(&text_path).join(&language);
-                    let cleaner = CorpusCleaner::raw();
+                glob::glob(&corpus_configs.to_string_lossy())
+                    .path_context(&corpus_configs)?
+                    .flat_map(|p| p.inspect_err(|e| eprintln!("{e}")))
+                    .map(|path| {
+                        let config = CorpusConfig::load(&path)?;
+                        let sources = config.sources().to_vec();
+                        let cleaner = CorpusCleaner::raw();
+                        let language = path
+                            .file_stem()
+                            .ok_or_else(|| ReplError::NoCorpusConfigFileName(path.clone()))?
+                            .to_string_lossy();
 
-                    println!("loading raw data for language: {language}...");
+                        println!("loading raw data for language: {language}...");
 
-                    self.load_one_with_config(&language, cleaner, &[corpus_path])?;
-                }
+                        self.load_one_with_cleaner(&language, cleaner, &sources)
+                    })
+                    .for_each(|res| {
+                        let _ = res.inspect_err(|e| eprintln!("{e}"));
+                    });
             }
             (true, false) => {
-                for dir_entry in std::fs::read_dir(&text_path)
-                    .path_context(&text_path)?
-                    .flatten()
-                    .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
-                {
-                    let language = dir_entry.file_name().display().to_string();
-                    let corpus_path = PathBuf::from(&text_path).join(&language);
+                glob::glob(&corpus_configs.to_string_lossy())
+                    .path_context(&corpus_configs)?
+                    .flat_map(|p| p.inspect_err(|e| eprintln!("{e}")))
+                    .map(|path| {
+                        let config = CorpusConfig::load(&path)?;
+                        let sources = config.sources().to_vec();
+                        let cleaner = config.into();
+                        let language = path
+                            .file_stem()
+                            .ok_or_else(|| ReplError::NoCorpusConfigFileName(path.clone()))?
+                            .to_string_lossy();
 
-                    let cleaner = glob::glob(&self.corpus_configs.display().to_string())
-                        .path_context(&self.corpus_configs)?
-                        .flatten()
-                        .find_map(|p| {
-                            let path = p.join(&language).with_extension("toml");
-                            CorpusConfig::load(path).ok()
-                        })
-                        .map_or_else(
-                            || {
-                                println!("loading data for language: {language}...");
-                                Default::default()
-                            },
-                            Into::into,
-                        );
+                        println!("loading data for language: {language}...");
 
-                    self.load_one_with_config(&language, cleaner, &[corpus_path])?;
-                }
+                        self.load_one_with_cleaner(&language, cleaner, &sources)
+                    })
+                    .for_each(|res| {
+                        let _ = res.inspect_err(|e| eprintln!("{e}"));
+                    });
             }
             (false, true) => {
+                let config_path = glob::glob(&corpus_configs.to_string_lossy())
+                    .path_context(&corpus_configs)?
+                    .flatten()
+                    .find(|path| {
+                        path.file_stem()
+                            .map(|n| n == language.as_str())
+                            .unwrap_or(false)
+                    })
+                    .ok_or_else(|| ReplError::CouldNotFindCorpusConfig(language.clone()))?;
+
+                let config = CorpusConfig::load(config_path)?;
+                let sources = config.sources();
                 let cleaner = CorpusCleaner::raw();
 
                 println!("loading raw data for language: {language}...");
 
-                self.load_one_with_config(&language, cleaner, &corpus_paths)?;
+                self.load_one_with_cleaner(&language, cleaner, &sources)?;
             }
             (false, false) => {
-                let config_path = PathBuf::from(BASE_PATH).join(&self.corpus_configs);
-                let cleaner = glob::glob(&config_path.display().to_string())
-                    .path_context(&self.corpus_configs)?
+                let config_path = glob::glob(&corpus_configs.to_string_lossy())
+                    .path_context(&corpus_configs)?
                     .flatten()
-                    .find_map(|p| {
-                        let path = dbg!(p.join(&language).with_extension("toml"));
-                        CorpusConfig::load(path).ok()
+                    .find(|path| {
+                        path.file_stem()
+                            .map(|n| n == language.as_str())
+                            .unwrap_or(false)
                     })
-                    .map(Into::into)
-                    .unwrap_or_else(|| {
-                        println!("Failed to find corpur config, using a raw translator instead.");
-                        Default::default()
-                    });
+                    .ok_or_else(|| ReplError::CouldNotFindCorpusConfig(language.clone()))?;
+
+                let config = CorpusConfig::load(config_path)?;
+                let sources = config.sources().to_vec();
+                let cleaner = CorpusCleaner::from(config);
 
                 println!("loading data for {language}...");
 
-                self.load_one_with_config(&language, cleaner, &corpus_paths)?;
+                self.load_one_with_cleaner(&language, cleaner, &sources)?;
                 self.language(Some(language))?;
             }
         };
@@ -827,7 +834,7 @@ impl Repl {
             Language(l) => self.language(l.language)?,
             Include(l) => self.include(&l.languages)?,
             Languages(_) => self.languages()?,
-            Load(l) => self.load(l.language, &l.corpus_paths, l.raw, l.all)?,
+            Load(l) => self.load(l.language, l.all, l.raw)?,
             Ngram(n) => self.ngram(&n.ngram)?,
             Reload(_) => self.reload()?,
             Quit(_) => return Ok(ReplStatus::Quit),
