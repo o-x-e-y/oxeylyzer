@@ -846,7 +846,11 @@ impl Repl {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_layouts<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Layout>> {
-    let pattern = PathBuf::from(BASE_PATH).join(&path).join("*.dof");
+    let base = PathBuf::from(BASE_PATH).join(&path);
+    let pattern = match base.is_dir() {
+        true => base.join("*.dof"),
+        false => base,
+    };
     let pattern_str = pattern.to_string_lossy();
 
     let map = glob::glob(&pattern_str)
