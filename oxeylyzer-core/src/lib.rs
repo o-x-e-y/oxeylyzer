@@ -40,7 +40,7 @@ pub enum OxeylyzerError {
     #[error("Corpus path '{}' is invalid as it does not end in a (.json) file.", .0.display())]
     InvalidCorpusPath(PathBuf),
 
-    #[error(transparent)]
+    #[error("{0:#}")]
     AnyhowError(#[from] anyhow::Error),
 
     #[cfg(target_arch = "wasm32")]
