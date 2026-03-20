@@ -208,16 +208,23 @@ pub fn get_trigram_combinations() -> Arc<[TrigramPattern; 1000]> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::{TrigramPattern::*, *};
-    use crate::{fast_layout::FastLayout, generate::Oxeylyzer, layout::Layout};
+    use crate::{
+        data::Data, fast_layout::FastLayout, generate::Oxeylyzer, layout::Layout, weights::Config,
+    };
     use once_cell::sync::Lazy;
 
-    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| Oxeylyzer::new("english", "./static").unwrap());
+    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| {
+        let base = PathBuf::from(concat!(std::env!("CARGO_MANIFEST_DIR"), "/.."));
+        let config = Config::with_loaded_weights(base.join("config.toml")).unwrap();
+        let data = Data::load(base.join(&config.corpus)).unwrap();
+
+        Oxeylyzer::new(data, config)
+    });
 
     static DVORAK: Lazy<FastLayout> = Lazy::new(|| {
-        let base_path = concat!(std::env!("CARGO_MANIFEST_DIR"), "/../static");
-        let g = Oxeylyzer::new("english", base_path).unwrap();
-
         let dof_str = r#"
             {
                 "name": "Dvorak",
@@ -235,7 +242,7 @@ mod tests {
 
         let layout = serde_json::from_str::<Layout>(dof_str).unwrap();
 
-        g.fast_layout(&layout, &[])
+        GEN.fast_layout(&layout, &[])
     });
 
     #[test]

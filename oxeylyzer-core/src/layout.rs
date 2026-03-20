@@ -50,17 +50,6 @@ pub struct Layout {
     pub metadata: Arc<LayoutMetadata>,
 }
 
-#[test]
-fn thing() {
-    let layout =
-        serde_json::from_str::<Layout>(include_str!("../../static/layouts/english/sturdy.dof"))
-            .unwrap();
-
-    let s = serde_json::to_string_pretty(&layout).unwrap();
-
-    println!("{s}");
-}
-
 impl Layout {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
@@ -68,7 +57,7 @@ impl Layout {
 
         serde_json::from_str::<Dof>(&s)
             .map(Into::into)
-            .str_context(s)
+            .map_err(|e| OxeylyzerError::AnyhowError(e.into()))
     }
 
     #[cfg(target_arch = "wasm32")]

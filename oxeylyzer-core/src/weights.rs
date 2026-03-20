@@ -1,8 +1,9 @@
 use libdof::prelude::Finger;
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
+use serde_with::{OneOrMany, serde_as};
+use std::path::{Path, PathBuf};
+
+use crate::{OxeylyzerError, OxeylyzerResultExt, Result};
 
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct MaxFingerUse {
@@ -70,11 +71,11 @@ impl From<Weights> for AnalyzerWeights {
 
         let max_finger_use = AnalyzerMaxFingerUse {
             penalty: scale(weights.max_finger_use.penalty),
-            pinky: scale(weights.max_finger_use.pinky),
-            ring: scale(weights.max_finger_use.ring),
-            middle: scale(weights.max_finger_use.middle),
-            index: scale(weights.max_finger_use.index),
-            thumb: scale(weights.max_finger_use.thumb),
+            pinky: weights.max_finger_use.pinky as i64,
+            ring: weights.max_finger_use.ring as i64,
+            middle: weights.max_finger_use.middle as i64,
+            index: weights.max_finger_use.index as i64,
+            thumb: weights.max_finger_use.thumb as i64,
         };
 
         Self {
@@ -98,45 +99,30 @@ impl From<Weights> for AnalyzerWeights {
     }
 }
 
+#[serde_as]
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
-    pub language: String,
+    pub corpus: PathBuf,
+    #[serde_as(as = "OneOrMany<_>")]
+    pub layouts: Vec<PathBuf>,
+    pub corpus_configs: PathBuf,
     pub trigram_precision: usize,
     pub max_cores: usize,
     pub weights: Weights,
 }
 
 impl Config {
-    pub fn with_loaded_weights<P: AsRef<Path>>(path: P) -> Self {
-        let mut f = File::open(path).expect("The config.toml is missing! Help!");
+    pub fn with_loaded_weights<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let content = std::fs::read_to_string(&path).path_context(&path)?;
 
-        let mut buf = String::new();
-        f.read_to_string(&mut buf)
-            .expect("Failed to read config.toml for some reason");
-
-        let mut load = toml::from_str::<Self>(&buf)
-            .expect("Failed to parse config.toml. Values might be missing.");
-
-        load.weights.max_finger_use = MaxFingerUse {
-            penalty: load.weights.max_finger_use.penalty,
-            pinky: load.weights.max_finger_use.pinky / 100.0,
-            ring: load.weights.max_finger_use.ring / 100.0,
-            middle: load.weights.max_finger_use.middle / 100.0,
-            index: load.weights.max_finger_use.index / 100.0,
-            thumb: load.weights.max_finger_use.thumb / 100.0,
-        };
-
-        Self {
-            language: load.language,
-            trigram_precision: load.trigram_precision,
-            max_cores: load.max_cores,
-            weights: load.weights,
-        }
+        toml::from_str::<Self>(&content).path_context(path)
     }
 
     pub fn with_defaults() -> Self {
         Self {
-            language: "english".to_string(),
+            corpus: PathBuf::from("./static/language_data/english.json"),
+            layouts: vec![PathBuf::from("./static/layouts/english")],
+            corpus_configs: PathBuf::from("./static/corpus_configs/**/"),
             trigram_precision: 100000,
             max_cores: 128,
             weights: Weights {
@@ -180,6 +166,13 @@ impl Config {
 
     pub fn trigram_precision(&self) -> usize {
         self.trigram_precision
+    }
+
+    pub fn corpus_name(&self) -> Result<String> {
+        self.corpus
+            .file_stem()
+            .map(|o| o.display().to_string())
+            .ok_or_else(|| OxeylyzerError::InvalidCorpusPath(self.corpus.clone()))
     }
 }
 

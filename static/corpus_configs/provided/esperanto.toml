@@ -1,4 +1,6 @@
-inherits = ["default"]
+sources = [ "../../text/esperanto" ]
+
+inherits = [ "./default.toml" ]
 
 letters_to_lowercase = "ĝĉ"
 

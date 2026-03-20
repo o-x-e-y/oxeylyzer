@@ -1,1 +1,3 @@
-inherits = ["default", "bokmal"]
+sources = [ "../../text/danish" ]
+
+inherits = [ "./default.toml", "./bokmal.toml" ]

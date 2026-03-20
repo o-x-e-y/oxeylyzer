@@ -1,3 +1,5 @@
-inherits = ["default", "dutch"]
+sources = [ "../../text/dutch" ]
 
-keep = "@"
+inherits = [ "./default.toml", "./dutch.toml" ]
+
+repeat_key = true

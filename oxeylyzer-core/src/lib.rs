@@ -33,12 +33,16 @@ pub enum OxeylyzerError {
     ChunkerChunkError,
     #[error("Path must be either a directory or a file, '{}' is neither", .0.display())]
     NotAFile(PathBuf),
+    #[error("Cannot load data for '{}' as it does not exist.", .0.display())]
+    PathDoesNotExist(PathBuf),
     #[error("Specifying a name for the corpus is required")]
     MissingDataName,
     #[error("Failed to serialize data for language '{0}'")]
     CouldNotSerializeData(String),
+    #[error("Corpus path '{}' is invalid as it does not end in a (.json) file.", .0.display())]
+    InvalidCorpusPath(PathBuf),
 
-    #[error(transparent)]
+    #[error("{0:#}")]
     AnyhowError(#[from] anyhow::Error),
 
     #[cfg(target_arch = "wasm32")]

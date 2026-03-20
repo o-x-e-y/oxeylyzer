@@ -2,14 +2,17 @@
 
 mod data;
 mod languages;
+mod util;
 
 use std::hint::black_box;
 
 use diol::prelude::*;
-use oxeylyzer_core::{corpus_cleaner::CorpusCleaner, data::Data, generate::*, layout::PosPair};
+use oxeylyzer_core::{corpus_cleaner::CorpusCleaner, data::Data, layout::PosPair};
+
+use crate::util::oxeylyzer;
 
 fn main() -> diol::Result<()> {
-    let g = Oxeylyzer::new("english", "./static/").unwrap();
+    let g = oxeylyzer("english");
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
 
     let layout_names = saved.keys().take(5).cloned().collect::<Vec<_>>();
@@ -27,13 +30,14 @@ fn main() -> diol::Result<()> {
 
     let bench = Bench::from_args()?;
 
-    bench.register("score_swap", score_swap, swaps);
-    bench.register("score_layout", score_layout, layout_names.clone());
+    bench.register("score swap", score_swap, swaps);
+    bench.register("score layout", score_layout, layout_names.clone());
     bench.register("generate", generate, languages);
-    bench.register("best_swap_cached", best_swap_cached, layout_names.clone());
-    bench.register("best_swap", best_swap, layout_names);
-    bench.register("language_data", language_data, corpora);
-    bench.register("shuffle_pins", shuffle_pins, (0..40).step_by(5));
+    bench.register("best swap cached", best_swap_cached, layout_names.clone());
+    bench.register("best swap", best_swap, layout_names);
+    bench.register("language data", language_data, corpora);
+    bench.register("shuffle pins", shuffle_pins, (0..40).step_by(5));
+    bench.register("load data", load_data, corpora);
 
     bench.run()?;
 
@@ -41,7 +45,7 @@ fn main() -> diol::Result<()> {
 }
 
 fn score_swap(bencher: Bencher, swap: PosPair) {
-    let g = Oxeylyzer::new("english", "./static/").unwrap();
+    let g = oxeylyzer("english");
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
 
     let (_name, mut layout) = saved
@@ -56,7 +60,7 @@ fn score_swap(bencher: Bencher, swap: PosPair) {
 }
 
 fn score_layout(bencher: Bencher, name: String) {
-    let g = Oxeylyzer::new("english", "./static/").unwrap();
+    let g = oxeylyzer("english");
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
 
     let layout = black_box(g.fast_layout(&saved.get(&name).unwrap(), &[]));
@@ -67,7 +71,7 @@ fn score_layout(bencher: Bencher, name: String) {
 }
 
 fn best_swap(bencher: Bencher, name: String) {
-    let g = black_box(Oxeylyzer::new("english", "./static/").unwrap());
+    let g = black_box(oxeylyzer("english"));
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
     let mut layout = black_box(g.fast_layout(saved.get(&name).unwrap(), &[]));
     let possible_swaps = std::mem::take(&mut layout.possible_swaps);
@@ -78,7 +82,7 @@ fn best_swap(bencher: Bencher, name: String) {
 }
 
 fn best_swap_cached(bencher: Bencher, name: String) {
-    let g = black_box(Oxeylyzer::new("english", "./static/").unwrap());
+    let g = black_box(oxeylyzer("english"));
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
     let mut layout = black_box(g.fast_layout(saved.get(&name).unwrap(), &[]));
 
@@ -91,7 +95,7 @@ fn best_swap_cached(bencher: Bencher, name: String) {
 }
 
 fn generate(bencher: Bencher, language: &str) {
-    let g = black_box(Oxeylyzer::new(language, "./static/").unwrap());
+    let g = black_box(oxeylyzer(language));
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
     let basis = black_box(g.fast_layout(saved.get("sturdy").unwrap(), &[]));
 
@@ -122,4 +126,10 @@ fn shuffle_pins(bencher: Bencher, pin_count: usize) {
     bencher.bench(|| {
         oxeylyzer_core::utility::shuffle_pins::<i32>(&mut arr, &pins);
     })
+}
+
+fn load_data(bencher: Bencher, language: &str) {
+    let path = format!("./static/language_data/{language}.json");
+
+    bencher.bench(|| Data::load(&path).unwrap().name)
 }

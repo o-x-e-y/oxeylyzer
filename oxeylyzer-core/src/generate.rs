@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::Arc;
 
 use ahash::AHashMap as HashMap;
@@ -13,7 +12,6 @@ use crate::fast_layout::*;
 use crate::layout::{Layout, PosPair};
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::weights::{AnalyzerWeights, Config};
-use crate::{OxeylyzerResultExt, Result};
 
 pub type CharacterData = Box<[f64]>;
 pub type BigramData = Box<[f64]>;
@@ -141,26 +139,12 @@ pub struct Oxeylyzer {
 }
 
 impl Oxeylyzer {
-    pub fn new<P>(language: &str, base_path: P) -> Result<Self>
-    where
-        P: AsRef<Path>,
-    {
-        let config = Config::with_loaded_weights(concat!(
-            std::env!("CARGO_MANIFEST_DIR"),
-            "/../config.toml"
-        ));
-        let data_path = base_path
-            .as_ref()
-            .join("language_data")
-            .join(language)
-            .with_extension("json");
-
-        let data = Data::load(&data_path).path_context(data_path)?;
-
+    pub fn new(data: Data, config: Config) -> Self
+where {
         let data = AnalyzerData::new(data, &config.weights);
 
-        Ok(Self {
-            language: language.to_string(),
+        Self {
+            language: data.name().to_string(),
             per_char_trigrams: Self::per_char_trigrams(
                 data.gen_trigrams(),
                 data.len() as u8,
@@ -172,7 +156,7 @@ impl Oxeylyzer {
             data,
 
             weights: config.weights.into(),
-        })
+        }
     }
 
     pub fn fast_layout(&self, layout: &Layout, pins: &[usize]) -> FastLayout {
@@ -884,9 +868,15 @@ mod tests {
 
     use once_cell::sync::Lazy;
     use rayon::iter::ParallelIterator;
-    use std::{collections::HashSet, sync::atomic::Ordering};
+    use std::{collections::HashSet, path::PathBuf, sync::atomic::Ordering};
 
-    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| Oxeylyzer::new("english", "static").unwrap());
+    static GEN: Lazy<Oxeylyzer> = Lazy::new(|| {
+        let base = PathBuf::from(concat!(std::env!("CARGO_MANIFEST_DIR"), "/.."));
+        let config = Config::with_loaded_weights(base.join("config.toml")).unwrap();
+        let data = Data::load(base.join(&config.corpus)).unwrap();
+
+        Oxeylyzer::new(data, config)
+    });
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
         let dof_str = r#"

@@ -1,4 +1,6 @@
-language = "shai"
+corpus = "./static/language_data/shai.json"
+layouts = [ "./static/layouts/english/*.dof" ]       #these can include glob patterns
+corpus_configs = "./static/corpus_configs/**/*.toml" #these can include glob patterns
 trigram_precision = 1000
 max_cores = 32
 
