@@ -17,7 +17,7 @@ fn main() -> diol::Result<()> {
 
     let layout_names = saved.keys().take(5).cloned().collect::<Vec<_>>();
     let swaps = g
-        .fast_layout(&saved.values().next().unwrap(), &[])
+        .fast_layout(saved.values().next().unwrap(), &[])
         .possible_swaps
         .iter()
         .copied()
@@ -63,7 +63,7 @@ fn score_layout(bencher: Bencher, name: String) {
     let g = oxeylyzer("english");
     let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
 
-    let layout = black_box(g.fast_layout(&saved.get(&name).unwrap(), &[]));
+    let layout = black_box(g.fast_layout(saved.get(&name).unwrap(), &[]));
 
     bencher.bench(|| {
         g.score(&layout);
