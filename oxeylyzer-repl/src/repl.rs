@@ -786,6 +786,7 @@ impl Repl {
                     .inspect_err(|e| println!("Error loading layout at '{}': {e}", p.display()))
             })
             .flat_map(|h| h.into_iter())
+            .chain(std::mem::take(&mut self.saved))
             .collect();
 
         let generator = Oxeylyzer::new(data, config);
