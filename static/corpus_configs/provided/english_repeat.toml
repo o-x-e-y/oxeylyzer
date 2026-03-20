@@ -1,3 +1,5 @@
-inherits = ["default"]
+sources = [ "../../text/english" ]
 
-keep = "@"
+inherits = [ "./default.toml" ]
+
+repeat_key = true

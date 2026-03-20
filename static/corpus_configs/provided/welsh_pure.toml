@@ -1,4 +1,6 @@
-inherits = ["default"]
+sources = [ "../../text/welsh_pure" ]
+
+inherits = [ "./default.toml" ]
 
 [multiple]
 uppercase_versions = true

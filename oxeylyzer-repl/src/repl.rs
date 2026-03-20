@@ -1,21 +1,33 @@
+#[cfg(not(target_arch = "wasm32"))]
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use indexmap::IndexMap;
 use itertools::Itertools;
 use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 use oxeylyzer_core::data::Data;
-use oxeylyzer_core::{generate::LayoutGeneration, layout::*, rayon, weights::Config};
+use oxeylyzer_core::{OxeylyzerError, OxeylyzerResultExt};
+use oxeylyzer_core::{
+    fast_layout::*,
+    generate::Oxeylyzer,
+    layout::{Layout, PosPair},
+    rayon,
+    weights::Config,
+};
 use rustyline::DefaultEditor;
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
+use serde::Serialize;
+use serde_json::Serializer;
+use serde_json::ser::PrettyFormatter;
 use thiserror::Error;
 
 use crate::corpus_transposition::CorpusConfig;
-use crate::tui::*;
+use crate::display::*;
 
 const EXIT_MESSAGE: &str = "Exiting analyzer...";
+const BASE_PATH: &str = concat!(std::env!("CARGO_MANIFEST_DIR"), "/..");
 
 #[derive(Debug, Error)]
 pub enum ReplError {
@@ -33,21 +45,36 @@ pub enum ReplError {
     InvalidNgramLength(usize),
     #[error("Failed to parse lisp expression: {0}")]
     SexpError(String), // TODO: Make these errors fancy with line numbers and such
+    #[error(
+        "{} {}",
+        "Missing <language> flag. The language flag can only be omitted in combination with",
+        "`--all`.\nRun `load help` for more information about the command."
+    )]
+    MissingLanguageFlag,
+    #[error("Could not serialize layout:\n{}\n", .0.formatted_string())]
+    CouldNotSerializeLayout(Box<FastLayout>),
+    #[error("Could not find corpus config for corpus '{0}'")]
+    CouldNotFindCorpusConfig(String),
+    #[error(
+        "Shift key can only be a single char, found '{}' with length {}", .0, .0.chars().count()
+    )]
+    WrongShiftKeyLength(String),
+    #[error(
+        "{}\n{} '{}'",
+        "Failed to get corpus path: the process is ./path/corpus.json -> ./path/<new_lang>.json,",
+        "But this is not possible for",
+        .0.display()
+    )]
+    FailedToGetCorpusPath(PathBuf),
+    #[error(
+        "Could not get file name for corpus config file '{}'. Is it even a file?", .0.display()
+    )]
+    NoCorpusConfigFileName(PathBuf),
 
     #[error(transparent)]
     XflagsError(#[from] xflags::Error),
     #[error(transparent)]
-    IoError(#[from] std::io::Error),
-    // #[error("{0}")]
-    // OxeylyzerDataError(#[from] OxeylyzerError),
-    // #[error(transparent)]
-    // DofError(#[from] libdof::DofError),
-    // #[error(transparent)]
-    // TomlSerializeError(#[from] toml::ser::Error),
-    // #[error(transparent)]
-    // TomlDeserializeError(#[from] toml::de::Error),
-    #[error(transparent)]
-    AnyhowError(#[from] anyhow::Error),
+    OxeylyzerError(#[from] OxeylyzerError),
     #[error(transparent)]
     ReadlineError(#[from] rustyline::error::ReadlineError),
 }
@@ -62,53 +89,71 @@ pub enum ReplStatus {
 
 pub struct Repl {
     language: String,
-    layout_gen: LayoutGeneration,
-    saved: IndexMap<String, FastLayout>,
+    layout_gen: Oxeylyzer,
+    saved: HashMap<String, Layout>,
     temp_generated: Vec<FastLayout>,
-    temp_command_layouts: IndexMap<String, FastLayout>,
+    temp_command_layouts: HashMap<String, Layout>,
     thread_pool: rayon::ThreadPool,
+    corpus_configs: PathBuf,
+    language_data: PathBuf,
 }
 
 impl Repl {
-    pub fn new<P>(generator_base_path: P) -> Result<Self>
+    pub fn new<P>(config_name: P) -> Result<Self>
     where
         P: AsRef<Path>,
     {
-        let config = Config::with_loaded_weights("config.toml");
-        let language = config.language.clone();
+        let base = PathBuf::from(BASE_PATH);
+
+        let config = Config::with_loaded_weights(base.join(config_name))?;
+        let data = Data::load(base.join(&config.corpus)).unwrap();
+        let language = data.name.clone();
+
+        let corpus_configs = config.corpus_configs.clone();
+        let language_data = config
+            .corpus
+            .parent()
+            .unwrap_or_else(|| Path::new("./"))
+            .to_path_buf();
 
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(config.max_cores)
             .build()
             .unwrap();
 
-        let mut layout_gen = LayoutGeneration::new(
-            config.language.clone().as_str(),
-            generator_base_path.as_ref(),
-            Some(config),
-        )?;
+        let saved = config
+            .layouts
+            .iter()
+            .flat_map(|p| {
+                load_layouts(p)
+                    .inspect_err(|e| println!("Error loading layout at '{}': {e}", p.display()))
+            })
+            .flat_map(|h| h.into_iter())
+            .collect();
+
+        let layout_gen = Oxeylyzer::new(data, config);
 
         Ok(Self {
-            saved: layout_gen.load_layouts(
-                generator_base_path.as_ref().join("layouts"),
-                language.as_str(),
-            )?,
+            saved,
             language,
             layout_gen,
             temp_generated: Vec::new(),
-            temp_command_layouts: IndexMap::new(),
+            temp_command_layouts: HashMap::new(),
             thread_pool,
+            corpus_configs,
+            language_data,
         })
     }
 
     pub fn run() -> Result<()> {
-        let mut env = Self::new("static")?;
+        let mut env = Self::new("config.toml")?;
 
         let mut rl = DefaultEditor::new()?;
 
         rl.set_history_ignore_space(true);
 
-        if rl.load_history("./static/history.txt").is_err() {
+        let history_path = PathBuf::from(BASE_PATH).join("static/history.txt");
+        if rl.load_history(&history_path).is_err() {
             println!("Welcome to Oxeylyzer!");
         }
 
@@ -143,7 +188,7 @@ impl Repl {
             }
         }
 
-        if let Err(e) = rl.save_history("./static/history.txt") {
+        if let Err(e) = rl.save_history(&history_path) {
             rl.history().iter().for_each(|line| println!("{line}"));
 
             println!("Could not save history: {e}");
@@ -152,7 +197,7 @@ impl Repl {
         Ok(())
     }
 
-    pub fn insert_temp_layout(&mut self, line: &str, layout: FastLayout) {
+    pub fn insert_temp_layout(&mut self, line: &str, layout: Layout) {
         let hash = format!("{:x}", md5::compute(line));
         self.temp_command_layouts.insert(hash, layout);
     }
@@ -161,10 +206,11 @@ impl Repl {
         self.temp_command_layouts.clear();
     }
 
-    pub fn layout(&self, name: &str) -> Result<&FastLayout> {
+    pub fn layout(&self, name: &str) -> Result<FastLayout> {
         self.saved
             .get(&name.to_lowercase())
             .or_else(|| self.temp_command_layouts.get(name))
+            .map(|layout| self.layout_gen.fast_layout(layout, &[]))
             .ok_or(ReplError::UnknownLayout(name.into()))
     }
 
@@ -180,7 +226,7 @@ impl Repl {
     pub fn analyze(&self, name_or_nr: &str) -> Result<Option<FastLayout>> {
         let layout = match name_or_nr.parse::<usize>() {
             Ok(nr) => self.nth_layout(nr)?,
-            Err(_) => self.layout(name_or_nr)?,
+            Err(_) => &self.layout(name_or_nr)?,
         };
 
         println!("{}", name_or_nr);
@@ -190,10 +236,16 @@ impl Repl {
     }
 
     pub fn rank(&self) -> Option<FastLayout> {
-        for (name, layout) in self.saved.iter() {
-            let score = (layout.score as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
-            println!("{:10}{}", format!("{:.3}:", score), name);
-        }
+        self.saved
+            .iter()
+            .map(|(n, l)| {
+                let fast = self.layout_gen.fast_layout(l, &[]);
+                let s = self.layout_gen.score(&fast);
+                let score = (s as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
+                (n, score)
+            })
+            .sorted_by(|(_, a), (_, b)| a.total_cmp(b))
+            .for_each(|(n, s)| println!("{n: <15} {s:.3}"));
 
         None
     }
@@ -202,7 +254,7 @@ impl Repl {
         let m = HashSet::<char>::from_iter(pin_chars.chars());
 
         layout
-            .matrix
+            .keys
             .iter()
             .map(|u| self.layout_gen.mapping.get_c(*u))
             .enumerate()
@@ -210,19 +262,7 @@ impl Repl {
             .collect()
     }
 
-    pub fn generate(&mut self, count: Option<usize>) -> Result<Option<FastLayout>> {
-        let count = count.unwrap_or(2500);
-
-        println!("generating {} layouts...", count);
-        self.thread_pool.install(|| {
-            // TODO: figure out how to use ctrl+c to cancel during generation
-            self.temp_generated = generate_n(&self.layout_gen, count);
-        });
-
-        Ok(None)
-    }
-
-    pub fn improve(
+    pub fn generate(
         &mut self,
         name: &str,
         count: Option<usize>,
@@ -246,7 +286,7 @@ impl Repl {
     fn placeholder_name(&self, layout: &FastLayout) -> Result<String> {
         for i in 1..1000usize {
             let new_name = layout
-                .matrix
+                .keys
                 .iter()
                 .skip(10)
                 .take(4)
@@ -269,144 +309,57 @@ impl Repl {
             None => self.placeholder_name(&layout)?,
         };
 
+        layout.name = Some(new_name.clone());
         let name_path = new_name.replace(' ', "_").to_lowercase();
+        let path = PathBuf::from(BASE_PATH)
+            .join("static/layouts")
+            .join(&self.language)
+            .join(name_path)
+            .with_extension("dof");
 
         let mut f = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(format!("static/layouts/{}/{}.kb", self.language, name_path))?;
+            .open(&path)
+            .path_context(&path)?;
 
-        let layout_formatted = layout.formatted_string(&self.layout_gen.data.mapping);
-        println!("saved {}\n{}", new_name, layout_formatted);
-        f.write_all(layout_formatted.as_bytes()).unwrap();
+        let formatter = PrettyFormatter::with_indent(b"    ");
+        let mut ser = Serializer::with_formatter(vec![], formatter);
+        layout
+            .serialize(&mut ser)
+            .map_err(|_| ReplError::CouldNotSerializeLayout(Box::new(layout.clone())))?;
 
-        layout.score = self.layout_gen.score(&layout);
-        self.saved.insert(new_name, layout.clone());
-        self.saved
-            .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
+        f.write_all(ser.into_inner().as_slice())
+            .path_context(path)?;
+
+        println!("saved {}\n{}", new_name, layout.formatted_string());
+
+        self.saved.insert(new_name, layout.clone().into());
 
         Ok(Some(layout))
     }
 
     pub fn analyze_layout(&self, layout: &FastLayout) {
-        let fmt_score = |base| (base as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
-
         let stats = self.layout_gen.get_layout_stats(layout);
-        let score = if layout.score == 0 {
-            self.layout_gen.score(layout)
-        } else {
-            layout.score
-        };
 
-        let layout_str = heatmap_string(&self.layout_gen.data, layout);
+        let layout_str = heatmap_string(layout, &self.layout_gen.data);
 
-        println!("{}\n{}\nScore: {:.3}", layout_str, stats, fmt_score(score));
+        println!("{layout_str}\n");
+        print_layout_stats(&stats, &self.layout_gen.data);
     }
 
     pub fn compare(&self, name1: &str, name2: &str) -> Result<Option<FastLayout>> {
         let l1 = self.layout(name1)?;
         let l2 = self.layout(name2)?;
 
-        println!("\n{:31}{}", name1, name2);
-        for y in 0..3 {
-            for (n, layout) in [l1, l2].into_iter().enumerate() {
-                for x in 0..10 {
-                    print!(
-                        "{} ",
-                        heatmap_heat(&self.layout_gen.data, layout.char(x + 10 * y).unwrap())
-                    );
-                    if x == 4 {
-                        print!(" ");
-                    }
-                }
-                if n == 0 {
-                    print!("          ");
-                }
-            }
-            println!();
-        }
-        let s1 = self.layout_gen.get_layout_stats(l1);
-        let s2 = self.layout_gen.get_layout_stats(l2);
-        let ts1 = s1.trigram_stats;
-        let ts2 = s2.trigram_stats;
+        println!("\n{: <32}{}", name1, name2);
+        print_compare_layouts(&l1, &l2, &self.layout_gen.data);
 
-        let fmt_score = |base| (base as f64) / (self.layout_gen.data.char_total as f64) / 100.0;
+        let s1 = self.layout_gen.get_layout_stats(&l1);
+        let s2 = self.layout_gen.get_layout_stats(&l2);
 
-        println!(
-            concat!(
-                "Sfb:                {: <11} Sfb:                {:.3}%\n",
-                "Dsfb:               {: <11} Dsfb:               {:.3}%\n",
-                "Finger Speed:       {: <11} Finger Speed:       {:.3}\n",
-                "Stretches:          {: <11} Stretches:          {:.3}\n",
-                "Scissors:           {: <11} Scissors:           {:.3}%\n",
-                "Lsbs:               {: <11} Lsbs:               {:.3}%\n",
-                "Pinky Ring Bigrams: {: <11} Pinky Ring Bigrams: {:.3}%\n\n",
-                "Inrolls:            {: <11} Inrolls:            {:.2}%\n",
-                "Outrolls:           {: <11} Outrolls:           {:.2}%\n",
-                "Total Rolls:        {: <11} Total Rolls:        {:.2}%\n",
-                "Onehands:           {: <11} Onehands:           {:.3}%\n\n",
-                "Alternates:         {: <11} Alternates:         {:.2}%\n",
-                "Alternates Sfs:     {: <11} Alternates Sfs:     {:.2}%\n",
-                "Total Alternates:   {: <11} Total Alternates:   {:.2}%\n\n",
-                "Redirects:          {: <11} Redirects:          {:.3}%\n",
-                "Redirects Sfs:      {: <11} Redirects Sfs:      {:.3}%\n",
-                "Bad Redirects:      {: <11} Bad Redirects:      {:.3}%\n",
-                "Bad Redirects Sfs:  {: <11} Bad Redirects Sfs:  {:.3}%\n",
-                "Total Redirects:    {: <11} Total Redirects:    {:.3}%\n\n",
-                "Bad Sfbs:           {: <11} Bad Sfbs:           {:.3}%\n",
-                "Sft:                {: <11} Sft:                {:.3}%\n\n",
-                "Score:              {: <11} Score:              {:.3}\n"
-            ),
-            format!("{:.3}%", s1.sfb * 100.0),
-            s2.sfb * 100.0,
-            format!("{:.3}%", s1.dsfb * 100.0),
-            s2.dsfb * 100.0,
-            format!("{:.3}", s1.fspeed * 10.0),
-            s2.fspeed * 10.0,
-            format!("{:.3}", s1.stretches * 10.0),
-            s2.stretches * 10.0,
-            format!("{:.3}%", s1.scissors * 100.0),
-            s2.scissors * 100.0,
-            format!("{:.3}%", s1.lsbs * 100.0),
-            s2.lsbs * 100.0,
-            format!("{:.3}%", s1.pinky_ring * 100.0),
-            s2.pinky_ring * 100.0,
-            format!("{:.2}%", ts1.inrolls * 100.0),
-            ts2.inrolls * 100.0,
-            format!("{:.2}%", ts1.outrolls * 100.0),
-            ts2.outrolls * 100.0,
-            format!("{:.2}%", (ts1.inrolls + ts1.outrolls) * 100.0),
-            (ts2.inrolls + ts2.outrolls) * 100.0,
-            format!("{:.3}%", ts1.onehands * 100.0),
-            ts2.onehands * 100.0,
-            format!("{:.2}%", ts1.alternates * 100.0),
-            ts2.alternates * 100.0,
-            format!("{:.2}%", ts1.alternates_sfs * 100.0),
-            ts2.alternates_sfs * 100.0,
-            format!("{:.2}%", (ts1.alternates + ts1.alternates_sfs) * 100.0),
-            (ts2.alternates + ts2.alternates_sfs) * 100.0,
-            format!("{:.3}%", ts1.redirects * 100.0),
-            ts2.redirects * 100.0,
-            format!("{:.3}%", ts1.redirects_sfs * 100.0),
-            ts2.redirects_sfs * 100.0,
-            format!("{:.3}%", ts1.bad_redirects * 100.0),
-            ts2.bad_redirects * 100.0,
-            format!("{:.3}%", ts1.bad_redirects_sfs * 100.0),
-            ts2.bad_redirects_sfs * 100.0,
-            format!(
-                "{:.3}%",
-                (ts1.redirects + ts1.redirects_sfs + ts1.bad_redirects + ts1.bad_redirects_sfs)
-                    * 100.0
-            ),
-            (ts2.redirects + ts2.redirects_sfs + ts2.bad_redirects + ts2.bad_redirects_sfs) * 100.0,
-            format!("{:.3}%", ts1.bad_sfbs * 100.0),
-            ts2.bad_sfbs * 100.0,
-            format!("{:.3}%", ts1.sfts * 100.0),
-            ts2.sfts * 100.0,
-            format!("{:.3}", fmt_score(l1.score)),
-            fmt_score(l2.score)
-        );
+        print_compare_stats(&s1, &s2, &self.layout_gen.data);
 
         Ok(None)
     }
@@ -420,16 +373,16 @@ impl Repl {
             .flat_map(|swap| swap.chars().zip(swap.chars().skip(1)).collect::<Vec<_>>())
             .for_each(|(c1, c2)| {
                 let p1 = layout
-                    .matrix
+                    .keys
                     .iter()
                     .position(|&k| k == self.layout_gen.mapping.get_u(c1));
                 let p2 = layout
-                    .matrix
+                    .keys
                     .iter()
                     .position(|&k| k == self.layout_gen.mapping.get_u(c2));
 
                 match (p1, p2) {
-                    (Some(p1), Some(p2)) => assert!(layout.swap(p1, p2).is_some()),
+                    (Some(p1), Some(p2)) => assert!(layout.swap(p1 as u8, p2 as u8).is_some()),
                     (Some(_), None) => {
                         println!("Couldn't swap {c1}{c2} because {c1} is not on the layout.")
                     }
@@ -442,7 +395,6 @@ impl Repl {
                 }
             });
 
-        layout.score = self.layout_gen.score(&layout);
         self.analyze_layout(&layout);
 
         Ok(Some(layout.clone()))
@@ -459,11 +411,18 @@ impl Repl {
     fn bigram_stat(
         &self,
         pairs: &[BigramPair],
-        freq: impl Fn(&LayoutGeneration, &FastLayout, &BigramPair) -> i64,
+        freq: impl Fn(&Oxeylyzer, &FastLayout, &BigramPair) -> i64,
         layout: &FastLayout,
         count: usize,
+        is_percent: bool,
     ) {
-        let fmt_freq = |v| v as f64 / self.layout_gen.data.bigram_total as f64;
+        let fmt_freq = |v| {
+            let f = v as f64 / self.layout_gen.data.bigram_total as f64;
+            match is_percent {
+                true => format!("{:.3}%", f),
+                false => format!("{:.3}", f),
+            }
+        };
 
         pairs
             .iter()
@@ -485,42 +444,72 @@ impl Repl {
 
                 let fmt = format!("{bigram}/{bigram2}");
 
-                let freq = freq(&self.layout_gen, layout, pair);
+                let freq = match is_percent {
+                    true => 100 * freq(&self.layout_gen, layout, pair),
+                    false => freq(&self.layout_gen, layout, pair),
+                };
 
-                Some((fmt, fmt_freq(freq)))
+                Some((fmt, freq))
             })
-            .sorted_by(|(_, a), (_, b)| a.total_cmp(b))
+            .sorted_by(|(_, f1), (_, f2)| match is_percent {
+                true => f2.cmp(f1),
+                false => f1.cmp(f2),
+            })
             .take(count)
-            .for_each(|(bigram, freq)| println!("{bigram}: {:.3}", freq));
+            .for_each(|(bigram, freq)| println!("{bigram}: {}", fmt_freq(freq)));
+    }
+
+    fn percent_stat(&self, layout: &FastLayout, count: usize, indices: &[PosPair]) {
+        let pairs = indices
+            .iter()
+            .map(|p| BigramPair { pair: *p, dist: 1 })
+            .collect::<Vec<_>>();
+
+        self.bigram_stat(&pairs, Oxeylyzer::pair_sfb, layout, count, true);
     }
 
     pub fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
         let layout = self.layout(name)?;
-        let count = top_n.unwrap_or(10);
+        let count = top_n.unwrap_or(10).min(layout.fspeed_indices.all.len());
 
         println!("top {} sfbs for {name}:", count);
 
         self.bigram_stat(
             &layout.fspeed_indices.all,
-            LayoutGeneration::pair_sfb,
-            layout,
+            Oxeylyzer::pair_sfb,
+            &layout,
             count,
+            true,
         );
+
+        Ok(None)
+    }
+
+    pub fn pinky_ring(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
+        let layout = self.layout(name)?;
+        let count = top_n
+            .unwrap_or(10)
+            .min(layout.pinky_ring_indices.pairs.len());
+
+        println!("top {} pinky-ring bigrams for {name}:", count);
+
+        self.percent_stat(&layout, count, &layout.pinky_ring_indices.pairs);
 
         Ok(None)
     }
 
     pub fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
         let layout = self.layout(name)?;
-        let count = top_n.unwrap_or(10);
+        let count = top_n.unwrap_or(10).min(layout.fspeed_indices.all.len());
 
         println!("top {} fspeed pairs for {name}:", count);
 
         self.bigram_stat(
             &layout.fspeed_indices.all,
-            LayoutGeneration::pair_fspeed,
-            layout,
+            Oxeylyzer::pair_fspeed,
+            &layout,
             count,
+            false,
         );
 
         Ok(None)
@@ -528,16 +517,41 @@ impl Repl {
 
     pub fn stretches(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
         let layout = self.layout(name)?;
-        let count = top_n.unwrap_or(10);
+        let count = top_n
+            .unwrap_or(10)
+            .min(layout.stretch_indices.all_pairs.len());
 
         println!("top {} stretch pairs for {name}:", count);
 
         self.bigram_stat(
             &layout.stretch_indices.all_pairs,
-            LayoutGeneration::pair_stretch,
-            layout,
+            Oxeylyzer::pair_stretch,
+            &layout,
             count,
+            false,
         );
+
+        Ok(None)
+    }
+
+    pub fn scissors(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
+        let layout = self.layout(name)?;
+        let count = top_n.unwrap_or(10).min(layout.scissor_indices.pairs.len());
+
+        println!("top {} scissor pairs for {name}:", count);
+
+        self.percent_stat(&layout, count, &layout.scissor_indices.pairs);
+
+        Ok(None)
+    }
+
+    pub fn lsbs(&self, name: &str, top_n: Option<usize>) -> Result<Option<FastLayout>> {
+        let layout = self.layout(name)?;
+        let count = top_n.unwrap_or(10).min(layout.lsb_indices.pairs.len());
+
+        println!("top {} lsbs for {name}:", count);
+
+        self.percent_stat(&layout, count, &layout.lsb_indices.pairs);
 
         Ok(None)
     }
@@ -565,25 +579,26 @@ impl Repl {
     }
 
     pub fn include<P: AsRef<Path>>(&mut self, languages: &[P]) -> Result<Option<FastLayout>> {
+        let layouts_base_path = PathBuf::from(BASE_PATH).join("static/layouts");
+
         for language in languages {
             let language = language.as_ref().display().to_string();
 
-            self.layout_gen
-                .load_layouts("static/layouts", &language)?
+            load_layouts(layouts_base_path.join(language))?
                 .into_iter()
-                .for_each(|(name, layout)| {
-                    self.saved.insert(name, layout);
+                .for_each(|(name, l)| {
+                    self.saved.insert(name, l);
                 });
         }
-
-        self.saved
-            .sort_by(|_, a, _, b| a.score.partial_cmp(&b.score).unwrap());
 
         Ok(None)
     }
 
     pub fn languages(&self) -> Result<Option<FastLayout>> {
-        std::fs::read_dir("static/language_data")?
+        let path = PathBuf::from(BASE_PATH).join("static/language_data");
+
+        std::fs::read_dir(&path)
+            .path_context(path)?
             .flatten()
             .for_each(|p| {
                 let name = p
@@ -600,11 +615,15 @@ impl Repl {
         Ok(None)
     }
 
-    fn load_one_with_config(&mut self, language: &str, cleaner: CorpusCleaner) -> Result<()> {
-        let base_path = PathBuf::from("./static/text");
-
-        match Data::from_path(base_path.join(language), language, &cleaner) {
-            Ok(data) => match data.save("./static/language_data") {
+    fn load_one_with_cleaner<P: AsRef<Path>>(
+        &mut self,
+        language: &str,
+        cleaner: CorpusCleaner,
+        corpus_paths: &[P],
+    ) -> Result<()> {
+        let language_data_path = PathBuf::from(BASE_PATH).join(&self.language_data);
+        match Data::from_paths(corpus_paths, language, &cleaner) {
+            Ok(data) => match data.save(language_data_path) {
                 Ok(_) => println!("Saved data for {language}!"),
                 Err(e) => println!("Failed to save data for {language}: {e}"),
             },
@@ -614,41 +633,89 @@ impl Repl {
         Ok(())
     }
 
-    pub fn load<P: AsRef<Path>>(
-        &mut self,
-        language: P,
-        all: bool,
-        raw: bool,
-    ) -> Result<Option<FastLayout>> {
-        let language = language.as_ref().display().to_string();
+    pub fn load(&mut self, language: String, all: bool, raw: bool) -> Result<Option<FastLayout>> {
+        let corpus_configs = PathBuf::from(BASE_PATH).join(&self.corpus_configs);
 
         match (all, raw) {
             (true, true) => {
-                for (language, _) in CorpusConfig::all("./") {
-                    println!("loading raw data for language: {language}...");
-                    let cleaner = CorpusCleaner::raw();
+                glob::glob(&corpus_configs.to_string_lossy())
+                    .path_context(&corpus_configs)?
+                    .flat_map(|p| p.inspect_err(|e| eprintln!("{e}")))
+                    .map(|path| {
+                        let config = CorpusConfig::load(&path)?;
+                        let sources = config.sources().to_vec();
+                        let cleaner = CorpusCleaner::raw();
+                        let language = path
+                            .file_stem()
+                            .ok_or_else(|| ReplError::NoCorpusConfigFileName(path.clone()))?
+                            .to_string_lossy();
 
-                    self.load_one_with_config(&language, cleaner)?;
-                }
+                        println!("loading raw data for language: {language}...");
+
+                        self.load_one_with_cleaner(&language, cleaner, &sources)
+                    })
+                    .for_each(|res| {
+                        let _ = res.inspect_err(|e| eprintln!("{e}"));
+                    });
             }
             (true, false) => {
-                for (language, config) in CorpusConfig::all("./") {
-                    println!("loading data for language: {language}...");
+                glob::glob(&corpus_configs.to_string_lossy())
+                    .path_context(&corpus_configs)?
+                    .flat_map(|p| p.inspect_err(|e| eprintln!("{e}")))
+                    .map(|path| {
+                        let config = CorpusConfig::load(&path)?;
+                        let sources = config.sources().to_vec();
+                        let cleaner = config.into();
+                        let language = path
+                            .file_stem()
+                            .ok_or_else(|| ReplError::NoCorpusConfigFileName(path.clone()))?
+                            .to_string_lossy();
 
-                    self.load_one_with_config(&language, config.into())?;
-                }
+                        println!("loading data for language: {language}...");
+
+                        self.load_one_with_cleaner(&language, cleaner, &sources)
+                    })
+                    .for_each(|res| {
+                        let _ = res.inspect_err(|e| eprintln!("{e}"));
+                    });
             }
             (false, true) => {
-                println!("loading raw data for language: {language}...");
+                let config_path = glob::glob(&corpus_configs.to_string_lossy())
+                    .path_context(&corpus_configs)?
+                    .flatten()
+                    .find(|path| {
+                        path.file_stem()
+                            .map(|n| n == language.as_str())
+                            .unwrap_or(false)
+                    })
+                    .ok_or_else(|| ReplError::CouldNotFindCorpusConfig(language.clone()))?;
+
+                let config = CorpusConfig::load(config_path)?;
+                let sources = config.sources();
                 let cleaner = CorpusCleaner::raw();
 
-                self.load_one_with_config(&language, cleaner)?;
+                println!("loading raw data for language: {language}...");
+
+                self.load_one_with_cleaner(&language, cleaner, sources)?;
             }
             (false, false) => {
-                println!("loading data for {language}...");
-                let cleaner = CorpusConfig::new_translator(&language, None);
+                let config_path = glob::glob(&corpus_configs.to_string_lossy())
+                    .path_context(&corpus_configs)?
+                    .flatten()
+                    .find(|path| {
+                        path.file_stem()
+                            .map(|n| n == language.as_str())
+                            .unwrap_or(false)
+                    })
+                    .ok_or_else(|| ReplError::CouldNotFindCorpusConfig(language.clone()))?;
 
-                self.load_one_with_config(&language, cleaner)?;
+                let config = CorpusConfig::load(config_path)?;
+                let sources = config.sources().to_vec();
+                let cleaner = CorpusCleaner::from(config);
+
+                println!("loading data for {language}...");
+
+                self.load_one_with_cleaner(&language, cleaner, &sources)?;
                 self.language(Some(language))?;
             }
         };
@@ -713,14 +780,42 @@ impl Repl {
     }
 
     fn reset_with_language(&mut self, language: &str) -> Result<()> {
-        let config = Config::with_loaded_weights("config.toml");
+        let config = Config::with_loaded_weights(PathBuf::from(BASE_PATH).join("config.toml"))?;
+        let corpus_configs = config.corpus_configs.clone();
+        let language_data = config
+            .corpus
+            .parent()
+            .ok_or_else(|| ReplError::FailedToGetCorpusPath(config.corpus.clone()))?
+            .to_path_buf();
+        let corpus_path = PathBuf::from(BASE_PATH)
+            .join(&language_data)
+            .join(language)
+            .with_extension("json");
 
-        let mut generator = LayoutGeneration::new(language, "static", Some(config))?;
-        let saved = generator.load_layouts("static/layouts", language)?;
+        let data = Data::load(corpus_path)?;
 
+        let saved = config
+            .layouts
+            .iter()
+            .flat_map(|p| {
+                load_layouts(p)
+                    .inspect_err(|e| println!("Error loading layout at '{}': {e}", p.display()))
+            })
+            .flat_map(|h| h.into_iter())
+            .chain(std::mem::take(&mut self.saved))
+            .collect();
+
+        let generator = Oxeylyzer::new(data, config);
+
+        self.language_data = language_data;
+        self.corpus_configs = corpus_configs;
         self.layout_gen = generator;
         self.language = language.to_string();
         self.saved = saved;
+        self.temp_generated.iter_mut().for_each(|l| {
+            let layout = Layout::from(l.clone());
+            *l = self.layout_gen.fast_layout(&layout, &[]);
+        });
 
         Ok(())
     }
@@ -729,5 +824,66 @@ impl Repl {
         self.reset_with_language(&self.language.clone())?;
 
         Ok(None)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_layouts<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Layout>> {
+    let base = PathBuf::from(BASE_PATH).join(&path);
+    let pattern = match base.is_dir() {
+        true => base.join("*.dof"),
+        false => base,
+    };
+    let pattern_str = pattern.to_string_lossy();
+
+    let map = glob::glob(&pattern_str)
+        .str_context(&pattern_str)?
+        .flatten()
+        .flat_map(|p| {
+            Layout::load(&p)
+                .inspect_err(|e| println!("Error loading layout from '{}': {e}", p.display()))
+        })
+        .map(|l| (l.name.to_lowercase(), l))
+        .collect();
+
+    Ok(map)
+}
+
+#[cfg(test)]
+mod tests {
+    use once_cell::sync::Lazy;
+
+    use super::*;
+
+    static REPL: Lazy<Repl> = Lazy::new(|| Repl::new("config.toml").unwrap());
+
+    static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
+        let dof_str = r#"
+            {
+                "name": "Qwerty",
+                "board": "ansi",
+                "layers": {
+                    "main": [
+                        "q w e r t  y u i o p",
+                        "a s d f g  h j k l ;",
+                        "z x c v b  n m , . /"
+                    ]
+                },
+                "fingering": "traditional"
+            }
+        "#;
+
+        let layout = serde_json::from_str::<Layout>(dof_str).unwrap();
+
+        REPL.layout_gen.fast_layout(&layout, &[])
+    });
+
+    #[test]
+    fn pins() {
+        let pins = REPL.pin_positions(&QWERTY, "qwerty".to_string());
+        assert_eq!(pins, vec![0, 1, 2, 3, 4, 5]);
+
+        let pins = REPL.pin_positions(&QWERTY, "wasd".to_string());
+        assert_eq!(pins, vec![1, 10, 11, 12]);
     }
 }

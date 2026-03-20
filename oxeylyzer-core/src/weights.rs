@@ -1,8 +1,9 @@
 use libdof::prelude::Finger;
 use serde::{Deserialize, Serialize};
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
+use serde_with::{OneOrMany, serde_as};
+use std::path::{Path, PathBuf};
+
+use crate::{OxeylyzerError, OxeylyzerResultExt, Result};
 
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct MaxFingerUse {
@@ -11,6 +12,7 @@ pub struct MaxFingerUse {
     pub ring: f64,
     pub middle: f64,
     pub index: f64,
+    pub thumb: f64,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -18,9 +20,7 @@ pub struct Weights {
     pub lateral_penalty: f64,
     pub sfbs: f64,
     pub sfs: f64,
-    pub scissors: f64,
     pub stretches: f64,
-    pub lsbs: f64,
     pub pinky_ring_bigrams: f64,
     pub inrolls: f64,
     pub outrolls: f64,
@@ -42,6 +42,7 @@ pub struct AnalyzerMaxFingerUse {
     pub ring: i64,
     pub middle: i64,
     pub index: i64,
+    pub thumb: i64,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
@@ -49,9 +50,7 @@ pub struct AnalyzerWeights {
     pub lateral_penalty: i64,
     pub sfbs: i64,
     pub sfs: i64,
-    pub scissors: i64,
     pub stretches: i64,
-    pub lsbs: i64,
     pub pinky_ring_bigrams: i64,
     pub inrolls: i64,
     pub outrolls: i64,
@@ -71,21 +70,19 @@ impl From<Weights> for AnalyzerWeights {
         let scale = |float| (float * 100.0) as i64;
 
         let max_finger_use = AnalyzerMaxFingerUse {
-            // TODO: this is probably wrong
             penalty: scale(weights.max_finger_use.penalty),
-            pinky: scale(weights.max_finger_use.pinky),
-            ring: scale(weights.max_finger_use.ring),
-            middle: scale(weights.max_finger_use.middle),
-            index: scale(weights.max_finger_use.index),
+            pinky: weights.max_finger_use.pinky as i64,
+            ring: weights.max_finger_use.ring as i64,
+            middle: weights.max_finger_use.middle as i64,
+            index: weights.max_finger_use.index as i64,
+            thumb: weights.max_finger_use.thumb as i64,
         };
 
         Self {
             lateral_penalty: scale(weights.lateral_penalty),
             sfbs: scale(weights.sfbs),
             sfs: scale(weights.sfs),
-            scissors: scale(weights.scissors),
             stretches: scale(weights.stretches),
-            lsbs: scale(weights.lsbs),
             pinky_ring_bigrams: scale(weights.pinky_ring_bigrams),
             inrolls: scale(weights.inrolls),
             outrolls: scale(weights.outrolls),
@@ -102,54 +99,37 @@ impl From<Weights> for AnalyzerWeights {
     }
 }
 
+#[serde_as]
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
-    pub language: String,
+    pub corpus: PathBuf,
+    #[serde_as(as = "OneOrMany<_>")]
+    pub layouts: Vec<PathBuf>,
+    pub corpus_configs: PathBuf,
     pub trigram_precision: usize,
     pub max_cores: usize,
     pub weights: Weights,
 }
 
 impl Config {
-    pub fn with_loaded_weights<P: AsRef<Path>>(path: P) -> Self {
-        let mut f = File::open(path).expect("The config.toml is missing! Help!");
+    pub fn with_loaded_weights<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let content = std::fs::read_to_string(&path).path_context(&path)?;
 
-        let mut buf = String::new();
-        f.read_to_string(&mut buf)
-            .expect("Failed to read config.toml for some reason");
-
-        let mut load = toml::from_str::<Self>(&buf)
-            .expect("Failed to parse config.toml. Values might be missing.");
-
-        // TODO: figure out how this should even work
-        load.weights.max_finger_use = MaxFingerUse {
-            penalty: load.weights.max_finger_use.penalty,
-            pinky: load.weights.max_finger_use.pinky / 100.0,
-            ring: load.weights.max_finger_use.ring / 100.0,
-            middle: load.weights.max_finger_use.middle / 100.0,
-            index: load.weights.max_finger_use.index / 100.0,
-        };
-
-        Self {
-            language: load.language,
-            trigram_precision: load.trigram_precision,
-            max_cores: load.max_cores,
-            weights: load.weights,
-        }
+        toml::from_str::<Self>(&content).path_context(path)
     }
 
     pub fn with_defaults() -> Self {
         Self {
-            language: "english".to_string(),
+            corpus: PathBuf::from("./static/language_data/english.json"),
+            layouts: vec![PathBuf::from("./static/layouts/english")],
+            corpus_configs: PathBuf::from("./static/corpus_configs/**/"),
             trigram_precision: 100000,
             max_cores: 128,
             weights: Weights {
                 lateral_penalty: 1.3,
                 sfbs: -8.0,
                 sfs: -1.0,
-                scissors: -5.0,
                 stretches: -0.3,
-                lsbs: -2.0,
                 pinky_ring_bigrams: -0.0,
                 inrolls: 1.6,
                 outrolls: 1.3,
@@ -178,6 +158,7 @@ impl Config {
                     ring: 16.0,
                     middle: 19.5,
                     index: 18.0,
+                    thumb: 22.0,
                 },
             },
         }
@@ -185,6 +166,13 @@ impl Config {
 
     pub fn trigram_precision(&self) -> usize {
         self.trigram_precision
+    }
+
+    pub fn corpus_name(&self) -> Result<String> {
+        self.corpus
+            .file_stem()
+            .map(|o| o.display().to_string())
+            .ok_or_else(|| OxeylyzerError::InvalidCorpusPath(self.corpus.clone()))
     }
 }
 

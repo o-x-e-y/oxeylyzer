@@ -1,25 +1,24 @@
-language = "shai"
+corpus = "./static/language_data/shai.json"
+layouts = [ "./static/layouts/english/*.dof" ]       #these can include glob patterns
+corpus_configs = "./static/corpus_configs/**/*.toml" #these can include glob patterns
 trigram_precision = 1000
-keyboard_type = "ansi"
 max_cores = 32
 
 [weights]
-sfbs = -8.0
+sfbs = -7.0
 sfs = -1.0
-lateral_penalty = -1.0
-scissors = -2.5
-lsbs = -2.0
+lateral_penalty = 1.0
 stretches = -0.3
-pinky_ring_bigrams = 0.2
+pinky_ring_bigrams = -0.2
 inrolls = 2.5
 outrolls = 2.4
 onehands = 0.9
 alternates = 0.4
 alternates_sfs = 0.1
-redirects = -5.4
-redirects_sfs = -7.2
-bad_redirects = -6.9
-bad_redirects_sfs = -9.5
+redirects = -3.4
+redirects_sfs = -4.2
+bad_redirects = -4.9
+bad_redirects_sfs = -5.5
 
 [weights.finger_weights]
 lp = 1.4
@@ -39,3 +38,4 @@ pinky = 9.0
 ring = 14.0
 middle = 20.0
 index = 20.0
+thumb = 22.0

@@ -1,3 +1,5 @@
-inherits = ["default_punct"]
+sources = [ "../../text/hebrew" ]
+
+inherits = [ "./default_punct.toml" ]
 
 keep = "יוהלרתבמאשנעםדחכקפסגצטןזךףץ"

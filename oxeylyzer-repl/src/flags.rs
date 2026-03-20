@@ -21,12 +21,9 @@ xflags::xflags! {
         }
         /// Rank all layouts for the currently specified language. A higher score is better.
         cmd rank list {}
-        /// Generate a number of layouts and displays the best 10. Note: layouts may not be correct after changing language.
-        cmd generate gen g {
-            optional count: usize
-        }
-        /// Improves the the given layout by pinning keys specified in the `config.toml` and reordering everything else.
-        cmd improve i optimize {
+        /// Improves the the given layout. Optionally, you can provide a list of pinned characters
+        /// to keep in place during optimization.
+        cmd generate gen g improve i optimize {
             required name: String
             optional count: usize
             /// Sets pinned characters on the layout to optimize, `-p abc` pins `abc`.
@@ -47,6 +44,22 @@ xflags::xflags! {
             required name: String
             optional -c, --count count: usize
         }
+        /// Shows the top n scissors on a layout. 10 by default.
+        cmd scissors {
+            required name: String
+            optional -c, --count count: usize
+        }
+        /// Shows the top n lsbs on a layout. 10 by default.
+        cmd lsbs {
+            required name: String
+            optional -c, --count count: usize
+        }
+        /// Shows the top n pinky-ring bigrams on a layout. 10 by default.
+        cmd pinkyring pinky-ring pr {
+            required name: String
+            optional -c, --count count: usize
+        }
+        /// Shows the top n stretches on a layout. 10 by default.
         cmd stretches {
             required name: String
             optional -c, --count count: usize
@@ -63,9 +76,14 @@ xflags::xflags! {
         cmd languages langs {}
         /// Loads a corpus for a certain language.
         cmd load {
-            required language: PathBuf
-            optional -a, --all
+            /// The name of the corpus. This value will be used when looking for a corpus config,
+            /// which is the configuration used to clean the corpus.
+            required language: String
+            /// If set, processes the corpus as-is without cleaning it.
             optional -r, --raw
+            /// If set, processes all corpora found in ./static/text where the folder name is the
+            /// language name.
+            optional -a, --all
         }
         /// Gives information about a certain ngram. for 2 letter ones, skipgram info will be provided as well.
         cmd ngram n occ freq {

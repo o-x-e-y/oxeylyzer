@@ -1,6 +1,6 @@
-inherits = ["default"]
+sources = [ "../../text/german" ]
 
-# letters_to_lowercase = "äöüß"
+inherits = [ "./default.toml" ]
 
 [multiple]
 uppercase_versions = true

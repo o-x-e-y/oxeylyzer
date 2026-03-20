@@ -15,7 +15,7 @@ impl std::ops::Add for ReplStatus {
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Self::Quit, _) | (_, Self::Quit) => Self::Quit,
-            _ => Self::Continue
+            _ => Self::Continue,
         }
     }
 }
@@ -36,9 +36,12 @@ impl Repl {
                         }
                     })
                     .collect::<Result<(Vec<_>, Vec<_>)>>()?;
-                
+
                 let subcommand = command_parts.join(" ");
-                let repl_status = statuses.into_iter().reduce(|acc, e| acc + e).unwrap_or(ReplStatus::Continue);
+                let repl_status = statuses
+                    .into_iter()
+                    .reduce(|acc, e| acc + e)
+                    .unwrap_or(ReplStatus::Continue);
 
                 println!("subcommand: {subcommand}");
                 let repl_status = repl_status + self.parse_flags(&subcommand)?;
@@ -78,12 +81,14 @@ impl Repl {
             Compare(c) => self.compare(&c.name1, &c.name2)?,
             Swap(s) => self.swap(&s.name, &s.swaps)?,
             Rank(_) => self.rank(),
-            Generate(g) => self.generate(g.count)?,
-            Improve(i) => self.improve(&i.name, i.count, i.pins)?,
+            Generate(i) => self.generate(&i.name, i.count, i.pins)?,
             Save(s) => self.save(s.n, s.name)?,
             Sfbs(s) => self.sfbs(&s.name, s.count)?,
             Fspeed(s) => self.fspeed(&s.name, s.count)?,
             Stretches(s) => self.stretches(&s.name, s.count)?,
+            Scissors(s) => self.scissors(&s.name, s.count)?,
+            Lsbs(s) => self.lsbs(&s.name, s.count)?,
+            Pinkyring(s) => self.pinky_ring(&s.name, s.count)?,
             Language(l) => self.language(l.language)?,
             Include(l) => self.include(&l.languages)?,
             Languages(_) => self.languages()?,
@@ -94,7 +99,7 @@ impl Repl {
         };
 
         if let Some(layout) = layout {
-            self.insert_temp_layout(line, layout);
+            self.insert_temp_layout(line, layout.into());
         }
 
         Ok(ReplStatus::Continue)
