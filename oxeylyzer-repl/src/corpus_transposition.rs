@@ -6,6 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use itertools::Itertools;
 use oxeylyzer_core::{OxeylyzerResultExt, SHIFT_CHAR, corpus_cleaner::CorpusCleaner};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, serde_conv};
@@ -114,6 +115,7 @@ impl std::default::Default for ShiftKey {
 #[serde(default)]
 pub struct CorpusConfig {
     inherits: Vec<PathBuf>,
+    sources: Vec<PathBuf>,
     #[serde(default)]
     #[serde_as(as = "StringAsCharArray")]
     letters_to_lowercase: Vec<char>,
@@ -179,6 +181,21 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
 
     fn add(self, rhs: CorpusConfig) -> Self::Output {
         let inherits = self.inherits.into_iter().chain(rhs.inherits).collect();
+        let sources = self
+            .sources
+            .into_iter()
+            .chain(rhs.sources)
+            .flat_map(|s| {
+                let canonical = s
+                    .canonicalize()
+                    .path_context(&s)
+                    .inspect_err(|e| eprintln!("{e}"))
+                    .ok()?;
+                Some((s, canonical))
+            })
+            .unique_by(|(_, canonical)| canonical.clone())
+            .map(|(s, _)| s)
+            .collect();
         let multiple = self.multiple.into_iter().chain(rhs.multiple).collect();
         let letters_to_lowercase = self
             .letters_to_lowercase
@@ -198,6 +215,7 @@ impl std::ops::Add<CorpusConfig> for CorpusConfig {
 
         CorpusConfig {
             inherits,
+            sources,
             letters_to_lowercase,
             punct_unshifted,
             keep,
@@ -265,6 +283,26 @@ mod tests {
         assert_eq!(
             config.inherits,
             vec![PathBuf::from("dofsmie"), PathBuf::from("yeah")]
+        );
+    }
+
+    #[test]
+    fn sources() {
+        let config1 = r#"sources = ["../static"]"#;
+        let config2 = r#"sources = ["../target", "./../static"]"#;
+
+        let config1 = toml::from_str::<CorpusConfig>(config1).unwrap();
+        let config2 = toml::from_str::<CorpusConfig>(config2).unwrap();
+        assert_eq!(config1.sources, vec!["../static".to_string()]);
+        assert_eq!(
+            config2.sources,
+            vec!["../target".to_string(), "./../static".to_string()]
+        );
+
+        let config = config1 + config2;
+        assert_eq!(
+            config.sources,
+            vec![PathBuf::from("../static"), PathBuf::from("../target")]
         );
     }
 
