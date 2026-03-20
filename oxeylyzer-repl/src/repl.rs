@@ -652,7 +652,6 @@ impl Repl {
 
                     let cleaner = glob::glob(&self.corpus_configs.display().to_string())
                         .path_context(&self.corpus_configs)?
-                        .into_iter()
                         .flatten()
                         .find_map(|p| {
                             let path = p.join(&language).with_extension("toml");
@@ -678,9 +677,8 @@ impl Repl {
             }
             (false, false) => {
                 let config_path = PathBuf::from(BASE_PATH).join(&self.corpus_configs);
-                let cleaner = glob::glob(dbg!(&config_path.display().to_string()))
+                let cleaner = glob::glob(&config_path.display().to_string())
                     .path_context(&self.corpus_configs)?
-                    .into_iter()
                     .flatten()
                     .find_map(|p| {
                         let path = dbg!(p.join(&language).with_extension("toml"));
