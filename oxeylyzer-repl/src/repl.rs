@@ -289,7 +289,8 @@ impl Repl {
 
         layout.name = Some(new_name.clone());
         let name_path = new_name.replace(' ', "_").to_lowercase();
-        let path = PathBuf::from("static/layouts")
+        let path = PathBuf::from(BASE_PATH)
+            .join("static/layouts")
             .join(&self.language)
             .join(name_path)
             .with_extension("dof");
@@ -556,7 +557,7 @@ impl Repl {
     }
 
     pub fn include<P: AsRef<Path>>(&mut self, languages: &[P]) -> Result<()> {
-        let layouts_base_path = PathBuf::from("./static/layouts");
+        let layouts_base_path = PathBuf::from(BASE_PATH).join("static/layouts");
 
         for language in languages {
             let language = language.as_ref().display().to_string();
@@ -572,8 +573,9 @@ impl Repl {
     }
 
     pub fn languages(&self) -> Result<()> {
-        let path = "static/language_data";
-        std::fs::read_dir(path)
+        let path = PathBuf::from(BASE_PATH).join("static/language_data");
+
+        std::fs::read_dir(&path)
             .path_context(path)?
             .flatten()
             .for_each(|p| {
