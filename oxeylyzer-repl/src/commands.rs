@@ -115,16 +115,26 @@ impl Repl {
         match (response, depth) {
             (RR::NoLayout { printable }, 0) => println!("{printable}"),
             (RR::SingleLayout { layout, printable }, 0) => {
-                self.insert_temp_layout(command, *layout);
+                let mut layout = *layout;
+                layout.name = original.to_string();
+                self.insert_temp_layout(command, layout);
                 println!("{printable}");
             }
             (RR::MultipleLayouts { layouts, printable }, 0) => {
-                self.insert_temp_layout(command, layouts[0].clone());
+                let mut layout = layouts[0].clone();
+                layout.name = format!("{original} (idx 0)");
+                self.insert_temp_layout(command, layout);
                 println!("{printable}");
             }
-            (RR::SingleLayout { layout, .. }, _) => self.insert_temp_layout(command, *layout),
+            (RR::SingleLayout { layout, .. }, _) => {
+                let mut layout = *layout;
+                layout.name = original.to_string();
+                self.insert_temp_layout(command, layout)
+            }
             (RR::MultipleLayouts { layouts, .. }, _) => {
-                self.insert_temp_layout(command, layouts[0].clone())
+                let mut layout = layouts[0].clone();
+                layout.name = format!("{original} (idx 0)");
+                self.insert_temp_layout(command, layout)
             }
             _ => {}
         }

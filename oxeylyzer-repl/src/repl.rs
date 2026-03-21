@@ -54,7 +54,7 @@ pub enum ReplError {
     InvalidNgramLength(usize),
     #[error(
         "Failed to parse lisp expression: {err_message}\n{line}\n{}",
-        std::iter::repeat(" ").take(idx.saturating_sub(2)).chain(["^"]).collect::<String>()
+        std::iter::repeat_n(" " , idx.saturating_sub(2)).chain(["^"]).collect::<String>()
     )]
     SexpError {
         err_message: String,
@@ -295,7 +295,17 @@ impl Repl {
             Err(_) => self.layout(name_or_nr)?,
         };
 
-        writeln!(&mut buf, "{}", name_or_nr)?;
+        match is_md5_hash(name_or_nr) {
+            false => writeln!(&mut buf, "{}", name_or_nr)?,
+            true => writeln!(
+                &mut buf,
+                "{}",
+                layout
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| name_or_nr.to_string())
+            )?,
+        }
         write!(&mut buf, "{}", self.analyze_layout(&layout)?)?;
 
         Ok(ReplResponse::single_layout(layout, buf))
