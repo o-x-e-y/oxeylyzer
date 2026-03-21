@@ -1,3 +1,4 @@
 [alias]
 test-core = "test -p oxeylyzer-core"
+test-repl = "test -p oxeylyzer-repl"
 test-all = "test --all"
