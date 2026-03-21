@@ -52,8 +52,15 @@ pub enum ReplError {
     IndexOutOfBounds(usize, usize),
     #[error("Invalid ngram length, found length {0}. Allowed lengths: 1, 2, 3")]
     InvalidNgramLength(usize),
-    #[error("Failed to parse lisp expression: {0}")]
-    SexpError(String), // TODO: Make these errors fancy with line numbers and such
+    #[error(
+        "Failed to parse lisp expression: {err_message}\n{line}\n{}",
+        std::iter::repeat(" ").take(idx.saturating_sub(2)).chain(["^"]).collect::<String>()
+    )]
+    SexpError {
+        err_message: String,
+        line: String,
+        idx: usize,
+    },
     #[error(
         "{} {}",
         "Missing <language> flag. The language flag can only be omitted in combination with",

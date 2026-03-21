@@ -60,7 +60,11 @@ impl Repl {
 
         let expr = add_outside_parens(line);
 
-        let sexp = sexp::parse(&expr).map_err(|e| ReplError::SexpError(e.message.to_string()))?;
+        let sexp = sexp::parse(&expr).map_err(|e| ReplError::SexpError {
+            err_message: e.message.to_string(),
+            line: line.to_string(),
+            idx: e.index,
+        })?;
 
         self.walk(&sexp)
     }
