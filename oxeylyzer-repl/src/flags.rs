@@ -26,6 +26,7 @@ xflags::xflags! {
         cmd generate gen g improve i optimize {
             required name: String
             optional count: usize
+            /// Sets pinned characters on the layout to optimize, `-p abc` pins `abc`.
             optional -p, --pins pins: String
         }
         /// Saves the nth layout that was generated. Optionally, you can provide a name as `-n <name>`.

@@ -1,3 +1,7 @@
+use crate::repl::{ReplResponse, Result};
+
+use std::fmt::Write;
+
 use itertools::{EitherOrBoth, Itertools};
 use oxeylyzer_core::fast_layout::*;
 use oxeylyzer_core::generate::LayoutStats;
@@ -32,13 +36,14 @@ pub fn generate_n_with_pins(
     amount: usize,
     based_on: FastLayout,
     pins: &[usize],
-) -> Vec<FastLayout> {
+) -> Result<ReplResponse> {
     if amount == 0 {
         println!("Optimizing 0 variants took: 0 seconds");
-        return Vec::new();
+        return Ok(ReplResponse::Nothing);
     }
 
     let fmt_score = |base| (base as f64) / (layout_gen.data.char_total as f64) / 100.0;
+    let mut buf = String::new();
 
     let start = std::time::Instant::now();
 
@@ -64,10 +69,19 @@ pub fn generate_n_with_pins(
 
     for (i, (score, layout)) in layouts.iter().enumerate().take(10) {
         let printable = heatmap_string(layout, &layout_gen.data);
-        println!("#{}, score: {:.5}\n{}", i, fmt_score(*score), printable);
+        writeln!(
+            &mut buf,
+            "#{i}, score: {:.5}\n{printable}",
+            fmt_score(*score),
+        )?;
     }
 
-    layouts.into_iter().map(|(_, layout)| layout).collect()
+    let layouts = layouts
+        .into_iter()
+        .map(|(_, layout)| layout)
+        .collect::<Vec<_>>();
+
+    Ok(ReplResponse::multiple_layouts(&layouts, buf))
 }
 
 fn format_fspeed(finger_speed: &[f64]) -> String {
@@ -90,10 +104,13 @@ fn format_fspeed(finger_speed: &[f64]) -> String {
     format!("{legend}{left_hand}{right_hand}")
 }
 
-pub fn print_layout_stats(stats: &LayoutStats, data: &AnalyzerData) {
+pub fn get_print_layout_stats(stats: &LayoutStats, data: &AnalyzerData) -> Result<String> {
     let fmt_score = |base| (base as f64) / (data.char_total as f64) / 100.0;
 
-    println!(
+    let mut buf = String::new();
+
+    writeln!(
+        &mut buf,
         concat!(
             "Sfb:  {:.3}%\nDsfb: {:.3}%\n\nFinger Speed: {:.3}\n",
             "{}\nStretches: {:.3}%\nScissors: {:.3}%\nLsbs: {:.3}%\n",
@@ -107,11 +124,12 @@ pub fn print_layout_stats(stats: &LayoutStats, data: &AnalyzerData) {
         stats.scissors,
         stats.lsbs,
         stats.pinky_ring,
-    );
+    )?;
 
     let t = &stats.trigram_stats;
 
-    println!(
+    writeln!(
+        &mut buf,
         "Inrolls: {:.3}%\n\
 			Outrolls: {:.3}%\n\
 			Total Rolls: {:.3}%\n\
@@ -142,31 +160,49 @@ pub fn print_layout_stats(stats: &LayoutStats, data: &AnalyzerData) {
         t.bad_sfbs,
         t.sfts,
         fmt_score(stats.score),
-    )
+    )?;
+
+    Ok(buf)
 }
 
-pub fn print_compare_layouts(l1: &FastLayout, l2: &FastLayout, data: &AnalyzerData) {
+pub fn get_print_compare_layouts(
+    l1: &FastLayout,
+    l2: &FastLayout,
+    data: &AnalyzerData,
+) -> Result<String> {
+    let mut buf = String::new();
+
     heatmap_string(l1, data)
         .split('\n')
         .zip(l1.formatted_string().split('\n'))
         .zip_longest(heatmap_string(l2, data).split('\n'))
-        .for_each(|z| match z {
+        .map(|z| match z {
             EitherOrBoth::Both((r1, f), r2) => {
                 let spaces = std::iter::repeat_n(' ', 32 - f.len()).collect::<String>();
-                println!("{r1}{spaces}{r2}");
+                writeln!(&mut buf, "{r1}{spaces}{r2}")
             }
-            EitherOrBoth::Left((r1, _)) => println!("{r1}",),
-            EitherOrBoth::Right(r2) => println!("{: <32}{r2}", ""),
-        });
+            EitherOrBoth::Left((r1, _)) => writeln!(&mut buf, "{r1}",),
+            EitherOrBoth::Right(r2) => writeln!(&mut buf, "{: <32}{r2}", ""),
+        })
+        .try_for_each(|e| e)?;
+
+    Ok(buf)
 }
 
-pub fn print_compare_stats(s1: &LayoutStats, s2: &LayoutStats, data: &AnalyzerData) {
+pub fn get_print_compare_stats(
+    s1: &LayoutStats,
+    s2: &LayoutStats,
+    data: &AnalyzerData,
+) -> Result<String> {
     let fmt_score = |base| (base as f64) / (data.char_total as f64) / 100.0;
+
+    let mut buf = String::new();
 
     let ts1 = &s1.trigram_stats;
     let ts2 = &s2.trigram_stats;
 
-    println!(
+    writeln!(
+        &mut buf,
         concat!(
             "\n",
             "Sfb:                {: <11} Sfb:                {:.3}%\n",
@@ -239,5 +275,7 @@ pub fn print_compare_stats(s1: &LayoutStats, s2: &LayoutStats, data: &AnalyzerDa
         ts2.sfts,
         format!("{:.3}", fmt_score(s1.score)),
         fmt_score(s2.score),
-    );
+    )?;
+
+    Ok(buf)
 }

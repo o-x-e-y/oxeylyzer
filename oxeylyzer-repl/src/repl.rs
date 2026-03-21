@@ -1,7 +1,8 @@
 #[cfg(not(target_arch = "wasm32"))]
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::io::Write;
+use std::fmt::Write as _;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
@@ -26,8 +27,16 @@ use thiserror::Error;
 use crate::corpus_transposition::CorpusConfig;
 use crate::display::*;
 
-const EXIT_MESSAGE: &str = "Exiting analyzer...";
-const BASE_PATH: &str = concat!(std::env!("CARGO_MANIFEST_DIR"), "/..");
+pub const EXIT_MESSAGE: &str = "Exiting analyzer...";
+pub const BASE_PATH: &str = concat!(std::env!("CARGO_MANIFEST_DIR"), "/..");
+pub const MD5_HASH_LEN: usize = 16;
+
+fn get_subcommand(cmd: &str) -> String {
+    cmd.chars()
+        .skip_while(|c| *c != '(')
+        .take_while_inclusive(|c| *c != ')')
+        .collect::<String>()
+}
 
 #[derive(Debug, Error)]
 pub enum ReplError {
@@ -43,6 +52,15 @@ pub enum ReplError {
     IndexOutOfBounds(usize, usize),
     #[error("Invalid ngram length, found length {0}. Allowed lengths: 1, 2, 3")]
     InvalidNgramLength(usize),
+    #[error(
+        "Failed to parse lisp expression: {err_message}\n{line}\n{}",
+        std::iter::repeat_n(" " , idx.saturating_sub(2)).chain(["^"]).collect::<String>()
+    )]
+    SexpError {
+        err_message: String,
+        line: String,
+        idx: usize,
+    },
     #[error(
         "{} {}",
         "Missing <language> flag. The language flag can only be omitted in combination with",
@@ -68,7 +86,14 @@ pub enum ReplError {
         "Could not get file name for corpus config file '{}'. Is it even a file?", .0.display()
     )]
     NoCorpusConfigFileName(PathBuf),
+    #[error(
+        "Attempting to execute command '{}' when '{}' does not return a layout",
+        .0, get_subcommand(&.0)
+    )]
+    CommandDoesNotReturnLayout(String),
 
+    #[error(transparent)]
+    FmtError(#[from] std::fmt::Error),
     #[error(transparent)]
     XflagsError(#[from] xflags::Error),
     #[error(transparent)]
@@ -85,11 +110,49 @@ pub enum ReplStatus {
     Quit,
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub enum ReplResponse {
+    NoLayout {
+        printable: String,
+    },
+    SingleLayout {
+        layout: Box<Layout>,
+        printable: String,
+    },
+    MultipleLayouts {
+        layouts: Vec<Layout>,
+        printable: String,
+    },
+    #[default]
+    Nothing,
+}
+
+impl ReplResponse {
+    pub fn no_layout(printable: String) -> Self {
+        Self::NoLayout { printable }
+    }
+
+    pub fn single_layout(layout: FastLayout, printable: String) -> Self {
+        Self::SingleLayout {
+            layout: Box::new(layout.into()),
+            printable,
+        }
+    }
+
+    pub fn multiple_layouts(layouts: &[FastLayout], printable: String) -> Self {
+        Self::MultipleLayouts {
+            layouts: layouts.iter().cloned().map(Into::into).collect(),
+            printable,
+        }
+    }
+}
+
 pub struct Repl {
     language: String,
     layout_gen: Oxeylyzer,
     saved: HashMap<String, Layout>,
-    temp_generated: Vec<FastLayout>,
+    temp_generated: Vec<Layout>,
+    temp_command_layouts: HashMap<String, Layout>,
     thread_pool: rayon::ThreadPool,
     corpus_configs: PathBuf,
     language_data: PathBuf,
@@ -135,6 +198,7 @@ impl Repl {
             language,
             layout_gen,
             temp_generated: Vec::new(),
+            temp_command_layouts: HashMap::new(),
             thread_pool,
             corpus_configs,
             language_data,
@@ -193,35 +257,63 @@ impl Repl {
         Ok(())
     }
 
+    pub fn insert_temp_layout(&mut self, line: &str, layout: Layout) {
+        let hash = md5_hash(line);
+        self.temp_command_layouts.insert(hash, layout);
+    }
+
+    pub fn clear_temp_layouts(&mut self) {
+        self.temp_command_layouts.clear();
+    }
+
     pub fn layout(&self, name: &str) -> Result<FastLayout> {
         self.saved
             .get(&name.to_lowercase())
+            .or_else(|| self.temp_command_layouts.get(name))
             .map(|layout| self.layout_gen.fast_layout(layout, &[]))
-            .ok_or(ReplError::UnknownLayout(name.into()))
+            .ok_or_else(|| match is_md5_hash(name) {
+                true => ReplError::CommandDoesNotReturnLayout(name.to_string()),
+                false => ReplError::UnknownLayout(name.into()),
+            })
     }
 
-    pub fn nth_layout(&self, index: usize) -> Result<&FastLayout> {
+    pub fn nth_layout(&self, index: usize) -> Result<FastLayout> {
         self.temp_generated
             .get(index)
+            .map(|l| self.layout_gen.fast_layout(l, &[]))
             .ok_or(ReplError::IndexOutOfBounds(
                 index,
                 self.temp_generated.len(),
             ))
     }
 
-    pub fn analyze(&self, name_or_nr: &str) -> Result<()> {
+    pub fn analyze(&self, name_or_nr: &str) -> Result<ReplResponse> {
+        let mut buf = String::new();
+
         let layout = match name_or_nr.parse::<usize>() {
             Ok(nr) => self.nth_layout(nr)?,
-            Err(_) => &self.layout(name_or_nr)?,
+            Err(_) => self.layout(name_or_nr)?,
         };
 
-        println!("{}", name_or_nr);
-        self.analyze_layout(layout);
+        match is_md5_hash(name_or_nr) {
+            false => writeln!(&mut buf, "{}", name_or_nr)?,
+            true => writeln!(
+                &mut buf,
+                "{}",
+                layout
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| name_or_nr.to_string())
+            )?,
+        }
+        write!(&mut buf, "{}", self.analyze_layout(&layout)?)?;
 
-        Ok(())
+        Ok(ReplResponse::single_layout(layout, buf))
     }
 
-    pub fn rank(&self) {
+    pub fn rank(&self) -> Result<ReplResponse> {
+        let mut buf = String::new();
+
         self.saved
             .iter()
             .map(|(n, l)| {
@@ -231,7 +323,10 @@ impl Repl {
                 (n, score)
             })
             .sorted_by(|(_, a), (_, b)| a.total_cmp(b))
-            .for_each(|(n, s)| println!("{n: <15} {s:.3}"));
+            .map(|(n, s)| writeln!(&mut buf, "{n: <15} {s:.3}"))
+            .try_for_each(|e| e)?;
+
+        Ok(ReplResponse::no_layout(buf))
     }
 
     pub fn pin_positions(&self, layout: &FastLayout, pin_chars: String) -> Vec<usize> {
@@ -246,12 +341,12 @@ impl Repl {
             .collect()
     }
 
-    fn generate(
+    pub fn generate(
         &mut self,
         name: &str,
         count: Option<usize>,
         pin_chars: Option<String>,
-    ) -> Result<()> {
+    ) -> Result<ReplResponse> {
         let layout = self.layout(name)?.clone();
 
         let count = count.unwrap_or(2500);
@@ -260,11 +355,19 @@ impl Repl {
             None => vec![],
         };
 
-        self.thread_pool.install(|| {
-            self.temp_generated = generate_n_with_pins(&self.layout_gen, count, layout, &pins)
-        });
+        let response = self
+            .thread_pool
+            .install(|| generate_n_with_pins(&self.layout_gen, count, layout, &pins))?;
 
-        Ok(())
+        use ReplResponse as RR;
+
+        match response {
+            RR::MultipleLayouts { layouts, printable } => {
+                self.temp_generated = layouts.clone();
+                Ok(RR::MultipleLayouts { layouts, printable })
+            }
+            response => Ok(response),
+        }
     }
 
     fn placeholder_name(&self, layout: &FastLayout) -> Result<String> {
@@ -286,7 +389,7 @@ impl Repl {
         Err(ReplError::FailedToFindPlaceholderName)
     }
 
-    pub fn save(&mut self, n: usize, name: Option<String>) -> Result<()> {
+    pub fn save(&mut self, n: usize, name: Option<String>) -> Result<ReplResponse> {
         let mut layout = self.nth_layout(n)?.clone();
         let new_name = match name {
             Some(name) => name,
@@ -319,36 +422,53 @@ impl Repl {
 
         println!("saved {}\n{}", new_name, layout.formatted_string());
 
-        self.saved.insert(new_name, layout.into());
+        self.saved.insert(new_name, layout.clone().into());
 
-        Ok(())
+        Ok(ReplResponse::single_layout(layout, String::new()))
     }
 
-    pub fn analyze_layout(&self, layout: &FastLayout) {
+    pub fn analyze_layout(&self, layout: &FastLayout) -> Result<String> {
+        let mut buf = String::new();
         let stats = self.layout_gen.get_layout_stats(layout);
 
         let layout_str = heatmap_string(layout, &self.layout_gen.data);
 
-        println!("{layout_str}\n");
-        print_layout_stats(&stats, &self.layout_gen.data);
+        writeln!(&mut buf, "{layout_str}\n")?;
+        write!(
+            &mut buf,
+            "{}",
+            get_print_layout_stats(&stats, &self.layout_gen.data)?
+        )?;
+
+        Ok(buf)
     }
 
-    pub fn compare(&self, name1: &str, name2: &str) -> Result<()> {
+    pub fn compare(&self, name1: &str, name2: &str) -> Result<ReplResponse> {
+        let mut buf = String::new();
+
         let l1 = self.layout(name1)?;
         let l2 = self.layout(name2)?;
 
-        println!("\n{: <32}{}", name1, name2);
-        print_compare_layouts(&l1, &l2, &self.layout_gen.data);
+        writeln!(&mut buf, "\n{: <32}{}", name1, name2)?;
+        write!(
+            &mut buf,
+            "{}",
+            get_print_compare_layouts(&l1, &l2, &self.layout_gen.data)?
+        )?;
 
         let s1 = self.layout_gen.get_layout_stats(&l1);
         let s2 = self.layout_gen.get_layout_stats(&l2);
 
-        print_compare_stats(&s1, &s2, &self.layout_gen.data);
+        write!(
+            &mut buf,
+            "{}",
+            get_print_compare_stats(&s1, &s2, &self.layout_gen.data)?
+        )?;
 
-        Ok(())
+        Ok(ReplResponse::multiple_layouts(&[l1, l2], buf))
     }
 
-    fn swap(&self, name: &str, swaps: &[String]) -> Result<()> {
+    pub fn swap(&self, name: &str, swaps: &[String]) -> Result<ReplResponse> {
         let mut layout = self.layout(name)?.clone();
 
         swaps
@@ -379,9 +499,9 @@ impl Repl {
                 }
             });
 
-        self.analyze_layout(&layout);
+        let printable = self.analyze_layout(&layout)?;
 
-        Ok(())
+        Ok(ReplResponse::single_layout(layout, printable))
     }
 
     pub fn sfr_freq(&self) -> f64 {
@@ -399,7 +519,7 @@ impl Repl {
         layout: &FastLayout,
         count: usize,
         is_percent: bool,
-    ) {
+    ) -> Result<String> {
         let fmt_freq = |v| {
             let f = v as f64 / self.layout_gen.data.bigram_total as f64;
             match is_percent {
@@ -407,6 +527,8 @@ impl Repl {
                 false => format!("{:.3}", f),
             }
         };
+
+        let mut buf = String::new();
 
         pairs
             .iter()
@@ -440,112 +562,138 @@ impl Repl {
                 false => f1.cmp(f2),
             })
             .take(count)
-            .for_each(|(bigram, freq)| println!("{bigram}: {}", fmt_freq(freq)));
+            .map(|(bigram, freq)| writeln!(&mut buf, "{bigram}: {}", fmt_freq(freq)))
+            .try_for_each(|e| e)?;
+
+        Ok(buf)
     }
 
-    fn percent_stat(&self, layout: &FastLayout, count: usize, indices: &[PosPair]) {
+    fn percent_stat(
+        &self,
+        layout: &FastLayout,
+        count: usize,
+        indices: &[PosPair],
+    ) -> Result<String> {
         let pairs = indices
             .iter()
             .map(|p| BigramPair { pair: *p, dist: 1 })
             .collect::<Vec<_>>();
 
-        self.bigram_stat(&pairs, Oxeylyzer::pair_sfb, layout, count, true);
+        self.bigram_stat(&pairs, Oxeylyzer::pair_sfb, layout, count, true)
     }
 
-    fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+    pub fn sfbs(&self, name: &str, top_n: Option<usize>) -> Result<ReplResponse> {
+        let mut buf = String::new();
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10).min(layout.fspeed_indices.all.len());
 
-        println!("top {} sfbs for {name}:", count);
+        writeln!(&mut buf, "top {} sfbs for {name}:", count)?;
 
-        self.bigram_stat(
+        let sfbs = self.bigram_stat(
             &layout.fspeed_indices.all,
             Oxeylyzer::pair_sfb,
             &layout,
             count,
             true,
-        );
+        )?;
 
-        Ok(())
+        write!(&mut buf, "{}", sfbs)?;
+
+        Ok(ReplResponse::no_layout(buf))
     }
 
-    fn pinky_ring(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+    pub fn pinky_ring(&self, name: &str, top_n: Option<usize>) -> Result<ReplResponse> {
+        let mut buf = String::new();
         let layout = self.layout(name)?;
         let count = top_n
             .unwrap_or(10)
             .min(layout.pinky_ring_indices.pairs.len());
 
-        println!("top {} pinky-ring bigrams for {name}:", count);
+        writeln!(&mut buf, "top {} pinky-ring bigrams for {name}:", count)?;
 
-        self.percent_stat(&layout, count, &layout.pinky_ring_indices.pairs);
+        let pinky_ring = self.percent_stat(&layout, count, &layout.pinky_ring_indices.pairs)?;
 
-        Ok(())
+        write!(&mut buf, "{}", pinky_ring)?;
+
+        Ok(ReplResponse::no_layout(buf))
     }
 
-    fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+    pub fn fspeed(&self, name: &str, top_n: Option<usize>) -> Result<ReplResponse> {
+        let mut buf = String::new();
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10).min(layout.fspeed_indices.all.len());
 
-        println!("top {} fspeed pairs for {name}:", count);
+        writeln!(&mut buf, "top {} fspeed pairs for {name}:", count)?;
 
-        self.bigram_stat(
+        let fspeed = self.bigram_stat(
             &layout.fspeed_indices.all,
             Oxeylyzer::pair_fspeed,
             &layout,
             count,
             false,
-        );
+        )?;
 
-        Ok(())
+        write!(&mut buf, "{}", fspeed)?;
+
+        Ok(ReplResponse::no_layout(buf))
     }
 
-    fn stretches(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+    pub fn stretches(&self, name: &str, top_n: Option<usize>) -> Result<ReplResponse> {
+        let mut buf = String::new();
         let layout = self.layout(name)?;
         let count = top_n
             .unwrap_or(10)
             .min(layout.stretch_indices.all_pairs.len());
 
-        println!("top {} stretch pairs for {name}:", count);
+        writeln!(&mut buf, "top {} stretch pairs for {name}:", count)?;
 
-        self.bigram_stat(
+        let stretches = self.bigram_stat(
             &layout.stretch_indices.all_pairs,
             Oxeylyzer::pair_stretch,
             &layout,
             count,
             false,
-        );
+        )?;
 
-        Ok(())
+        write!(&mut buf, "{}", stretches)?;
+
+        Ok(ReplResponse::no_layout(buf))
     }
 
-    fn scissors(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+    pub fn scissors(&self, name: &str, top_n: Option<usize>) -> Result<ReplResponse> {
+        let mut buf = String::new();
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10).min(layout.scissor_indices.pairs.len());
 
-        println!("top {} scissor pairs for {name}:", count);
+        writeln!(&mut buf, "top {} scissor pairs for {name}:", count)?;
 
-        self.percent_stat(&layout, count, &layout.scissor_indices.pairs);
+        let scissors = self.percent_stat(&layout, count, &layout.scissor_indices.pairs)?;
 
-        Ok(())
+        write!(&mut buf, "{}", scissors)?;
+
+        Ok(ReplResponse::no_layout(buf))
     }
 
-    fn lsbs(&self, name: &str, top_n: Option<usize>) -> Result<()> {
+    pub fn lsbs(&self, name: &str, top_n: Option<usize>) -> Result<ReplResponse> {
+        let mut buf = String::new();
         let layout = self.layout(name)?;
         let count = top_n.unwrap_or(10).min(layout.lsb_indices.pairs.len());
 
-        println!("top {} lsbs for {name}:", count);
+        writeln!(&mut buf, "top {} lsbs for {name}:", count)?;
 
-        self.percent_stat(&layout, count, &layout.lsb_indices.pairs);
+        let lsbs = self.percent_stat(&layout, count, &layout.lsb_indices.pairs)?;
 
-        Ok(())
+        write!(&mut buf, "{}", lsbs)?;
+
+        Ok(ReplResponse::no_layout(buf))
     }
 
-    fn language<P: AsRef<Path>>(&mut self, language: Option<P>) -> Result<()> {
+    pub fn language<P: AsRef<Path>>(&mut self, language: Option<P>) -> Result<ReplResponse> {
         let language = match language {
             Some(l) => l,
             None => {
                 println!("Current language: {}", self.language);
-                return Ok(());
+                return Ok(ReplResponse::Nothing);
             }
         };
 
@@ -559,44 +707,58 @@ impl Repl {
             Err(e) => println!("Failed to set language: {}", e),
         }
 
-        Ok(())
+        Ok(ReplResponse::Nothing)
     }
 
-    pub fn include<P: AsRef<Path>>(&mut self, languages: &[P]) -> Result<()> {
+    pub fn include<P: AsRef<Path>>(&mut self, languages: &[P]) -> Result<ReplResponse> {
         let layouts_base_path = PathBuf::from(BASE_PATH).join("static/layouts");
 
-        for language in languages {
-            let language = language.as_ref().display().to_string();
+        let layouts = languages
+            .iter()
+            .flat_map(|language| {
+                let layouts = load_layouts(layouts_base_path.join(language))
+                    .inspect_err(|e| eprintln!("{e}"))?;
 
-            load_layouts(layouts_base_path.join(language))?
-                .into_iter()
-                .for_each(|(name, l)| {
-                    self.saved.insert(name, l);
-                });
-        }
+                println!(
+                    "Included layouts from language '{}'",
+                    language.as_ref().display()
+                );
 
-        Ok(())
+                Ok::<_, ReplError>(layouts)
+            })
+            .flatten()
+            .map(|(name, l)| {
+                self.saved.insert(name, l.clone());
+                self.layout_gen.fast_layout(&l, &[])
+            })
+            .collect::<Vec<_>>();
+
+        Ok(ReplResponse::multiple_layouts(&layouts, String::new()))
     }
 
-    pub fn languages(&self) -> Result<()> {
+    pub fn languages(&self) -> Result<ReplResponse> {
         let path = PathBuf::from(BASE_PATH).join("static/language_data");
+
+        let mut buf = String::new();
 
         std::fs::read_dir(&path)
             .path_context(path)?
             .flatten()
-            .for_each(|p| {
+            .map(|p| {
                 let name = p
                     .file_name()
                     .to_string_lossy()
                     .replace('_', " ")
                     .replace(".json", "");
 
-                if name != "test" {
-                    println!("{}", name);
+                match name.as_str() {
+                    "test" => writeln!(&mut buf, "{}", name),
+                    _ => Ok(()),
                 }
-            });
+            })
+            .try_for_each(|e| e)?;
 
-        Ok(())
+        Ok(ReplResponse::no_layout(buf))
     }
 
     fn load_one_with_cleaner<P: AsRef<Path>>(
@@ -606,6 +768,7 @@ impl Repl {
         corpus_paths: &[P],
     ) -> Result<()> {
         let language_data_path = PathBuf::from(BASE_PATH).join(&self.language_data);
+
         match Data::from_paths(corpus_paths, language, &cleaner) {
             Ok(data) => match data.save(language_data_path) {
                 Ok(_) => println!("Saved data for {language}!"),
@@ -617,7 +780,7 @@ impl Repl {
         Ok(())
     }
 
-    pub fn load(&mut self, language: String, all: bool, raw: bool) -> Result<()> {
+    pub fn load(&mut self, language: String, all: bool, raw: bool) -> Result<ReplResponse> {
         let corpus_configs = PathBuf::from(BASE_PATH).join(&self.corpus_configs);
 
         match (all, raw) {
@@ -704,10 +867,12 @@ impl Repl {
             }
         };
 
-        Ok(())
+        Ok(ReplResponse::Nothing)
     }
 
-    pub fn ngram(&self, ngram: &str) -> Result<()> {
+    pub fn ngram(&self, ngram: &str) -> Result<ReplResponse> {
+        let mut buf = String::new();
+
         let data = &self.layout_gen.data;
 
         match ngram.chars().count() {
@@ -715,7 +880,7 @@ impl Repl {
                 let c = ngram.chars().next().unwrap();
                 let u = data.mapping.get_u(c);
                 let occ = (data.get_char_u(u) as f64 / data.char_total as f64) * 100.0;
-                println!("{ngram}: {occ:.3}%")
+                writeln!(&mut buf, "{ngram}: {occ:.3}%")?
             }
             2 => {
                 let bigram: [char; 2] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
@@ -733,12 +898,13 @@ impl Repl {
                 let occ_s2 =
                     (data.get_skipgram_u([c2, c1]) as f64 / data.skipgram_total as f64) * 100.0;
 
-                println!(
+                writeln!(
+                    &mut buf,
                     "{ngram} + {rev}: {:.3}%,\n  {ngram}: {occ_b1:.3}%\n  {rev}: {occ_b2:.3}%\n\
                     {ngram} + {rev} (skipgram): {:.3}%,\n  {ngram}: {occ_s1:.3}%\n  {rev}: {occ_s2:.3}%",
                     occ_b1 + occ_b2,
                     occ_s1 + occ_s2
-                )
+                )?
             }
             3 => {
                 let trigram: [char; 3] = ngram.chars().collect::<Vec<char>>().try_into().unwrap();
@@ -752,15 +918,16 @@ impl Repl {
                     .iter()
                     .find(|&&(tf, _)| tf == t)
                     .unwrap_or(&(t, 0));
-                println!(
+                writeln!(
+                    &mut buf,
                     "{ngram}: {:.3}%",
                     (occ as f64) / (data.trigram_total as f64) * 100.0
-                )
+                )?
             }
             n => return Err(ReplError::InvalidNgramLength(n)),
         };
 
-        Ok(())
+        Ok(ReplResponse::no_layout(buf))
     }
 
     fn reset_with_language(&mut self, language: &str) -> Result<()> {
@@ -797,51 +964,17 @@ impl Repl {
         self.language = language.to_string();
         self.saved = saved;
         self.temp_generated.iter_mut().for_each(|l| {
-            let layout = Layout::from(l.clone());
-            *l = self.layout_gen.fast_layout(&layout, &[]);
+            let fast_layout = self.layout_gen.fast_layout(l, &[]);
+            *l = fast_layout.into();
         });
 
         Ok(())
     }
 
-    pub fn reload(&mut self) -> Result<()> {
-        self.reset_with_language(&self.language.clone())
-    }
+    pub fn reload(&mut self) -> Result<ReplResponse> {
+        self.reset_with_language(&self.language.clone())?;
 
-    fn respond(&mut self, line: &str) -> Result<ReplStatus> {
-        use crate::flags::{Repl, ReplCmd::*};
-
-        let args = shlex::split(line)
-            .ok_or(ReplError::ShlexError)?
-            .into_iter()
-            .map(std::ffi::OsString::from)
-            .collect::<Vec<_>>();
-
-        let flags = Repl::from_vec(args)?;
-
-        match flags.subcommand {
-            Analyze(a) => self.analyze(&a.name_or_nr)?,
-            Compare(c) => self.compare(&c.name1, &c.name2)?,
-            Swap(s) => self.swap(&s.name, &s.swaps)?,
-            Rank(_) => self.rank(),
-            Generate(i) => self.generate(&i.name, i.count, i.pins)?,
-            Save(s) => self.save(s.n, s.name)?,
-            Sfbs(s) => self.sfbs(&s.name, s.count)?,
-            Fspeed(s) => self.fspeed(&s.name, s.count)?,
-            Stretches(s) => self.stretches(&s.name, s.count)?,
-            Scissors(s) => self.scissors(&s.name, s.count)?,
-            Lsbs(s) => self.lsbs(&s.name, s.count)?,
-            Pinkyring(s) => self.pinky_ring(&s.name, s.count)?,
-            Language(l) => self.language(l.language)?,
-            Include(l) => self.include(&l.languages)?,
-            Languages(_) => self.languages()?,
-            Load(l) => self.load(l.language, l.all, l.raw)?,
-            Ngram(n) => self.ngram(&n.ngram)?,
-            Reload(_) => self.reload()?,
-            Quit(_) => return Ok(ReplStatus::Quit),
-        };
-
-        Ok(ReplStatus::Continue)
+        Ok(ReplResponse::Nothing)
     }
 }
 
@@ -865,6 +998,17 @@ pub fn load_layouts<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Layout>> 
         .collect();
 
     Ok(map)
+}
+
+pub fn md5_hash(value: &str) -> String {
+    format!("{:x}", md5::compute(value))
+        .chars()
+        .take(MD5_HASH_LEN)
+        .collect()
+}
+
+pub fn is_md5_hash(value: &str) -> bool {
+    value.len() == MD5_HASH_LEN && value.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 #[cfg(test)]
