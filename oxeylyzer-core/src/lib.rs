@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 pub mod analyzer_data;
 pub mod char_mapping;
 pub mod corpus_cleaner;
