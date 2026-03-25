@@ -108,12 +108,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arrayvec"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
-
-[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -818,10 +812,8 @@ name = "oxeylyzer-core"
 version = "0.1.0"
 dependencies = [
  "ahash",
- "ansi_rgb",
  "anyhow",
  "approx",
- "arrayvec",
  "fancy-regex",
  "file-chunker",
  "fxhash",
@@ -836,7 +828,6 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sliding_window_alt",
- "smartstring",
  "thiserror",
  "time_this",
  "toml 0.9.12+spec-1.1.0",
@@ -1241,23 +1232,6 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
-
-[[package]]
-name = "smartstring"
-version = "1.0.1"
-source = "git+https://github.com/O-X-E-Y/smartstring#bb0c2fa6f6ba34d33672bf18f3098fa006e20df1"
-dependencies = [
- "autocfg",
- "serde",
- "static_assertions",
- "version_check",
-]
-
-[[package]]
-name = "static_assertions"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "strsim"

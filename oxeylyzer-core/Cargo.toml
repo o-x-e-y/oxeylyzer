@@ -14,10 +14,7 @@ file-chunker = "0.1.1"
 anyhow = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 toml = { workspace = true }
-smartstring = { git = "https://github.com/O-X-E-Y/smartstring", features = ["serde"] }
-arrayvec = "0.7.2"
 once_cell = { workspace = true }
-ansi_rgb = { git = "https://github.com/O-X-E-Y/ansi_rgb" }
 ahash = { version = "0.8.11", features = ["serde"] }
 libdof = { workspace = true }
 sliding_window_alt = "0.1.2"
