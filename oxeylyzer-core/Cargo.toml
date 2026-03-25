@@ -19,7 +19,6 @@ file-chunker = "0.1.1"
 anyhow = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 toml = { workspace = true }
-once_cell = { workspace = true }
 ahash = { version = "0.8.11", features = ["serde"] }
 libdof = { workspace = true }
 sliding_window_alt = "0.1.2"
@@ -32,3 +31,4 @@ num_cpus = "1.17"
 time_this = "0"
 approx = "0"
 fancy-regex = "0.17.0"
+once_cell = { workspace = true }
