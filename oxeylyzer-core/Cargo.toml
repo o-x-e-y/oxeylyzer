@@ -1,8 +1,13 @@
 [package]
 name = "oxeylyzer-core"
 version = "0.1.0"
-authors = ["O_X_E_Y <lucoerlemans37@gmail.com>"]
+authors = ["o-x-e-y <lucoerlemans37@gmail.com>"]
 edition = "2024"
+license = "Apache-2.0"
+description = "Core library for Oxeylyzer, a keyboard layout analyzer"
+repository = "https://github.com/o-x-e-y/oxeylyzer"
+categories = ["algorithms", "data-structures", "mathematics"]
+documentation = "https://docs.rs/oxeylyzer-core"
 
 [dependencies]
 itertools = { workspace = true }
