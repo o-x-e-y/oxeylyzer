@@ -5,9 +5,13 @@ use thiserror::Error;
 
 use crate::*;
 
+/// Errors that can occur during corpus cleaning.
 #[derive(Debug, Clone, Error)]
 pub enum CorpusError {}
 
+/// A cleaner that transforms raw corpus text into a format suitable for analysis.
+///
+/// It handles character mappings, shift keys, and repeat keys.
 #[derive(Debug, Clone)]
 pub struct CorpusCleaner {
     map: HashMap<char, Vec<char>>,
@@ -28,6 +32,14 @@ impl Default for CorpusCleaner {
 }
 
 impl CorpusCleaner {
+    /// Creates a new [`CorpusCleanerBuilder`] to configure a cleaner.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let builder = CorpusCleaner::builder();
+    /// ```
     pub fn builder() -> CorpusCleanerBuilder {
         CorpusCleanerBuilder {
             shift_char: Some(SHIFT_CHAR),
@@ -38,23 +50,60 @@ impl CorpusCleaner {
         }
     }
 
+    /// Creates a raw `CorpusCleaner` that performs no transformations.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::raw();
+    /// assert!(cleaner.is_raw());
+    /// ```
     pub fn raw() -> Self {
         Self::default()
     }
 
+    /// Returns the shift key character if one is configured.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::raw();
+    /// assert_eq!(cleaner.shift_key(), Some('⇑'));
+    /// ```
     pub fn shift_key(&self) -> Option<char> {
         self.shift_key
     }
 
+    /// Returns true if a repeat key is enabled.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::raw();
+    /// assert!(!cleaner.repeat_key());
+    /// ```
     pub fn repeat_key(&self) -> bool {
         self.repeat_key
     }
 
+    /// Returns true if this is a raw cleaner.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::raw();
+    /// assert!(cleaner.is_raw());
+    /// ```
     pub fn is_raw(&self) -> bool {
         self.raw
     }
 }
 
+/// Builder for creating a [`CorpusCleaner`].
 #[derive(Debug, Clone, Default)]
 pub struct CorpusCleanerBuilder {
     shift_char: Option<char>,
@@ -70,6 +119,16 @@ impl CorpusCleanerBuilder {
         self.chars.insert(lower);
     }
 
+    /// Adds mappings for uppercase characters.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder()
+    ///     .with_uppercase_mappings([('a', 'A')])
+    ///     .build();
+    /// ```
     pub fn with_uppercase_mappings(
         &mut self,
         mappings: impl IntoIterator<Item = (char, char)>,
@@ -98,18 +157,50 @@ impl CorpusCleanerBuilder {
         }
     }
 
+    /// Adds a set of characters to be included in the cleaned corpus.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder()
+    ///     .with_chars("abc".chars())
+    ///     .build();
+    /// ```
     pub fn with_chars(&mut self, chars: impl IntoIterator<Item = char>) -> &mut Self {
         chars.into_iter().for_each(|c| self.with_char(c));
 
         self
     }
 
+    /// Enables or disables the repeat key.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder()
+    ///     .repeat_key(true)
+    ///     .build();
+    /// assert!(cleaner.repeat_key());
+    /// ```
     pub fn repeat_key(&mut self, enable: bool) -> &mut Self {
         self.repeat_key = enable;
 
         self
     }
 
+    /// Sets the character used to represent a shift key press.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder()
+    ///     .shift_char(Some('^'))
+    ///     .build();
+    /// assert_eq!(cleaner.shift_key(), Some('^'));
+    /// ```
     pub fn shift_char(&mut self, shift_char: Option<char>) -> &mut Self {
         self.shift_char = shift_char;
 
@@ -120,6 +211,16 @@ impl CorpusCleanerBuilder {
         self.mappings.insert(from, to);
     }
 
+    /// Adds complex mappings from one character to multiple characters.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder()
+    ///     .with_mappings([('æ', vec!['a', 'e'])])
+    ///     .build();
+    /// ```
     pub fn with_mappings(
         &mut self,
         mappings: impl IntoIterator<Item = (char, Vec<char>)>,
@@ -129,6 +230,16 @@ impl CorpusCleanerBuilder {
         self
     }
 
+    /// Adds simple character-to-character mappings.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder()
+    ///     .with_char_mappings([('A', 'a')])
+    ///     .build();
+    /// ```
     pub fn with_char_mappings(
         &mut self,
         mappings: impl IntoIterator<Item = (char, char)>,
@@ -140,6 +251,16 @@ impl CorpusCleanerBuilder {
         self
     }
 
+    /// Adds mappings where a character maps exactly to itself.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder()
+    ///     .with_exact_mappings(['a', 'b'])
+    ///     .build();
+    /// ```
     pub fn with_exact_mappings(&mut self, chars: impl IntoIterator<Item = char>) -> &mut Self {
         chars
             .into_iter()
@@ -148,6 +269,16 @@ impl CorpusCleanerBuilder {
         self
     }
 
+    /// Adds mappings that involve a dead key followed by another character.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder()
+    ///     .with_dead_key([('á', 'a')], '´')
+    ///     .build();
+    /// ```
     pub fn with_dead_key(
         &mut self,
         mappings: impl IntoIterator<Item = (char, char)>,
@@ -161,6 +292,16 @@ impl CorpusCleanerBuilder {
         self
     }
 
+    /// Adds standard QWERTY punctuation mappings (e.g., '!' maps to Shift + '1').
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder()
+    ///     .qwerty_punctuation_mappings(true)
+    ///     .build();
+    /// ```
     pub fn qwerty_punctuation_mappings(&mut self, enable: bool) -> &mut Self {
         if enable {
             self.with_uppercase_mappings([
@@ -191,6 +332,16 @@ impl CorpusCleanerBuilder {
         }
     }
 
+    /// Adds normalization for various miscellaneous punctuation marks (e.g., smart quotes to straight quotes).
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder()
+    ///     .normalize_misc_punctuation(true)
+    ///     .build();
+    /// ```
     pub fn normalize_misc_punctuation(&mut self, normalize: bool) -> &mut Self {
         if normalize {
             self.with_char_mappings([
@@ -209,6 +360,14 @@ impl CorpusCleanerBuilder {
         }
     }
 
+    /// Builds the [`CorpusCleaner`].
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+    ///
+    /// let cleaner = CorpusCleaner::builder().build();
+    /// ```
     pub fn build(&mut self) -> CorpusCleaner {
         use std::mem::take;
 
@@ -247,6 +406,7 @@ impl CorpusCleanerBuilder {
     }
 }
 
+/// An iterator that cleans corpus text using a [`CorpusCleaner`].
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 #[derive(Debug)]
 pub struct CorpusCleanerIterator<'a, I> {
@@ -320,7 +480,18 @@ where
     }
 }
 
+/// Trait providing the `clean_corpus` method to any character iterator.
 pub trait CleanCorpus: Iterator {
+    /// Wraps the iterator with a [`CorpusCleanerIterator`].
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::corpus_cleaner::{CorpusCleaner, CleanCorpus};
+    ///
+    /// let cleaner = CorpusCleaner::raw();
+    /// let cleaned: String = "abc".chars().clean_corpus(&cleaner).flatten().collect();
+    /// assert_eq!(cleaned, "abc");
+    /// ```
     fn clean_corpus(
         self,
         cleaner: &CorpusCleaner,

@@ -2,22 +2,38 @@ use std::sync::Arc;
 
 use libdof::dofinitions::{Finger, Finger::*, Hand, Hand::*};
 
+/// Represents various patterns formed by three consecutive keystrokes (trigrams).
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum TrigramPattern {
+    /// Strokes alternate hands (e.g., Left-Right-Left).
     Alternate,
+    /// Strokes alternate hands with the same finger used twice (e.g., L1-R1-L1).
     AlternateSfs,
+    /// Strokes move from outer fingers to inner fingers on one hand.
     Inroll,
+    /// Strokes move from inner fingers to outer fingers on one hand.
     Outroll,
+    /// All three strokes are on the same hand.
     Onehand,
+    /// Strokes change direction on one hand (e.g., Middle-Index-Ring).
     Redirect,
+    /// Redirect that includes a same-finger stay.
     RedirectSfs,
+    /// Redirect involving "bad" fingers (pinky/ring).
     BadRedirect,
+    /// Bad redirect that includes a same-finger stay.
     BadRedirectSfs,
+    /// Includes a Same-Finger Bigram.
     Sfb,
+    /// Includes a Same-Finger Bigram on uncomfortable keys.
     BadSfb,
+    /// Same-Finger Trigram (all three strokes on the same finger).
     Sft,
+    /// Trigram involves a thumb key.
     Thumb,
+    /// Any other pattern.
     Other,
+    /// Invalid trigram.
     Invalid,
 }
 
@@ -190,6 +206,15 @@ impl Trigram {
     }
 }
 
+/// Pre-calculates and returns a mapping of all possible finger combinations to their trigram patterns.
+///
+/// # Examples:
+/// ```
+/// use oxeylyzer_core::trigram_patterns::get_trigram_combinations;
+///
+/// let combinations = get_trigram_combinations();
+/// assert_eq!(combinations.len(), 1000);
+/// ```
 pub fn get_trigram_combinations() -> Arc<[TrigramPattern; 1000]> {
     let mut combinations = [TrigramPattern::Other; 1000];
 

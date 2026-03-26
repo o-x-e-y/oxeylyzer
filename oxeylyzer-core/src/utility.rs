@@ -6,6 +6,17 @@ use libdof::prelude::{
 };
 use nanorand::{Rng, tls_rng};
 
+/// Randomly shuffles a slice while keeping elements at specified indices (pins) in their original positions.
+///
+/// # Examples:
+/// ```
+/// use oxeylyzer_core::utility::shuffle_pins;
+///
+/// let mut data = vec![1, 2, 3, 4, 5];
+/// shuffle_pins(&mut data, &[0, 4]);
+/// assert_eq!(data[0], 1);
+/// assert_eq!(data[4], 5);
+/// ```
 #[inline]
 pub fn shuffle_pins<T>(slice: &mut [T], pins: &[usize]) {
     let mapping = (0..slice.len())
@@ -20,6 +31,15 @@ pub fn shuffle_pins<T>(slice: &mut [T], pins: &[usize]) {
     }
 }
 
+/// Generates a default physical keyboard map with a 3x10 grid of keys.
+///
+/// # Examples:
+/// ```
+/// use oxeylyzer_core::utility::default_physical_map;
+///
+/// let map = default_physical_map();
+/// assert_eq!(map.len(), 30);
+/// ```
 pub fn default_physical_map() -> Box<[PhysicalKey]> {
     let mut res = Vec::new();
 
@@ -32,6 +52,7 @@ pub fn default_physical_map() -> Box<[PhysicalKey]> {
     res.into()
 }
 
+/// Default mapping of keys to fingers for a standard 30-key layout.
 #[rustfmt::skip]
 pub static DEFAULT_FINGERMAP: [Finger; 30] = [
     LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
@@ -39,6 +60,7 @@ pub static DEFAULT_FINGERMAP: [Finger; 30] = [
     LP, LR, LM, LI, LI,  RI, RI, RM, RR, RP,
 ];
 
+/// Default effort weights for each finger.
 pub static DEFAULT_FINGER_WEIGHTS: FingerWeights = FingerWeights {
     lp: 1.4,
     lr: 3.6,
@@ -52,9 +74,19 @@ pub static DEFAULT_FINGER_WEIGHTS: FingerWeights = FingerWeights {
     rp: 1.4,
 };
 
+/// Trait for approximate equality comparison of floating point numbers.
 pub trait ApproxEq {
+    /// Returns true if two numbers are equal up to a certain number of decimal places.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::utility::ApproxEq;
+    ///
+    /// assert!((0.1234).approx_eq(0.123, 3));
+    /// ```
     fn approx_eq(self, other: f64, dec: u8) -> bool;
 
+    /// Same as `approx_eq`, but prints a message to stdout if the numbers are not equal.
     fn approx_eq_dbg(self, other: f64, dec: u8) -> bool;
 }
 
