@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::{char_mapping::CharMapping, data::Data, weights::Weights};
 
+/// Optimized data structure for layout analysis, containing frequency information for various n-grams.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AnalyzerData {
     name: String,
@@ -14,16 +15,37 @@ pub struct AnalyzerData {
     gen_trigrams: Box<[([u8; 3], i64)]>,
     same_finger_weighted_bigrams: Box<[i64]>,
     stretch_weighted_bigrams: Box<[i64]>,
+    /// Total number of characters in the corpus.
     pub char_total: i64,
+    /// Total number of bigrams in the corpus.
     pub bigram_total: i64,
+    /// Total number of skipgrams (1 distance) in the corpus.
     pub skipgram_total: i64,
+    /// Total number of skipgrams (2 distance) in the corpus.
     pub skipgram2_total: i64,
+    /// Total number of skipgrams (3 distance) in the corpus.
     pub skipgram3_total: i64,
+    /// Total number of trigrams in the corpus.
     pub trigram_total: i64,
+    /// Mapping between characters and their internal byte representations.
     pub mapping: Arc<CharMapping>,
 }
 
 impl AnalyzerData {
+    /// Creates a new `AnalyzerData` from raw corpus data and layout weights.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    /// use oxeylyzer_core::data::Data;
+    /// use oxeylyzer_core::weights::Weights;
+    ///
+    /// let data = Data::default();
+    /// let weights = Weights::default();
+    /// let analyzer_data = AnalyzerData::new(data, &weights);
+    ///
+    /// assert_eq!(analyzer_data.char_total, 0);
+    /// ```
     pub fn new(data: Data, weights: &Weights) -> Self {
         let convert_f = |f| f / 100.0;
 
@@ -190,97 +212,249 @@ impl AnalyzerData {
         }
     }
 
+    /// Returns the number of unique characters in the mapping.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert_eq!(analyzer_data.len(), 0);
+    /// ```
     pub fn len(&self) -> usize {
         self.chars.len()
     }
 
+    /// Returns true if there are no characters in the data.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert!(analyzer_data.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.chars.is_empty()
     }
 
+    /// Returns the name of the corpus.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert_eq!(analyzer_data.name(), "");
+    /// ```
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Returns the character frequency data.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert!(analyzer_data.chars().is_empty());
+    /// ```
     pub fn chars(&self) -> &[i64] {
         &self.chars
     }
 
+    /// Returns the bigram frequency data.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert!(analyzer_data.bigrams().is_empty());
+    /// ```
     pub fn bigrams(&self) -> &[i64] {
         &self.bigrams
     }
 
+    /// Returns the skipgram (1 distance) frequency data.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert!(analyzer_data.skipgrams().is_empty());
+    /// ```
     pub fn skipgrams(&self) -> &[i64] {
         &self.skipgrams
     }
 
+    /// Returns the skipgram (2 distance) frequency data.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert!(analyzer_data.skipgrams2().is_empty());
+    /// ```
     pub fn skipgrams2(&self) -> &[i64] {
         &self.skipgrams2
     }
 
+    /// Returns the skipgram (3 distance) frequency data.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert!(analyzer_data.skipgrams3().is_empty());
+    /// ```
     pub fn skipgrams3(&self) -> &[i64] {
         &self.skipgrams3
     }
 
+    /// Returns the trigram frequency data.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert!(analyzer_data.trigrams().is_empty());
+    /// ```
     pub fn trigrams(&self) -> &[i64] {
         &self.trigrams
     }
 
+    /// Returns the trigram data formatted for generation.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert!(analyzer_data.gen_trigrams().is_empty());
+    /// ```
     pub fn gen_trigrams(&self) -> &[([u8; 3], i64)] {
         &self.gen_trigrams
     }
 
+    /// Returns the frequency of a specific character.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    /// let analyzer_data = AnalyzerData::default();
+    /// let freq = analyzer_data.get_char('e');
+    /// ```
     pub fn get_char(&self, c: char) -> i64 {
-        let i = self.mapping.get_u(c) as usize;
-        self.chars[i]
+        let u = self.mapping.get_u(c);
+
+        self.get_char_u(u)
     }
 
+    /// Returns the frequency of a specific bigram.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    /// let analyzer_data = AnalyzerData::default();
+    /// let freq = analyzer_data.get_bigram(['t', 'h']);
+    /// ```
     pub fn get_bigram(&self, [c1, c2]: [char; 2]) -> i64 {
-        let u1 = self.mapping.get_u(c1) as usize;
-        let u2 = self.mapping.get_u(c2) as usize;
+        let u1 = self.mapping.get_u(c1);
+        let u2 = self.mapping.get_u(c2);
 
-        let i = u1 * self.len() + u2;
-        self.bigrams[i]
+        self.get_bigram_u([u1, u2])
     }
 
+    /// Returns the frequency of a specific skipgram (1 distance).
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    /// let analyzer_data = AnalyzerData::default();
+    /// let freq = analyzer_data.get_skipgram(['a', 'n']);
+    /// ```
     pub fn get_skipgram(&self, [c1, c2]: [char; 2]) -> i64 {
-        let u1 = self.mapping.get_u(c1) as usize;
-        let u2 = self.mapping.get_u(c2) as usize;
+        let u1 = self.mapping.get_u(c1);
+        let u2 = self.mapping.get_u(c2);
 
-        let i = u1 * self.len() + u2;
-        self.skipgrams[i]
+        self.get_skipgram_u([u1, u2])
     }
 
+    /// Returns the frequency of a specific trigram.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    /// let analyzer_data = AnalyzerData::default();
+    /// let freq = analyzer_data.get_trigram(['t', 'h', 'e']);
+    /// ```
     pub fn get_trigram(&self, [c1, c2, c3]: [char; 3]) -> i64 {
-        let u1 = self.mapping.get_u(c1) as usize;
-        let u2 = self.mapping.get_u(c2) as usize;
-        let u3 = self.mapping.get_u(c3) as usize;
+        let u1 = self.mapping.get_u(c1);
+        let u2 = self.mapping.get_u(c2);
+        let u3 = self.mapping.get_u(c3);
 
-        let i = u1 * self.len().pow(2) + u2 * self.len() + u3;
-        self.trigrams[i]
+        self.get_trigram_u([u1, u2, u3])
     }
 
+    /// Returns the weighted frequency of a bigram for same-finger analysis.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    /// let analyzer_data = AnalyzerData::default();
+    /// let weighted_freq = analyzer_data.get_same_finger_weighted_bigram(['d', 'e']);
+    /// ```
     pub fn get_same_finger_weighted_bigram(&self, [c1, c2]: [char; 2]) -> i64 {
-        let u1 = self.mapping.get_u(c1) as usize;
-        let u2 = self.mapping.get_u(c2) as usize;
+        let u1 = self.mapping.get_u(c1);
+        let u2 = self.mapping.get_u(c2);
 
-        let i = u1 * self.len() + u2;
-        self.same_finger_weighted_bigrams[i]
+        self.get_same_finger_weighted_bigram_u([u1, u2])
     }
 
+    /// Returns the weighted frequency of a bigram for stretch analysis.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    /// let analyzer_data = AnalyzerData::default();
+    /// let weighted_freq = analyzer_data.get_stretch_weighted_bigram(['q', 'u']);
+    /// ```
     pub fn get_stretch_weighted_bigram(&self, [c1, c2]: [char; 2]) -> i64 {
-        let u1 = self.mapping.get_u(c1) as usize;
-        let u2 = self.mapping.get_u(c2) as usize;
+        let u1 = self.mapping.get_u(c1);
+        let u2 = self.mapping.get_u(c2);
 
-        let i = u1 * self.len() + u2;
-        self.stretch_weighted_bigrams[i]
+        self.get_stretch_weighted_bigram_u([u1, u2])
     }
 
+    /// Returns the frequency of a character by its internal byte representation.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert_eq!(analyzer_data.get_char_u(0), 0);
+    /// ```
     #[inline]
     pub fn get_char_u(&self, c: u8) -> i64 {
         self.chars.get(c as usize).copied().unwrap_or_default()
     }
 
+    /// Returns the frequency of a bigram by its internal byte representations.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert_eq!(analyzer_data.get_bigram_u([0, 1]), 0);
+    /// ```
     #[inline]
     pub fn get_bigram_u(&self, [c1, c2]: [u8; 2]) -> i64 {
         let u1 = c1 as usize;
@@ -294,6 +468,15 @@ impl AnalyzerData {
         }
     }
 
+    /// Returns the frequency of a skipgram (1 distance) by its internal byte representations.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert_eq!(analyzer_data.get_skipgram_u([0, 1]), 0);
+    /// ```
     #[inline]
     pub fn get_skipgram_u(&self, [c1, c2]: [u8; 2]) -> i64 {
         let u1 = c1 as usize;
@@ -307,6 +490,15 @@ impl AnalyzerData {
         }
     }
 
+    /// Returns the frequency of a trigram by its internal byte representations.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert_eq!(analyzer_data.get_trigram_u([0, 1, 2]), 0);
+    /// ```
     #[inline]
     pub fn get_trigram_u(&self, [c1, c2, c3]: [u8; 3]) -> i64 {
         let u1 = c1 as usize;
@@ -321,6 +513,15 @@ impl AnalyzerData {
         }
     }
 
+    /// Returns the weighted frequency of a bigram for same-finger analysis by its internal byte representations.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert_eq!(analyzer_data.get_same_finger_weighted_bigram_u([0, 1]), 0);
+    /// ```
     #[inline]
     pub fn get_same_finger_weighted_bigram_u(&self, [c1, c2]: [u8; 2]) -> i64 {
         let u1 = c1 as usize;
@@ -334,6 +535,15 @@ impl AnalyzerData {
         }
     }
 
+    /// Returns the weighted frequency of a bigram for stretch analysis by its internal byte representations.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::analyzer_data::AnalyzerData;
+    ///
+    /// let analyzer_data = AnalyzerData::default();
+    /// assert_eq!(analyzer_data.get_stretch_weighted_bigram_u([0, 1]), 0);
+    /// ```
     #[inline]
     pub fn get_stretch_weighted_bigram_u(&self, [c1, c2]: [u8; 2]) -> i64 {
         let u1 = c1 as usize;

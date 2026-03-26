@@ -57,70 +57,138 @@ serde_conv!(
     }
 );
 
+// type BigramAsStr = DisplayFromStr;
+// type TrigramAsStr = DisplayFromStr;
+
+/// Frequency data for a specific language or corpus.
+///
+/// # Examples:
+/// ```
+/// use oxeylyzer_core::data::Data;
+///
+/// let data = Data::new();
+/// assert_eq!(data.char_total, 0);
+/// ```
 #[serde_as]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(into = "SaveData")]
 pub struct Data {
+    /// The name of the corpus or language.
     pub name: String,
 
+    /// Frequencies of individual characters.
     pub chars: HashMap<char, f64>,
+    /// Frequencies of bigrams (two consecutive characters).
     #[serde_as(as = "HashMap<BigramAsStr, _>")]
     pub bigrams: HashMap<[char; 2], f64>,
+    /// Frequencies of skipgrams with 1 character between them (e.g., "a.b").
     #[serde_as(as = "HashMap<BigramAsStr, _>")]
     pub skipgrams: HashMap<[char; 2], f64>,
+    /// Frequencies of skipgrams with 2 characters between them (e.g., "a..b").
     #[serde_as(as = "HashMap<BigramAsStr, _>")]
     pub skipgrams2: HashMap<[char; 2], f64>,
+    /// Frequencies of skipgrams with 3 characters between them (e.g., "a...b").
     #[serde_as(as = "HashMap<BigramAsStr, _>")]
     pub skipgrams3: HashMap<[char; 2], f64>,
+    /// Frequencies of trigrams (three consecutive characters).
     #[serde_as(as = "HashMap<TrigramAsStr, _>")]
     pub trigrams: HashMap<[char; 3], f64>,
 
+    /// Total count of characters in the corpus.
     pub char_total: i64,
+    /// Total count of bigrams in the corpus.
     pub bigram_total: i64,
+    /// Total count of 1-distance skipgrams in the corpus.
     pub skipgram_total: i64,
+    /// Total count of 2-distance skipgrams in the corpus.
     pub skipgram2_total: i64,
+    /// Total count of 3-distance skipgrams in the corpus.
     pub skipgram3_total: i64,
+    /// Total count of trigrams in the corpus.
     pub trigram_total: i64,
 }
 
 impl Data {
+    /// Creates a new, empty `Data` instance.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::data::Data;
+    ///
+    /// let data = Data::new();
+    /// assert_eq!(data.char_total, 0);
+    /// ```
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Returns the frequency of a specific character if it exists.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::data::Data;
+    ///
+    /// let mut data = Data::new();
+    /// data.chars.insert('e', 12.0);
+    /// assert_eq!(data.get_char('e'), Some(&12.0));
+    /// ```
     pub fn get_char(&self, c: char) -> Option<&f64> {
         self.chars.get(&c)
     }
 
+    /// Returns the frequency of a specific bigram if it exists.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::data::Data;
+    ///
+    /// let mut data = Data::new();
+    /// data.bigrams.insert(['t', 'h'], 3.5);
+    /// assert_eq!(data.get_bigram(['t', 'h']), Some(&3.5));
+    /// ```
     pub fn get_bigram(&self, bigram: [char; 2]) -> Option<&f64> {
         self.bigrams.get(&bigram)
     }
 
+    /// Returns the frequency of a specific 1-distance skipgram if it exists.
     pub fn get_skipgram(&self, skipgram: [char; 2]) -> Option<&f64> {
         self.skipgrams.get(&skipgram)
     }
 
+    /// Returns the frequency of a specific 2-distance skipgram if it exists.
     pub fn get_skipgram2(&self, skipgram2: [char; 2]) -> Option<&f64> {
         self.skipgrams2.get(&skipgram2)
     }
 
+    /// Returns the frequency of a specific 3-distance skipgram if it exists.
     pub fn get_skipgram3(&self, skipgram3: [char; 2]) -> Option<&f64> {
         self.skipgrams3.get(&skipgram3)
     }
 
+    /// Returns the frequency of a specific trigram if it exists.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::data::Data;
+    ///
+    /// let mut data = Data::new();
+    /// data.trigrams.insert(['t', 'h', 'e'], 1.2);
+    /// assert_eq!(data.get_trigram(['t', 'h', 'e']), Some(&1.2));
+    /// ```
     pub fn get_trigram(&self, trigram: [char; 3]) -> Option<&f64> {
         self.trigrams.get(&trigram)
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 impl Data {
+    /// Loads layout data from a JSON file.
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = std::fs::read_to_string(&path).path_context(&path)?;
         let data = serde_json::from_str::<Self>(&content).path_context(path)?;
         Ok(data)
     }
 
+    /// Generates frequency data from a set of paths (files or directories).
     pub fn from_paths<P: AsRef<Path>>(
         paths: &[P],
         name: &str,
@@ -167,10 +235,12 @@ impl Data {
             .into())
     }
 
+    /// Generates frequency data from a single open file.
     pub fn from_file(file: File, name: &str, cleaner: &CorpusCleaner) -> Result<Data> {
         IntermediateData::from_file(file, name, cleaner).map(Into::into)
     }
 
+    /// Saves the frequency data to a JSON file in the specified folder.
     pub fn save<P: AsRef<Path>>(&self, folder: P) -> Result<()> {
         if self.name.is_empty() {
             return Err(OxeylyzerError::MissingDataName);
@@ -201,6 +271,7 @@ impl Data {
 
 #[cfg(target_arch = "wasm32")]
 impl Data {
+    /// Loads layout data from a URL (WASM only).
     pub async fn load(url: &str) -> Result<Self, OxeylyzerError> {
         let data = Request::get(url).send().await?.json::<Self>().await?;
         Ok(data)
