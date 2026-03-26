@@ -5,12 +5,30 @@ use serde::{Deserialize, Serialize};
 
 use crate::{fast_layout::FastLayout, *};
 
+/// Type alias representing a position index on the layout.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::layout::Pos;
+/// let pos: Pos = 5;
+/// ```
 pub type Pos = u8;
 
+/// A pair of positions on a keyboard layout.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct PosPair(pub Pos, pub Pos);
 
 impl PosPair {
+    /// Creates a new `PosPair`.
+    ///
+    /// # Examples:
+    /// ```
+    /// use oxeylyzer_core::layout::PosPair;
+    ///
+    /// let pair = PosPair::new(0, 1);
+    /// assert_eq!(pair.0, 0);
+    /// assert_eq!(pair.1, 1);
+    /// ```
     pub const fn new(a: Pos, b: Pos) -> Self {
         Self(a, b)
     }
@@ -28,29 +46,55 @@ impl std::fmt::Display for PosPair {
     }
 }
 
+/// Metadata associated with a keyboard layout.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutMetadata {
+    /// The authors of the layout.
     pub authors: Vec<String>,
+    /// The year the layout was created.
     pub year: Option<u32>,
+    /// A link to more information about the layout.
     pub link: Option<String>,
+    /// Languages supported by this layout.
     pub languages: Vec<Language>,
+    /// The anchor point for the layout.
     pub anchor: Anchor,
+    /// The name of the fingering system used.
     pub fingering_name: Option<NamedFingering>,
+    /// The parsed physical keyboard layout.
     pub parsed_board: ParseKeyboard,
 }
 
+/// A keyboard layout representation containing keys, fingers, and geometry.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(from = "Dof", into = "Dof")]
 pub struct Layout {
+    /// The name of the layout.
     pub name: String,
+    /// The characters assigned to each key.
     pub keys: Arc<[char]>,
+    /// The finger assigned to each key.
     pub fingers: Arc<[Finger]>,
+    /// The physical layout of the keyboard.
     pub keyboard: Arc<[PhysicalKey]>,
+    /// The shape of the keyboard rows.
     pub shape: Shape,
+    /// Metadata associated with the layout.
     pub metadata: Arc<LayoutMetadata>,
 }
 
 impl Layout {
+    /// Loads a layout from a JSON file. This JSON file should use the [`Dof`](libdof::Dof) format,
+    /// signified by its `.dof` extension.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::layout::Layout;
+    /// let path = "static/layouts/gust.dof";
+    ///
+    /// let layout = Layout::load(path).unwrap();
+    /// assert_eq!(layout.name, "Gust");
+    /// ```
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         let s = std::fs::read_to_string(&path).path_context(path)?;
@@ -60,6 +104,17 @@ impl Layout {
             .map_err(|e| OxeylyzerError::AnyhowError(e.into()))
     }
 
+    /// Loads a layout from a JSON file at a specific URL. This JSON file should use the
+    /// [`Dof`](libdof::Dof) format, signified by its `.dof` extension.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::layout::Layout;
+    /// let path = "static/layouts/gust.dof";
+    ///
+    /// let layout = Layout::load(path).unwrap();
+    /// assert_eq!(layout.name, "Gust");
+    /// ```
     #[cfg(target_arch = "wasm32")]
     pub async fn load(url: &str) -> Result<Self> {
         let dof = gloo_net::http::Request::get(url)

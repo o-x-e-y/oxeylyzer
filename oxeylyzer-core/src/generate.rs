@@ -13,16 +13,40 @@ use crate::layout::{Layout, PosPair};
 use crate::trigram_patterns::{TrigramPattern, get_trigram_combinations};
 use crate::weights::{AnalyzerWeights, Config};
 
+/// Data structure for holding character frequencies.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::generate::CharacterData;
+/// let data: CharacterData = Box::new([0.0; 60]);
+/// ```
 pub type CharacterData = Box<[f64]>;
+
+/// Data structure for holding bigram frequencies.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::generate::BigramData;
+/// let data: BigramData = Box::new([0.0; 3600]);
+/// ```
 pub type BigramData = Box<[f64]>;
+
+/// Data structure for holding trigram frequencies.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::generate::TrigramData;
+/// let data: TrigramData = Box::new([]);
+/// ```
 pub type TrigramData = Box<[([u8; 3], i64)]>;
 
-const SMALLEST_SCORE: i64 = i64::MIN;
+pub(crate) const SMALLEST_SCORE: i64 = i64::MIN;
 
 #[cfg(test)]
 static ANALYZED_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 #[derive(Clone, Default)]
+/// Accumulates frequencies for different trigram patterns during analysis.
 pub struct TrigramAccumulator {
     alternates: i64,
     alternates_sfs: i64,
@@ -66,41 +90,78 @@ impl TrigramAccumulator {
 }
 
 #[derive(Clone, Default)]
+/// Statistics for different trigram patterns in a layout.
 pub struct TrigramStats {
+    /// Alternating hand trigrams.
     pub alternates: f64,
+    /// Alternating hand trigrams with same-finger skip.
     pub alternates_sfs: f64,
+    /// Inward rolling trigrams.
     pub inrolls: f64,
+    /// Outward rolling trigrams.
     pub outrolls: f64,
+    /// Trigrams typed entirely on one hand.
     pub onehands: f64,
+    /// Trigrams with a change of direction on the same hand.
     pub redirects: f64,
+    /// Redirects with a same-finger skip.
     pub redirects_sfs: f64,
+    /// Uncomfortable redirect trigrams.
     pub bad_redirects: f64,
+    /// Uncomfortable redirects with same-finger skip.
     pub bad_redirects_sfs: f64,
+    /// Same-finger bigrams.
     pub sfbs: f64,
+    /// Uncomfortable same-finger bigrams.
     pub bad_sfbs: f64,
+    /// Same-finger trigrams.
     pub sfts: f64,
+    /// Trigrams involving the thumb.
     pub thumbs: f64,
+    /// Other trigram patterns not explicitly categorized.
     pub other: f64,
+    /// Invalid trigram sequences.
     pub invalid: f64,
 }
 
 #[derive(Clone)]
+/// Comprehensive statistics for a keyboard layout's performance.
 pub struct LayoutStats {
+    /// Total same-finger bigram penalty.
     pub sfb: f64,
+    /// Disjoint same-finger bigram penalty (distance 1).
     pub dsfb: f64,
+    /// Disjoint same-finger bigram penalty (distance 2).
     pub dsfb2: f64,
+    /// Disjoint same-finger bigram penalty (distance 3).
     pub dsfb3: f64,
+    /// Penalty for scissor motions.
     pub scissors: f64,
+    /// Penalty for lateral stretch bigrams.
     pub lsbs: f64,
+    /// Penalty for excessive stretches.
     pub stretches: f64,
+    /// Penalty for uncomfortable pinky-ring combinations.
     pub pinky_ring: f64,
+    /// Detailed statistics for trigram patterns.
     pub trigram_stats: TrigramStats,
+    /// Penalty for finger speed issues.
     pub fspeed: f64,
+    /// Finger speed penalties for each finger.
     pub finger_speed: [f64; 10],
+    /// The total score for the layout.
     pub score: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Cache for partial layout scores to speed up generation.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::generate::LayoutCache;
+/// let cache: LayoutCache = Default::default();
+/// assert_eq!(cache.total_score(), 0);
+/// ```
 pub struct LayoutCache {
     pinky_ring: i64,
 
@@ -115,6 +176,14 @@ pub struct LayoutCache {
 }
 
 impl LayoutCache {
+    /// Calculates the total score from the cache.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::generate::LayoutCache;
+    /// let cache: LayoutCache = Default::default();
+    /// assert_eq!(cache.total_score(), 0);
+    /// ```
     pub fn total_score(&self) -> i64 {
         self.trigrams_total
             + self.pinky_ring
@@ -126,19 +195,47 @@ impl LayoutCache {
 
 type PerCharTrigrams = HashMap<[u8; 2], TrigramData>;
 
+/// The main entry point for layout generation and analysis.
+///
+/// It holds the necessary data and weights to evaluate and optimize keyboard layouts.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::{data::Data, generate::Oxeylyzer, weights::Config};
+/// let data = Data::default();
+/// let config = Config::with_defaults();
+/// let oxeylyzer = Oxeylyzer::new(data, config);
+/// assert_eq!(oxeylyzer.language, "");
+/// ```
 pub struct Oxeylyzer {
+    /// The language or corpus name being used.
     pub language: String,
+    /// Optimized frequency data for the language.
     pub data: AnalyzerData,
+    /// Mapping between characters and internal byte representations.
     pub mapping: Arc<CharMapping>,
+    /// Precision used for trigram calculations.
     pub trigram_precision: usize,
+    /// Pre-calculated trigram patterns.
     pub trigram_patterns: Arc<[TrigramPattern; 1000]>,
 
     per_char_trigrams: PerCharTrigrams,
 
+    /// Weights used for scoring layouts.
     pub weights: AnalyzerWeights,
 }
 
 impl Oxeylyzer {
+    /// Creates a new `Oxeylyzer` instance with the provided data and configuration.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::{data::Data, generate::Oxeylyzer, weights::Config};
+    /// let data = Data::new();
+    /// let config = Config::default();
+    /// let oxeylyzer = Oxeylyzer::new(data, config);
+    /// assert_eq!(oxeylyzer.language, "");
+    /// ```
     pub fn new(data: Data, config: Config) -> Self
 where {
         let data = AnalyzerData::new(data, &config.weights);
@@ -159,6 +256,23 @@ where {
         }
     }
 
+    /// Converts a standard [`Layout`] to a [`FastLayout`].
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::{data::Data, generate::Oxeylyzer, layout::Layout, weights::Config};
+    /// let config = Config::with_defaults();
+    /// let data = Data::default();
+    /// let oxeylyzer = Oxeylyzer::new(data, config);
+    ///
+    /// let stronk = serde_json::from_str::<Layout>(include_str!(
+    ///     concat!(std::env!("CARGO_MANIFEST_DIR"), "/static/layouts/gust.dof")
+    /// )).unwrap();
+    ///
+    /// let fast_layout = oxeylyzer.fast_layout(&stronk, &[]);
+    ///
+    /// assert_eq!(fast_layout.char(0), Some(oxeylyzer.mapping.get_u(';')));
+    /// ```
     pub fn fast_layout(&self, layout: &Layout, pins: &[usize]) -> FastLayout {
         let name = Some(layout.name.clone());
 
@@ -216,6 +330,21 @@ where {
         }
     }
 
+    /// Gathers all statistics for a given layout.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::{data::Data, generate::Oxeylyzer, layout::Layout, weights::Config};
+    /// # let stronk = serde_json::from_str::<Layout>(include_str!(
+    /// #     concat!(std::env!("CARGO_MANIFEST_DIR"), "/static/layouts/gust.dof")
+    /// # )).unwrap();
+    /// let config = Config::with_defaults();
+    /// let data = Data::default();
+    /// let oxeylyzer = Oxeylyzer::new(data, config);
+    /// let fast_layout = oxeylyzer.fast_layout(&stronk /* <-- Layout */, &[]);
+    ///
+    /// let stats = oxeylyzer.get_layout_stats(&fast_layout);
+    /// ```
     pub fn get_layout_stats(&self, layout: &FastLayout) -> LayoutStats {
         let sfb = self.bigram_percent(layout, self.data.bigrams(), self.data.bigram_total);
         let dsfb = self.bigram_percent(layout, self.data.skipgrams(), self.data.skipgram_total);
@@ -257,7 +386,7 @@ where {
         }
     }
 
-    pub fn bigram_percent(&self, layout: &FastLayout, data: &[i64], total: i64) -> f64 {
+    fn bigram_percent(&self, layout: &FastLayout, data: &[i64], total: i64) -> f64 {
         let mut res = 0;
         let len = self.data.len();
 
@@ -272,6 +401,32 @@ where {
         (res as f64 / (total as f64)) * 100.0
     }
 
+    /// Gets the trigram pattern for three positions.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::{data::Data, generate::Oxeylyzer, layout::Layout, weights::Config};
+    /// # fn thing() -> Option<()> {
+    /// # let stronk = serde_json::from_str::<Layout>(include_str!(
+    /// #     concat!(std::env!("CARGO_MANIFEST_DIR"), "/static/layouts/gust.dof")
+    /// # )).unwrap();
+    /// let config = Config::with_defaults();
+    /// let data = Data::default();
+    /// let oxeylyzer = Oxeylyzer::new(data, config);
+    /// let fast_layout = oxeylyzer.fast_layout(&stronk /* <-- Layout */, &[]);
+    ///
+    /// let trigram = [
+    ///     fast_layout.char(0)?,
+    ///     fast_layout.char(1)?,
+    ///     fast_layout.char(2)?
+    /// ];
+    /// let pattern = oxeylyzer.get_trigram_pattern(&fast_layout, &trigram);
+    /// # Some(())
+    /// # }
+    /// # fn main() {
+    /// #   thing().unwrap();
+    /// # }
+    /// ```
     pub fn get_trigram_pattern(
         &self,
         layout: &FastLayout,
@@ -294,6 +449,21 @@ where {
         self.trigram_patterns[index]
     }
 
+    /// Computes trigram statistics for a layout.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::{data::Data, generate::Oxeylyzer, layout::Layout, weights::Config};
+    /// # let stronk = serde_json::from_str::<Layout>(include_str!(
+    /// #     concat!(std::env!("CARGO_MANIFEST_DIR"), "/static/layouts/gust.dof")
+    /// # )).unwrap();
+    /// let config = Config::with_defaults();
+    /// let data = Data::default();
+    /// let oxeylyzer = Oxeylyzer::new(data, config);
+    /// let fast_layout = oxeylyzer.fast_layout(&stronk /* <-- Layout */, &[]);
+    ///
+    /// let stats = oxeylyzer.trigram_stats(&fast_layout, 1000);
+    /// ```
     pub fn trigram_stats(
         &self,
         layout: &FastLayout,
@@ -325,6 +495,23 @@ where {
         freqs
     }
 
+    /// Calculates the total score for a given layout.
+    ///
+    /// Higher scores generally indicate better layouts according to the weights.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::{data::Data, generate::Oxeylyzer, layout::Layout, weights::Config};
+    /// # let stronk = serde_json::from_str::<Layout>(include_str!(
+    /// #     concat!(std::env!("CARGO_MANIFEST_DIR"), "/static/layouts/gust.dof")
+    /// # )).unwrap();
+    /// let config = Config::with_defaults();
+    /// let data = Data::default();
+    /// let oxeylyzer = Oxeylyzer::new(data, config);
+    /// let fast_layout = oxeylyzer.fast_layout(&stronk /* <-- Layout */, &[]);
+    ///
+    /// let score = oxeylyzer.score(&fast_layout);
+    /// ```
     pub fn score(&self, layout: &FastLayout) -> i64 {
         #[cfg(test)]
         ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -338,6 +525,38 @@ where {
         let trigram_score = self.trigram_score_iter(layout, self.data.gen_trigrams());
 
         trigram_score + fspeed_usage + pinky_ring
+    }
+
+    /// Calculates the total score for a given layout.
+    ///
+    /// Higher scores generally indicate better layouts according to the weights.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::{data::Data, generate::Oxeylyzer, layout::Layout, weights::Config};
+    /// # let stronk = serde_json::from_str::<Layout>(include_str!(
+    /// #     concat!(std::env!("CARGO_MANIFEST_DIR"), "/static/layouts/gust.dof")
+    /// # )).unwrap();
+    /// let config = Config::with_defaults();
+    /// let data = Data::default();
+    /// let oxeylyzer = Oxeylyzer::new(data, config);
+    /// let fast_layout = oxeylyzer.fast_layout(&stronk /* <-- Layout */, &[]);
+    ///
+    /// let score = oxeylyzer.score_with_precision(&fast_layout, 1000);
+    /// ```
+    pub fn score_with_precision(&self, layout: &FastLayout, trigram_precision: usize) -> i64 {
+        let fspeed_usage = Finger::FINGERS
+            .into_iter()
+            .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
+            .sum::<i64>();
+
+        let pinky_ring = self.pinky_ring_score(layout);
+
+        let trigram_iter = self.data.gen_trigrams().iter().take(trigram_precision);
+        let trigram_score = self.trigram_score_iter(layout, trigram_iter);
+        let stretch_score = self.stretch_score(layout);
+
+        trigram_score + stretch_score + fspeed_usage + pinky_ring
     }
 
     fn per_char_trigrams(
@@ -509,6 +728,7 @@ where {
             }
     }
 
+    /// Computes the same-finger bigram penalty for a pair.
     pub fn pair_sfb(&self, layout: &FastLayout, bigram_pair: &BigramPair) -> i64 {
         let BigramPair {
             pair: PosPair(p1, p2),
@@ -525,6 +745,7 @@ where {
     }
 
     #[inline]
+    /// Computes the finger speed penalty for a pair.
     pub fn pair_fspeed(&self, layout: &FastLayout, bigram_pair: &BigramPair) -> i64 {
         let BigramPair {
             pair: PosPair(p1, p2),
@@ -550,6 +771,7 @@ where {
             .sum()
     }
 
+    /// Computes the stretch penalty including a specific pair.
     pub fn stretches_including_pair(&self, layout: &FastLayout, pair: &PosPair) -> i64 {
         layout
             .stretch_indices
@@ -565,6 +787,7 @@ where {
     }
 
     #[inline]
+    /// Computes the stretch penalty for a specific bigram pair.
     pub fn pair_stretch(&self, layout: &FastLayout, pair: &BigramPair) -> i64 {
         let BigramPair {
             pair: PosPair(p1, p2),
@@ -580,6 +803,7 @@ where {
         }
     }
 
+    /// Initializes the score cache for a layout ([`LayoutCache`]).
     pub fn initialize_cache(&self, layout: &FastLayout) -> LayoutCache {
         #[cfg(test)]
         ANALYZED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -605,6 +829,8 @@ where {
         res
     }
 
+    /// Scores a potential key swap using the cache. This does not update the cache, but instead
+    /// uses the cache to calculate the potential new score quickly.
     pub fn score_swap_cached(
         &self,
         layout: &mut FastLayout,
@@ -678,6 +904,7 @@ where {
         Some(trigrams_score + pinky_ring_score + stretch_score + usage_score + fspeed_score)
     }
 
+    /// Accepts a swap and updates the cache according to the new score.
     pub fn accept_swap(
         &self,
         layout: &mut FastLayout,
@@ -756,6 +983,9 @@ where {
         Some(cache.total_score())
     }
 
+    /// Finds the best possible swap using the cache. This uses the `.possible_swaps` field on
+    /// the [`FastLayout`] that is put in. It returns the swap and the new score if it did find a
+    /// swap that was better.
     pub fn best_swap_cached(
         &self,
         layout: &mut FastLayout,
@@ -806,10 +1036,14 @@ where {
         layout
     }
 
+    /// Generates an optimized layout starting from a basis.
     pub fn generate(&self, basis: &FastLayout) -> FastLayout {
         self.generate_with_pins(basis, &[])
     }
 
+    /// Generates an optimized layout keeping specific keys pinned to specific positions, starting
+    /// from a basis. The finger map, number of keys and their contents and such are used to create
+    /// the new layout. Returns the optimized [`FastLayout`].
     pub fn generate_with_pins(&self, based_on: &FastLayout, pins: &[usize]) -> FastLayout {
         let mut layout = based_on.clone();
 
@@ -827,6 +1061,8 @@ where {
         self.optimize(layout.random_with_pins(pins))
     }
 
+    /// Generates multiple optimized layouts in parallel. Returns the
+    /// [`ParallelIterator`](rayon::prelude::ParallelIterator) that yields those optimized layouts.
     pub fn generate_n_iter<'a>(
         &'a self,
         amount: usize,
@@ -835,6 +1071,8 @@ where {
         self.generate_n_with_pins_iter(amount, based_on, &[])
     }
 
+    /// Generates multiple optimized layouts in parallel with pinned keys. Returns the
+    /// [`ParallelIterator`](rayon::prelude::ParallelIterator) that yields those optimized layouts.
     pub fn generate_n_with_pins_iter<'a>(
         &'a self,
         amount: usize,
