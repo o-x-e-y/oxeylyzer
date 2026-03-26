@@ -5,63 +5,129 @@ use std::path::{Path, PathBuf};
 
 use crate::{OxeylyzerError, OxeylyzerResultExt, Result};
 
+/// Configuration for penalizing excessive finger usage.
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct MaxFingerUse {
+    /// The penalty multiplier applied when a finger exceeds its usage limit.
     pub penalty: f64,
+    /// Maximum usage threshold for the pinky finger.
     pub pinky: f64,
+    /// Maximum usage threshold for the ring finger.
     pub ring: f64,
+    /// Maximum usage threshold for the middle finger.
     pub middle: f64,
+    /// Maximum usage threshold for the index finger.
     pub index: f64,
+    /// Maximum usage threshold for the thumb.
     pub thumb: f64,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
+/// Holds weights used for calculating various layout penalties and rewards.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::weights::Weights;
+/// let weights = Weights::default();
+/// ```
 pub struct Weights {
+    /// Penalty for lateral stretches.
     pub lateral_penalty: f64,
+    /// Penalty for same-finger bigrams.
     pub sfbs: f64,
+    /// Penalty for same-finger skips.
     pub sfs: f64,
+    /// Penalty for finger stretches.
     pub stretches: f64,
+    /// Penalty for pinky-ring bigrams.
     pub pinky_ring_bigrams: f64,
+    /// Reward for inward rolls.
     pub inrolls: f64,
+    /// Reward for outward rolls.
     pub outrolls: f64,
+    /// Reward/penalty for one-handed trigrams.
     pub onehands: f64,
+    /// Reward for alternating hands.
     pub alternates: f64,
+    /// Reward for alternating hands with same-finger skip.
     pub alternates_sfs: f64,
+    /// Penalty for hand redirects.
     pub redirects: f64,
+    /// Penalty for redirects with same-finger skip.
     pub redirects_sfs: f64,
+    /// Penalty for uncomfortable hand redirects.
     pub bad_redirects: f64,
+    /// Penalty for uncomfortable redirects with same-finger skip.
     pub bad_redirects_sfs: f64,
+    /// Maximum usage thresholds for fingers.
     pub max_finger_use: MaxFingerUse,
+    /// Specific weights for each finger.
     pub finger_weights: FingerWeights,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
+/// Max finger usage thresholds scaled for internal calculations.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::weights::AnalyzerMaxFingerUse;
+/// let analyzer = AnalyzerMaxFingerUse::default();
+/// ```
 pub struct AnalyzerMaxFingerUse {
+    /// Scaled penalty multiplier.
     pub penalty: i64,
+    /// Scaled max pinky usage.
     pub pinky: i64,
+    /// Scaled max ring usage.
     pub ring: i64,
+    /// Scaled max middle usage.
     pub middle: i64,
+    /// Scaled max index usage.
     pub index: i64,
+    /// Scaled max thumb usage.
     pub thumb: i64,
 }
 
 #[derive(Deserialize, Clone, Debug, Default)]
+/// Analyzer weights scaled for internal integer calculations.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::weights::AnalyzerWeights;
+/// let analyzer = AnalyzerWeights::default();
+/// ```
 pub struct AnalyzerWeights {
+    /// Scaled lateral penalty.
     pub lateral_penalty: i64,
+    /// Scaled SFB penalty.
     pub sfbs: i64,
+    /// Scaled SFS penalty.
     pub sfs: i64,
+    /// Scaled stretch penalty.
     pub stretches: i64,
+    /// Scaled pinky-ring bigram penalty.
     pub pinky_ring_bigrams: i64,
+    /// Scaled inroll reward.
     pub inrolls: i64,
+    /// Scaled outroll reward.
     pub outrolls: i64,
+    /// Scaled onehand penalty.
     pub onehands: i64,
+    /// Scaled alternates reward.
     pub alternates: i64,
+    /// Scaled alternates with SFS reward.
     pub alternates_sfs: i64,
+    /// Scaled redirects penalty.
     pub redirects: i64,
+    /// Scaled redirects with SFS penalty.
     pub redirects_sfs: i64,
+    /// Scaled bad redirects penalty.
     pub bad_redirects: i64,
+    /// Scaled bad redirects with SFS penalty.
     pub bad_redirects_sfs: i64,
+    /// Specific weights for each finger.
     pub finger_weights: FingerWeights,
+    /// Max finger usage thresholds.
     pub max_finger_use: AnalyzerMaxFingerUse,
 }
 
@@ -101,23 +167,50 @@ impl From<Weights> for AnalyzerWeights {
 
 #[serde_as]
 #[derive(Debug, Clone, Default, Deserialize)]
+/// Configuration for the layout generation.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::weights::Config;
+/// let config = Config::default();
+/// ```
 pub struct Config {
+    /// Path to the corpus file.
     pub corpus: PathBuf,
     #[serde_as(as = "OneOrMany<_>")]
+    /// Paths to layout files.
     pub layouts: Vec<PathBuf>,
+    /// Path to the corpus configurations directory.
     pub corpus_configs: PathBuf,
+    /// Scaling factor for trigram precision.
     pub trigram_precision: usize,
+    /// Max number of threads/cores to use.
     pub max_cores: usize,
+    /// Configured weights for the generator.
     pub weights: Weights,
 }
 
 impl Config {
+    /// Loads a configuration from a file path.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::weights::Config;
+    /// let config = Config::with_loaded_weights("config.toml");
+    /// ```
     pub fn with_loaded_weights<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = std::fs::read_to_string(&path).path_context(&path)?;
 
         toml::from_str::<Self>(&content).path_context(path)
     }
 
+    /// Creates a configuration with default values.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::weights::Config;
+    /// let config = Config::with_defaults();
+    /// ```
     pub fn with_defaults() -> Self {
         Self {
             corpus: PathBuf::from("./static/language_data/english.json"),
@@ -164,10 +257,25 @@ impl Config {
         }
     }
 
+    /// Gets the trigram precision.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::weights::Config;
+    /// let precision = Config::default().trigram_precision();
+    /// ```
     pub fn trigram_precision(&self) -> usize {
         self.trigram_precision
     }
 
+    /// Retrieves the name of the configured corpus.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::weights::Config;
+    /// let config = Config::default();
+    /// let corpus_name = config.corpus_name();
+    /// ```
     pub fn corpus_name(&self) -> Result<String> {
         self.corpus
             .file_stem()
@@ -177,21 +285,47 @@ impl Config {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Relative weights applied to each finger.
+///
+/// # Examples:
+/// ```
+/// # use oxeylyzer_core::weights::FingerWeights;
+/// let finger_weights = FingerWeights::default();
+/// ```
 pub struct FingerWeights {
+    /// Left pinky weight.
     pub lp: f64,
+    /// Left ring weight.
     pub lr: f64,
+    /// Left middle weight.
     pub lm: f64,
+    /// Left index weight.
     pub li: f64,
+    /// Left thumb weight.
     pub lt: f64,
+    /// Right thumb weight.
     pub rt: f64,
+    /// Right index weight.
     pub ri: f64,
+    /// Right middle weight.
     pub rm: f64,
+    /// Right ring weight.
     pub rr: f64,
+    /// Right pinky weight.
     pub rp: f64,
 }
 
 impl FingerWeights {
     #[inline]
+    /// Gets the weight of a specific finger.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::weights::FingerWeights;
+    /// # use libdof::prelude::Finger;
+    /// let weights = FingerWeights::default();
+    /// let val = weights.get(Finger::LI);
+    /// ```
     pub const fn get(&self, f: Finger) -> f64 {
         use Finger::*;
 
@@ -210,6 +344,13 @@ impl FingerWeights {
     }
 
     #[inline]
+    /// Computes the maximum finger weight.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::weights::FingerWeights;
+    /// let max_val = FingerWeights::default().max();
+    /// ```
     pub fn max(&self) -> f64 {
         Finger::FINGERS
             .into_iter()

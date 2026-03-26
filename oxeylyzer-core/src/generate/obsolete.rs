@@ -1,41 +1,16 @@
-use libdof::prelude::Finger;
-
 use crate::{
     fast_layout::*,
     generate::{Oxeylyzer, SMALLEST_SCORE},
     layout::PosPair,
 };
 
+#[cfg(test)]
+use libdof::prelude::Finger;
+
 impl Oxeylyzer {
-    #[allow(dead_code)]
-    pub(crate) fn score_with_precision(
-        &self,
-        layout: &FastLayout,
-        trigram_precision: usize,
-    ) -> i64 {
-        let fspeed_usage = Finger::FINGERS
-            .into_iter()
-            .map(|f| self.finger_usage(layout, f) + self.finger_fspeed(layout, f))
-            .sum::<i64>();
-
-        let pinky_ring = self.pinky_ring_score(layout);
-
-        let trigram_iter = self.data.gen_trigrams().iter().take(trigram_precision);
-        let trigram_score = self.trigram_score_iter(layout, trigram_iter);
-        let stretch_score = self.stretch_score(layout);
-
-        trigram_score + stretch_score + fspeed_usage + pinky_ring
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> i64 {
-        layout.swap_pair(swap);
-        let score = self.score_with_precision(layout, self.trigram_precision);
-        layout.swap_pair(swap);
-        score
-    }
-
-    #[allow(dead_code)]
+    /// Finds the best possible swap without using the cache. This uses the `.possible_swaps` field
+    /// on the [`FastLayout`] that is put in. It returns the swap and the new score if it did find a
+    /// swap that was better.
     pub fn best_swap(
         &self,
         layout: &mut FastLayout,
@@ -57,7 +32,16 @@ impl Oxeylyzer {
         (best_swap, best_score)
     }
 
-    #[allow(dead_code)]
+    pub(crate) fn score_swap(&self, layout: &mut FastLayout, swap: &PosPair) -> i64 {
+        layout.swap_pair(swap);
+        let score = self.score_with_precision(layout, self.trigram_precision);
+        layout.swap_pair(swap);
+        score
+    }
+}
+
+#[cfg(test)]
+impl Oxeylyzer {
     pub(crate) fn optimize_normal_no_cols(&self, mut layout: FastLayout) -> FastLayout {
         let mut current_best_score = SMALLEST_SCORE;
         let possible_swaps = std::mem::take(&mut layout.possible_swaps);
@@ -74,7 +58,6 @@ impl Oxeylyzer {
         layout
     }
 
-    #[allow(dead_code)]
     pub(crate) fn usage_score(&self, layout: &FastLayout) -> i64 {
         Finger::FINGERS
             .into_iter()
@@ -82,7 +65,6 @@ impl Oxeylyzer {
             .sum()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn fspeed_score(&self, layout: &FastLayout) -> i64 {
         Finger::FINGERS
             .into_iter()
