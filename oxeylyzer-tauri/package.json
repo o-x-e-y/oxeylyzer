@@ -1,0 +1,27 @@
+{
+  "name": "oxeylyzer",
+  "version": "0.1.0",
+  "description": "A web frontend for Oxeylyzer, a keyboard layout analyzer",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "tauri": "tauri"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "solid-js": "^1.9.3",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3",
+    "vite-plugin-solid": "^2.11.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "tailwindcss": "^4.2.2",
+    "@tauri-apps/cli": "^2"
+  }
+}
