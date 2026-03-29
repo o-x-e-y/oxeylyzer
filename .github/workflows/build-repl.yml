@@ -1,0 +1,46 @@
+name: Release REPL
+
+on:
+  push:
+    tags: [ "v*" ]
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: oxeylyzer
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: oxeylyzer.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: oxeylyzer
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build
+        run: cargo build --release --bin oxeylyzer --target ${{ matrix.target }}
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: target/${{ matrix.target }}/release/${{ matrix.artifact }}
