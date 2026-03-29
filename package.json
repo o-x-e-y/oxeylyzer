@@ -2,7 +2,7 @@
   "description": "Script aliasing to be able to run things from the project root",
   "scripts": {
     "dev": "cd oxeylyzer-tauri && bun tauri dev",
-    "build": "cd oxeylyzer-tauri && bun tauri build",
+    "build-tauri": "cd oxeylyzer-tauri && bun tauri build",
     "install": "cd oxeylyzer-tauri && bun install"
   }
 }
