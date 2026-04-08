@@ -1,1 +1,5 @@
-@import 'tailwindcss';
+@import "tailwindcss";
+
+@utility br {
+    box-shadow: inset 0px 0px 0px 1px red;
+}
