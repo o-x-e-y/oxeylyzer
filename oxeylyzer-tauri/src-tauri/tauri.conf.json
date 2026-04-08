@@ -15,7 +15,8 @@
         "title": "Oxeylyzer",
         "width": 800,
         "height": 600,
-        "maximized": true
+        "maximized": true,
+        "decorations": false
       }
     ],
     "security": {
@@ -25,9 +26,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": [
-      "icons/icon.png",
-      "icons/icon.ico"
-    ]
+    "icon": ["icons/icon.png", "icons/icon.ico"]
   }
 }
