@@ -3,32 +3,35 @@ import KeyboardDisplay from "../components/KeyboardDisplay";
 import { MOCK_LAYOUTS } from "../mock";
 import type { Layout } from "../mock";
 
-function CompareStatRow(props: { label: string; v1: string; v2: string; dim?: boolean }) {
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function CRow(props: { label: string; v1: string; v2: string; dim?: boolean }) {
+    const lc = () => (props.dim ? "text-neutral-500" : "text-neutral-400");
+    const vc = () => (props.dim ? "text-neutral-500" : "text-neutral-100");
     return (
-        <div class="flex gap-2 py-0.5 text-sm font-mono">
-            <span class={`w-44 text-right ${props.dim ? "text-neutral-500" : "text-neutral-400"}`}>
-                {props.label}
-            </span>
-            <span class={`w-20 text-right ${props.dim ? "text-neutral-500" : "text-neutral-100"}`}>
-                {props.v1}
-            </span>
-            <span class={`w-20 text-right ${props.dim ? "text-neutral-500" : "text-neutral-100"}`}>
-                {props.v2}
-            </span>
+        <div class="flex gap-2 font-mono text-sm py-px">
+            <span class={`w-36 shrink-0 ${lc()}`}>{props.label}</span>
+            <span class={`w-20 text-right shrink-0 ${vc()}`}>{props.v1}</span>
+            <span class={`w-20 text-right shrink-0 ${vc()}`}>{props.v2}</span>
         </div>
     );
 }
 
-function StatSection(props: { title: string; children: any }) {
+function CHeader(props: { name1: string; name2: string }) {
     return (
-        <div class="mb-3">
-            <div class="text-xs text-neutral-500 uppercase tracking-widest mb-1 pl-46">
-                {props.title}
-            </div>
-            {props.children}
+        <div class="flex gap-2 font-mono text-xs text-neutral-500 pb-1 mb-0.5 border-b border-neutral-600">
+            <span class="w-36 shrink-0" />
+            <span class="w-20 text-right shrink-0 truncate">{props.name1}</span>
+            <span class="w-20 text-right shrink-0 truncate">{props.name2}</span>
         </div>
     );
 }
+
+function CSep() {
+    return <div class="border-t border-neutral-700 my-1.5" />;
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function CompareView() {
     const layoutNames = () => MOCK_LAYOUTS.map((l) => l.name);
@@ -43,19 +46,18 @@ export default function CompareView() {
     const getLayout = (name: string) =>
         MOCK_LAYOUTS.find((l) => l.name === name) ?? MOCK_LAYOUTS[0];
 
-    const handleCompare = () => {
-        setCompared([getLayout(name1()), getLayout(name2())]);
-    };
+    const handleCompare = () => setCompared([getLayout(name1()), getLayout(name2())]);
 
     const pct = (v: number) => `${v.toFixed(3)}%`;
     const num = (v: number) => v.toFixed(3);
+    const sum = (...vs: number[]) => `${vs.reduce((a, b) => a + b, 0).toFixed(3)}%`;
 
     return (
-        <div class="flex flex-col gap-4 max-w-4xl">
-            <h1 class="text-lg font-mono text-neutral-300">Compare</h1>
+        <div class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4">
+            <h1 class="text-lg font-mono text-neutral-300 shrink-0">Compare</h1>
 
-            {/* Pickers */}
-            <div class="flex gap-3 items-end">
+            {/* ── Pickers ──────────────────────────────────────────── */}
+            <div class="flex gap-3 items-end shrink-0">
                 <div class="flex flex-col gap-1">
                     <label class="text-xs text-neutral-500 font-mono uppercase tracking-widest">
                         Layout 1
@@ -94,173 +96,153 @@ export default function CompareView() {
                 </button>
             </div>
 
+            {/* ── Compared content ─────────────────────────────────── */}
             <Show when={compared()} keyed>
-                {([l1, l2]) => (
-                    <div class="flex flex-col gap-6">
-                        {/* Keyboards side by side */}
-                        <div class="flex gap-16">
-                            <div class="flex flex-col gap-2">
-                                <div class="font-mono text-neutral-200">{l1.name}</div>
-                                <KeyboardDisplay keys={l1.keys} />
+                {([l1, l2]) => {
+                    const s1 = l1.stats;
+                    const s2 = l2.stats;
+                    return (
+                        <div class="flex flex-col gap-6">
+                            {/* Keyboards */}
+                            <div class="flex gap-16 items-start">
+                                <div class="flex flex-col gap-2">
+                                    <div class="font-mono text-neutral-200">{l1.name}</div>
+                                    <KeyboardDisplay keys={l1.keys} />
+                                </div>
+                                <div class="flex flex-col gap-2">
+                                    <div class="font-mono text-neutral-200">{l2.name}</div>
+                                    <KeyboardDisplay keys={l2.keys} />
+                                </div>
                             </div>
-                            <div class="flex flex-col gap-2">
-                                <div class="font-mono text-neutral-200">{l2.name}</div>
-                                <KeyboardDisplay keys={l2.keys} />
+
+                            {/* Stats — two independent comparison columns */}
+                            <div class="grid grid-cols-2 gap-x-16 items-start">
+                                {/* ── Left col: Basic + Position Bigrams ── */}
+                                <div>
+                                    <CHeader name1={l1.name} name2={l2.name} />
+
+                                    <CRow label="Sfb" v1={pct(s1.sfb)} v2={pct(s2.sfb)} />
+                                    <CRow label="Dsfb" v1={pct(s1.dsfb)} v2={pct(s2.dsfb)} />
+                                    <CRow label="Fspeed" v1={num(s1.fspeed)} v2={num(s2.fspeed)} />
+                                    <CRow label="Score" v1={num(s1.score)} v2={num(s2.score)} />
+
+                                    <CSep />
+
+                                    <CRow
+                                        label="Stretches"
+                                        v1={pct(s1.stretches)}
+                                        v2={pct(s2.stretches)}
+                                    />
+                                    <CRow
+                                        label="Scissors"
+                                        v1={pct(s1.scissors)}
+                                        v2={pct(s2.scissors)}
+                                    />
+                                    <CRow label="LSBs" v1={pct(s1.lsbs)} v2={pct(s2.lsbs)} />
+                                    <CRow
+                                        label="Pinky-Ring"
+                                        v1={pct(s1.pinky_ring)}
+                                        v2={pct(s2.pinky_ring)}
+                                    />
+                                </div>
+
+                                {/* ── Right col: Rolls + Alternation + Redirects + Misc ── */}
+                                <div>
+                                    <CHeader name1={l1.name} name2={l2.name} />
+
+                                    <CRow
+                                        label="Inrolls"
+                                        v1={pct(s1.inrolls)}
+                                        v2={pct(s2.inrolls)}
+                                    />
+                                    <CRow
+                                        label="Outrolls"
+                                        v1={pct(s1.outrolls)}
+                                        v2={pct(s2.outrolls)}
+                                    />
+                                    <CRow
+                                        label="Total Rolls"
+                                        v1={sum(s1.inrolls, s1.outrolls)}
+                                        v2={sum(s2.inrolls, s2.outrolls)}
+                                        dim
+                                    />
+                                    <CRow
+                                        label="Onehands"
+                                        v1={pct(s1.onehands)}
+                                        v2={pct(s2.onehands)}
+                                    />
+
+                                    <CSep />
+
+                                    <CRow
+                                        label="Alternates"
+                                        v1={pct(s1.alternates)}
+                                        v2={pct(s2.alternates)}
+                                    />
+                                    <CRow
+                                        label="Alt. (sfs)"
+                                        v1={pct(s1.alternates_sfs)}
+                                        v2={pct(s2.alternates_sfs)}
+                                    />
+                                    <CRow
+                                        label="Total Alt."
+                                        v1={sum(s1.alternates, s1.alternates_sfs)}
+                                        v2={sum(s2.alternates, s2.alternates_sfs)}
+                                        dim
+                                    />
+
+                                    <CSep />
+
+                                    <CRow
+                                        label="Redirects"
+                                        v1={pct(s1.redirects)}
+                                        v2={pct(s2.redirects)}
+                                    />
+                                    <CRow
+                                        label="Redir. Sfs"
+                                        v1={pct(s1.redirects_sfs)}
+                                        v2={pct(s2.redirects_sfs)}
+                                    />
+                                    <CRow
+                                        label="Bad Redir."
+                                        v1={pct(s1.bad_redirects)}
+                                        v2={pct(s2.bad_redirects)}
+                                    />
+                                    <CRow
+                                        label="Bad Redir. Sfs"
+                                        v1={pct(s1.bad_redirects_sfs)}
+                                        v2={pct(s2.bad_redirects_sfs)}
+                                    />
+                                    <CRow
+                                        label="Total Redir."
+                                        v1={sum(
+                                            s1.redirects,
+                                            s1.redirects_sfs,
+                                            s1.bad_redirects,
+                                            s1.bad_redirects_sfs,
+                                        )}
+                                        v2={sum(
+                                            s2.redirects,
+                                            s2.redirects_sfs,
+                                            s2.bad_redirects,
+                                            s2.bad_redirects_sfs,
+                                        )}
+                                        dim
+                                    />
+
+                                    <CSep />
+
+                                    <CRow
+                                        label="Bad Sfbs"
+                                        v1={pct(s1.bad_sfbs)}
+                                        v2={pct(s2.bad_sfbs)}
+                                    />
+                                    <CRow label="Sft" v1={pct(s1.sfts)} v2={pct(s2.sfts)} />
+                                </div>
                             </div>
                         </div>
-
-                        {/* Stats comparison */}
-                        <div class="border border-neutral-700 p-4">
-                            {/* Header row */}
-                            <div class="flex gap-2 mb-3 text-xs text-neutral-500 font-mono uppercase tracking-widest">
-                                <span class="w-44 text-right">Metric</span>
-                                <span class="w-20 text-right">{l1.name}</span>
-                                <span class="w-20 text-right">{l2.name}</span>
-                            </div>
-
-                            <StatSection title="Basic">
-                                <CompareStatRow
-                                    label="Sfb"
-                                    v1={pct(l1.stats.sfb)}
-                                    v2={pct(l2.stats.sfb)}
-                                />
-                                <CompareStatRow
-                                    label="Dsfb"
-                                    v1={pct(l1.stats.dsfb)}
-                                    v2={pct(l2.stats.dsfb)}
-                                />
-                                <CompareStatRow
-                                    label="Finger Speed"
-                                    v1={num(l1.stats.fspeed)}
-                                    v2={num(l2.stats.fspeed)}
-                                />
-                                <CompareStatRow
-                                    label="Score"
-                                    v1={num(l1.stats.score)}
-                                    v2={num(l2.stats.score)}
-                                />
-                            </StatSection>
-
-                            <StatSection title="Position Bigrams">
-                                <CompareStatRow
-                                    label="Stretches"
-                                    v1={pct(l1.stats.stretches)}
-                                    v2={pct(l2.stats.stretches)}
-                                />
-                                <CompareStatRow
-                                    label="Scissors"
-                                    v1={pct(l1.stats.scissors)}
-                                    v2={pct(l2.stats.scissors)}
-                                />
-                                <CompareStatRow
-                                    label="LSBs"
-                                    v1={pct(l1.stats.lsbs)}
-                                    v2={pct(l2.stats.lsbs)}
-                                />
-                                <CompareStatRow
-                                    label="Pinky-Ring"
-                                    v1={pct(l1.stats.pinky_ring)}
-                                    v2={pct(l2.stats.pinky_ring)}
-                                />
-                            </StatSection>
-
-                            <StatSection title="Rolls">
-                                <CompareStatRow
-                                    label="Inrolls"
-                                    v1={pct(l1.stats.inrolls)}
-                                    v2={pct(l2.stats.inrolls)}
-                                />
-                                <CompareStatRow
-                                    label="Outrolls"
-                                    v1={pct(l1.stats.outrolls)}
-                                    v2={pct(l2.stats.outrolls)}
-                                />
-                                <CompareStatRow
-                                    label="Total Rolls"
-                                    v1={pct(l1.stats.inrolls + l1.stats.outrolls)}
-                                    v2={pct(l2.stats.inrolls + l2.stats.outrolls)}
-                                    dim
-                                />
-                                <CompareStatRow
-                                    label="Onehands"
-                                    v1={pct(l1.stats.onehands)}
-                                    v2={pct(l2.stats.onehands)}
-                                />
-                            </StatSection>
-
-                            <StatSection title="Alternation">
-                                <CompareStatRow
-                                    label="Alternates"
-                                    v1={pct(l1.stats.alternates)}
-                                    v2={pct(l2.stats.alternates)}
-                                />
-                                <CompareStatRow
-                                    label="Alternates (sfs)"
-                                    v1={pct(l1.stats.alternates_sfs)}
-                                    v2={pct(l2.stats.alternates_sfs)}
-                                />
-                                <CompareStatRow
-                                    label="Total Alternates"
-                                    v1={pct(l1.stats.alternates + l1.stats.alternates_sfs)}
-                                    v2={pct(l2.stats.alternates + l2.stats.alternates_sfs)}
-                                    dim
-                                />
-                            </StatSection>
-
-                            <StatSection title="Redirects">
-                                <CompareStatRow
-                                    label="Redirects"
-                                    v1={pct(l1.stats.redirects)}
-                                    v2={pct(l2.stats.redirects)}
-                                />
-                                <CompareStatRow
-                                    label="Redirects Sfs"
-                                    v1={pct(l1.stats.redirects_sfs)}
-                                    v2={pct(l2.stats.redirects_sfs)}
-                                />
-                                <CompareStatRow
-                                    label="Bad Redirects"
-                                    v1={pct(l1.stats.bad_redirects)}
-                                    v2={pct(l2.stats.bad_redirects)}
-                                />
-                                <CompareStatRow
-                                    label="Bad Redirects Sfs"
-                                    v1={pct(l1.stats.bad_redirects_sfs)}
-                                    v2={pct(l2.stats.bad_redirects_sfs)}
-                                />
-                                <CompareStatRow
-                                    label="Total Redirects"
-                                    v1={pct(
-                                        l1.stats.redirects +
-                                            l1.stats.redirects_sfs +
-                                            l1.stats.bad_redirects +
-                                            l1.stats.bad_redirects_sfs,
-                                    )}
-                                    v2={pct(
-                                        l2.stats.redirects +
-                                            l2.stats.redirects_sfs +
-                                            l2.stats.bad_redirects +
-                                            l2.stats.bad_redirects_sfs,
-                                    )}
-                                    dim
-                                />
-                            </StatSection>
-
-                            <StatSection title="Misc">
-                                <CompareStatRow
-                                    label="Bad Sfbs"
-                                    v1={pct(l1.stats.bad_sfbs)}
-                                    v2={pct(l2.stats.bad_sfbs)}
-                                />
-                                <CompareStatRow
-                                    label="Sft"
-                                    v1={pct(l1.stats.sfts)}
-                                    v2={pct(l2.stats.sfts)}
-                                />
-                            </StatSection>
-                        </div>
-                    </div>
-                )}
+                    );
+                }}
             </Show>
         </div>
     );

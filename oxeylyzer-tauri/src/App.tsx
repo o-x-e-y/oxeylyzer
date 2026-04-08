@@ -47,7 +47,7 @@ function App() {
             </nav>
 
             {/* ── Main content ────────────────────────────────── */}
-            <main class="flex-1 overflow-auto p-4">
+            <main class="flex-1 overflow-hidden flex flex-col p-4">
                 <Switch>
                     <Match when={view() === "layouts"}>
                         <LayoutsView onAnalyze={goAnalyze} />
