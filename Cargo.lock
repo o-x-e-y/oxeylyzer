@@ -2857,6 +2857,8 @@ dependencies = [
 name = "oxeylyzer-tauri"
 version = "0.1.0"
 dependencies = [
+ "glob",
+ "oxeylyzer-core",
  "serde",
  "serde_json",
  "tauri",

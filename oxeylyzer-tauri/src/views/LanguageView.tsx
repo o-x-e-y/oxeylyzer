@@ -1,76 +1,86 @@
 import { createSignal, For, Show } from "solid-js";
-import { MOCK_LANGUAGES, MOCK_NGRAM_RESULTS, type NgramResult } from "../mock";
+import { appStore, initStore } from "../store";
+import { setLanguage, loadCorpus, lookupNgram, reloadConfig } from "../api";
+import type { NgramResult } from "../mock";
 
 export default function LanguageView() {
-    const [language, setLanguage] = createSignal("english");
-    const [pendingLanguage, setPendingLanguage] = createSignal("english");
+    const [pendingLanguage, setPendingLanguage] = createSignal(
+        appStore.currentLanguage || "english",
+    );
+    const [settingLang, setSettingLang] = createSignal(false);
 
-    // Load corpus
     const [loadLang, setLoadLang] = createSignal("");
     const [rawFlag, setRawFlag] = createSignal(false);
-    const [allFlag, setAllFlag] = createSignal(false);
     const [loadMsg, setLoadMsg] = createSignal<string | null>(null);
+    const [loadError, setLoadError] = createSignal<string | null>(null);
+    const [loadRunning, setLoadRunning] = createSignal(false);
 
-    // Ngram lookup
     const [ngramInput, setNgramInput] = createSignal("");
     const [ngramResult, setNgramResult] = createSignal<NgramResult | null>(null);
     const [ngramError, setNgramError] = createSignal("");
 
-    // Reload
     const [reloadMsg, setReloadMsg] = createSignal<string | null>(null);
+    const [reloading, setReloading] = createSignal(false);
 
-    function handleSetLanguage() {
-        if (MOCK_LANGUAGES.includes(pendingLanguage())) {
-            setLanguage(pendingLanguage());
+    async function handleSetLanguage() {
+        setSettingLang(true);
+        try {
+            await setLanguage(pendingLanguage());
+            await initStore();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setSettingLang(false);
         }
     }
 
-    function handleLoad() {
+    async function handleLoad() {
         const lang = loadLang().trim();
         if (!lang) return;
-        setLoadMsg(
-            `Loaded corpus for "${lang}"${rawFlag() ? " (--raw)" : ""}${allFlag() ? " (--all)" : ""}.`,
-        );
+        setLoadRunning(true);
+        setLoadMsg(null);
+        setLoadError(null);
+        try {
+            const msg = await loadCorpus(lang, rawFlag());
+            setLoadMsg(msg);
+            // Refresh languages list
+            await initStore();
+        } catch (e) {
+            setLoadError(String(e));
+        } finally {
+            setLoadRunning(false);
+        }
     }
 
-    function handleNgramLookup() {
+    async function handleNgramLookup() {
         const ng = ngramInput().trim();
         setNgramError("");
         setNgramResult(null);
-
-        if (ng.length === 0) return;
-
+        if (!ng) return;
         if (ng.length > 3) {
             setNgramError(`Ngram length ${ng.length} is not supported (max 3).`);
             return;
         }
-
-        // Return mock result if we have one, otherwise a plausible fallback
-        const known = MOCK_NGRAM_RESULTS[ng];
-        if (known) {
-            setNgramResult(known);
-        } else if (ng.length === 1) {
-            setNgramResult({ kind: "unigram", char: ng, percent: 2.345 });
-        } else if (ng.length === 2) {
-            const rev = ng.split("").reverse().join("");
-            setNgramResult({
-                kind: "bigram",
-                bigram: ng,
-                rev,
-                total: 1.234,
-                fwd: 0.987,
-                bwd: 0.247,
-                skipTotal: 0.543,
-                skipFwd: 0.412,
-                skipBwd: 0.131,
-            });
-        } else {
-            setNgramResult({ kind: "trigram", trigram: ng, percent: 0.456 });
+        try {
+            const result = await lookupNgram(ng);
+            setNgramResult(result);
+        } catch (e) {
+            setNgramError(String(e));
         }
     }
 
-    function handleReload() {
-        setReloadMsg("Config reloaded. Generated layouts retained.");
+    async function handleReload() {
+        setReloading(true);
+        setReloadMsg(null);
+        try {
+            await reloadConfig();
+            await initStore();
+            setReloadMsg("Config reloaded successfully.");
+        } catch (e) {
+            setReloadMsg(`Error: ${e}`);
+        } finally {
+            setReloading(false);
+        }
     }
 
     return (
@@ -84,7 +94,9 @@ export default function LanguageView() {
                 </div>
 
                 <div class="flex items-center gap-3">
-                    <span class="font-mono text-neutral-100 text-base">{language()}</span>
+                    <span class="font-mono text-neutral-100 text-base">
+                        {appStore.currentLanguage}
+                    </span>
                 </div>
 
                 <div class="flex gap-2 items-center">
@@ -93,15 +105,16 @@ export default function LanguageView() {
                         value={pendingLanguage()}
                         onChange={(e) => setPendingLanguage(e.currentTarget.value)}
                     >
-                        <For each={MOCK_LANGUAGES}>
+                        <For each={appStore.languages}>
                             {(lang) => <option value={lang}>{lang}</option>}
                         </For>
                     </select>
                     <button
-                        class="border border-neutral-500 font-mono text-sm px-3 py-1 hover:bg-neutral-700"
+                        class="border border-neutral-500 font-mono text-sm px-3 py-1 hover:bg-neutral-700 disabled:opacity-40"
+                        disabled={settingLang()}
                         onClick={handleSetLanguage}
                     >
-                        Set Language
+                        {settingLang() ? "Switching…" : "Set Language"}
                     </button>
                 </div>
             </section>
@@ -112,19 +125,19 @@ export default function LanguageView() {
                     Available Languages
                 </div>
                 <div class="flex flex-col gap-1 font-mono text-sm">
-                    <For each={MOCK_LANGUAGES}>
+                    <For each={appStore.languages}>
                         {(lang) => (
                             <div class="flex items-center gap-2">
                                 <span
                                     class={
-                                        lang === language()
+                                        lang === appStore.currentLanguage
                                             ? "text-neutral-100"
                                             : "text-neutral-400"
                                     }
                                 >
                                     {lang}
                                 </span>
-                                <Show when={lang === language()}>
+                                <Show when={lang === appStore.currentLanguage}>
                                     <span class="text-xs text-neutral-500">(current)</span>
                                 </Show>
                             </div>
@@ -156,32 +169,17 @@ export default function LanguageView() {
                             type="checkbox"
                             class="accent-neutral-400"
                             checked={rawFlag()}
-                            onChange={(e) => {
-                                setRawFlag(e.currentTarget.checked);
-                                if (e.currentTarget.checked) setAllFlag(false);
-                            }}
+                            onChange={(e) => setRawFlag(e.currentTarget.checked)}
                         />
                         --raw
                     </label>
 
-                    <label class="flex items-center gap-1.5 font-mono text-sm text-neutral-300 cursor-pointer select-none">
-                        <input
-                            type="checkbox"
-                            class="accent-neutral-400"
-                            checked={allFlag()}
-                            onChange={(e) => {
-                                setAllFlag(e.currentTarget.checked);
-                                if (e.currentTarget.checked) setRawFlag(false);
-                            }}
-                        />
-                        --all
-                    </label>
-
                     <button
-                        class="border border-neutral-500 font-mono text-sm px-3 py-1 hover:bg-neutral-700"
+                        class="border border-neutral-500 font-mono text-sm px-3 py-1 hover:bg-neutral-700 disabled:opacity-40"
+                        disabled={loadRunning()}
                         onClick={handleLoad}
                     >
-                        Load
+                        {loadRunning() ? "Processing…" : "Load"}
                     </button>
                 </div>
 
@@ -189,6 +187,9 @@ export default function LanguageView() {
                     <div class="text-xs font-mono text-neutral-400 border border-neutral-700 px-2 py-1">
                         {loadMsg()}
                     </div>
+                </Show>
+                <Show when={loadError()}>
+                    <div class="text-xs font-mono text-red-400">{loadError()}</div>
                 </Show>
             </section>
 
@@ -279,15 +280,15 @@ export default function LanguageView() {
                 <div class="text-xs text-neutral-500 uppercase tracking-widest">Reload Config</div>
                 <div class="text-xs text-neutral-500">
                     Refreshes weights and default settings from{" "}
-                    <span class="font-mono">config.toml</span>. Previously generated layouts are
-                    retained.
+                    <span class="font-mono">config.toml</span>.
                 </div>
                 <div>
                     <button
-                        class="border border-neutral-500 font-mono text-sm px-3 py-1 hover:bg-neutral-700"
+                        class="border border-neutral-500 font-mono text-sm px-3 py-1 hover:bg-neutral-700 disabled:opacity-40"
+                        disabled={reloading()}
                         onClick={handleReload}
                     >
-                        Reload Config
+                        {reloading() ? "Reloading…" : "Reload Config"}
                     </button>
                 </div>
                 <Show when={reloadMsg()}>

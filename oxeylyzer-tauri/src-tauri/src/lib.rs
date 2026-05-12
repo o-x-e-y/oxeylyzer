@@ -1,19 +1,1100 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+};
+
+use oxeylyzer_core::{
+    data::Data,
+    fast_layout::{BigramPair, FastLayout},
+    generate::{LayoutStats, Oxeylyzer},
+    layout::Layout,
+    rayon::iter::ParallelIterator,
+    weights::{Config, FingerWeights, MaxFingerUse, Weights},
+};
+use serde::{Deserialize, Serialize};
+use tauri::{Emitter, Manager};
+
+// ─── DTOs ─────────────────────────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct LayoutStatsDto {
+    pub sfb: f64,
+    pub dsfb: f64,
+    pub fspeed: f64,
+    pub finger_speed: [f64; 10],
+    pub stretches: f64,
+    pub scissors: f64,
+    pub lsbs: f64,
+    pub pinky_ring: f64,
+    pub score: f64,
+    // trigram fields, flattened to match frontend LayoutStats type
+    pub inrolls: f64,
+    pub outrolls: f64,
+    pub onehands: f64,
+    pub alternates: f64,
+    pub alternates_sfs: f64,
+    pub redirects: f64,
+    pub redirects_sfs: f64,
+    pub bad_redirects: f64,
+    pub bad_redirects_sfs: f64,
+    pub bad_sfbs: f64,
+    pub sfts: f64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct LayoutDto {
+    pub name: String,
+    pub keys: String,
+    pub board: String,
+    pub stats: LayoutStatsDto,
+}
+
+#[derive(Serialize, Clone)]
+pub struct BigramEntryDto {
+    pub bigram: String,
+    pub percent: f64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct CharFreqDto {
+    pub char: String,
+    pub percent: f64,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum NgramResultDto {
+    Unigram {
+        #[serde(rename = "char")]
+        ch: String,
+        percent: f64,
+    },
+    Bigram {
+        bigram: String,
+        rev: String,
+        total: f64,
+        fwd: f64,
+        bwd: f64,
+        #[serde(rename = "skipTotal")]
+        skip_total: f64,
+        #[serde(rename = "skipFwd")]
+        skip_fwd: f64,
+        #[serde(rename = "skipBwd")]
+        skip_bwd: f64,
+    },
+    Trigram {
+        trigram: String,
+        percent: f64,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SessionDto {
+    pub view: String,
+    pub language: String,
+    pub last_layout: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct MaxFingerUseDto {
+    pub penalty: f64,
+    pub pinky: f64,
+    pub ring: f64,
+    pub middle: f64,
+    pub index: f64,
+    pub thumb: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct WeightsDto {
+    pub lateral_penalty: f64,
+    pub sfbs: f64,
+    pub sfs: f64,
+    pub stretches: f64,
+    pub pinky_ring_bigrams: f64,
+    pub inrolls: f64,
+    pub outrolls: f64,
+    pub onehands: f64,
+    pub alternates: f64,
+    pub alternates_sfs: f64,
+    pub redirects: f64,
+    pub redirects_sfs: f64,
+    pub bad_redirects: f64,
+    pub bad_redirects_sfs: f64,
+    pub finger_weights: FingerWeights,
+    pub max_finger_use: MaxFingerUseDto,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ConfigDto {
+    pub corpus: String,
+    pub layouts: Vec<String>,
+    pub corpus_configs: String,
+    pub trigram_precision: usize,
+    pub max_cores: usize,
+    pub weights: WeightsDto,
+}
+
+// ─── App State ────────────────────────────────────────────────────────────────
+
+pub struct AppState {
+    /// The active analyzer engine, wrapped in Arc so it can be cheaply cloned for
+    /// background generation without holding the lock.
+    pub engine: Mutex<Arc<Oxeylyzer>>,
+    /// All loaded layouts, keyed by lowercase name.
+    pub layouts: Mutex<HashMap<String, Layout>>,
+    /// Results from the most recent generation run. Cleared on language switch.
+    pub generated: Mutex<Vec<FastLayout>>,
+    /// Absolute path to the workspace root (where config.toml lives).
+    pub base_path: PathBuf,
+    /// Cached config for reload and language switching.
+    pub config: Mutex<Config>,
+    /// Set to true to request cancellation of an in-progress generation.
+    pub cancel_flag: Arc<AtomicBool>,
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+fn normalize_score(raw: i64, char_total: i64) -> f64 {
+    if char_total == 0 {
+        return 0.0;
+    }
+    (raw as f64) / (char_total as f64) / 100.0
+}
+
+fn stats_to_dto(stats: &LayoutStats, char_total: i64) -> LayoutStatsDto {
+    let t = &stats.trigram_stats;
+    LayoutStatsDto {
+        sfb: stats.sfb,
+        dsfb: stats.dsfb,
+        fspeed: stats.fspeed,
+        finger_speed: stats.finger_speed,
+        stretches: stats.stretches,
+        scissors: stats.scissors,
+        lsbs: stats.lsbs,
+        pinky_ring: stats.pinky_ring,
+        score: normalize_score(stats.score, char_total),
+        inrolls: t.inrolls,
+        outrolls: t.outrolls,
+        onehands: t.onehands,
+        alternates: t.alternates,
+        alternates_sfs: t.alternates_sfs,
+        redirects: t.redirects,
+        redirects_sfs: t.redirects_sfs,
+        bad_redirects: t.bad_redirects,
+        bad_redirects_sfs: t.bad_redirects_sfs,
+        bad_sfbs: t.bad_sfbs,
+        sfts: t.sfts,
+    }
+}
+
+fn fast_layout_to_dto(engine: &Oxeylyzer, fl: &FastLayout) -> LayoutDto {
+    let stats = engine.get_layout_stats(fl);
+    let stats_dto = stats_to_dto(&stats, engine.data.char_total);
+    LayoutDto {
+        name: fl.name.clone().unwrap_or_default(),
+        keys: fl.layout_str(),
+        board: "generated".to_string(),
+        stats: stats_dto,
+    }
+}
+
+fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
+    let fast = engine.fast_layout(layout, &[]);
+    let stats = engine.get_layout_stats(&fast);
+    let stats_dto = stats_to_dto(&stats, engine.data.char_total);
+    LayoutDto {
+        name: layout.name.clone(),
+        keys: fast.layout_str(),
+        board: get_board_str(layout),
+        stats: stats_dto,
+    }
+}
+
+fn get_board_str(layout: &Layout) -> String {
+    serde_json::to_value(layout)
+        .ok()
+        .and_then(|v| v.get("board")?.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+fn load_all_layouts(config: &Config, base_path: &Path) -> HashMap<String, Layout> {
+    config
+        .layouts
+        .iter()
+        .flat_map(|p| {
+            let full = base_path.join(p);
+            let pattern = full.to_string_lossy().into_owned();
+            glob::glob(&pattern)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .flat_map(|path| {
+                    Layout::load(&path)
+                        .inspect_err(|e| eprintln!("Error loading layout '{}': {e}", path.display()))
+                })
+                .map(|l| (l.name.to_lowercase(), l))
+        })
+        .collect()
+}
+
+fn pin_positions(fast: &FastLayout, engine: &Oxeylyzer, pins: &str) -> Vec<usize> {
+    let pin_set: std::collections::HashSet<char> = pins.chars().collect();
+    fast.keys
+        .iter()
+        .map(|&u| engine.mapping.get_c(u))
+        .enumerate()
+        .filter_map(|(i, c)| pin_set.contains(&c).then_some(i))
+        .collect()
+}
+
+fn bigram_str(engine: &Oxeylyzer, fl: &FastLayout, pair: &BigramPair) -> Option<String> {
+    let u1 = fl.char(pair.pair.0)?;
+    let u2 = fl.char(pair.pair.1)?;
+    Some(engine.mapping.map_us(&[u1, u2]).collect())
+}
+
+fn list_languages_from_dir(base_path: &Path) -> Vec<String> {
+    let dir = base_path.join("static/language_data");
+    std::fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.ends_with(".json") {
+                Some(name.trim_end_matches(".json").to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn corpus_path_for(base_path: &Path, config: &Config, language: &str) -> PathBuf {
+    // Corpus path from config, swapping the filename to the requested language.
+    // e.g. ./static/language_data/shai.json → ./static/language_data/{language}.json
+    let parent = config
+        .corpus
+        .parent()
+        .unwrap_or_else(|| Path::new("./static/language_data"));
+    base_path.join(parent).join(language).with_extension("json")
+}
+
+// ─── Tauri Commands ───────────────────────────────────────────────────────────
+
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+fn list_layouts(state: tauri::State<'_, AppState>) -> Result<Vec<LayoutDto>, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let layouts = state.layouts.lock().unwrap();
+    let mut dtos: Vec<LayoutDto> = layouts.values().map(|l| layout_to_dto(&engine, l)).collect();
+    dtos.sort_by(|a, b| b.stats.score.total_cmp(&a.stats.score));
+    Ok(dtos)
 }
 
 #[tauri::command]
-fn what() -> String {
-    "what?".to_string()
+fn list_languages(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+    Ok(list_languages_from_dir(&state.base_path))
 }
+
+#[tauri::command]
+fn current_language(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    Ok(state.engine.lock().unwrap().language.clone())
+}
+
+#[tauri::command]
+fn analyze_layout(name: String, state: tauri::State<'_, AppState>) -> Result<LayoutDto, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let layouts = state.layouts.lock().unwrap();
+    let layout = layouts
+        .get(&name.to_lowercase())
+        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    Ok(layout_to_dto(&engine, layout))
+}
+
+#[tauri::command]
+fn get_bigrams(
+    name: String,
+    category: String,
+    count: usize,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<BigramEntryDto>, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let layouts = state.layouts.lock().unwrap();
+    let layout = layouts
+        .get(&name.to_lowercase())
+        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    let fl = engine.fast_layout(layout, &[]);
+    let bigram_total = engine.data.bigram_total as f64;
+
+    let mut entries: Vec<BigramEntryDto> = match category.as_str() {
+        "sfbs" => fl
+            .fspeed_indices
+            .all
+            .iter()
+            .filter_map(|pair| {
+                let bigram = bigram_str(&engine, &fl, pair)?;
+                let raw = engine.pair_sfb(&fl, pair);
+                Some(BigramEntryDto {
+                    bigram,
+                    percent: (raw as f64 * 100.0) / bigram_total,
+                })
+            })
+            .collect(),
+        "scissors" => fl
+            .scissor_indices
+            .pairs
+            .iter()
+            .filter_map(|&pos_pair| {
+                let pair = BigramPair { pair: pos_pair, dist: 1 };
+                let bigram = bigram_str(&engine, &fl, &pair)?;
+                let raw = engine.pair_sfb(&fl, &pair);
+                Some(BigramEntryDto {
+                    bigram,
+                    percent: (raw as f64 * 100.0) / bigram_total,
+                })
+            })
+            .collect(),
+        "lsbs" => fl
+            .lsb_indices
+            .pairs
+            .iter()
+            .filter_map(|&pos_pair| {
+                let pair = BigramPair { pair: pos_pair, dist: 1 };
+                let bigram = bigram_str(&engine, &fl, &pair)?;
+                let raw = engine.pair_sfb(&fl, &pair);
+                Some(BigramEntryDto {
+                    bigram,
+                    percent: (raw as f64 * 100.0) / bigram_total,
+                })
+            })
+            .collect(),
+        "pinky-ring" => fl
+            .pinky_ring_indices
+            .pairs
+            .iter()
+            .filter_map(|&pos_pair| {
+                let pair = BigramPair { pair: pos_pair, dist: 1 };
+                let bigram = bigram_str(&engine, &fl, &pair)?;
+                let raw = engine.pair_sfb(&fl, &pair);
+                Some(BigramEntryDto {
+                    bigram,
+                    percent: (raw as f64 * 100.0) / bigram_total,
+                })
+            })
+            .collect(),
+        "fspeed" => fl
+            .fspeed_indices
+            .all
+            .iter()
+            .filter_map(|pair| {
+                let bigram = bigram_str(&engine, &fl, pair)?;
+                let raw = engine.pair_fspeed(&fl, pair).abs();
+                Some(BigramEntryDto {
+                    bigram,
+                    percent: raw as f64 / bigram_total,
+                })
+            })
+            .collect(),
+        "stretches" => fl
+            .stretch_indices
+            .all_pairs
+            .iter()
+            .filter_map(|pair| {
+                let bigram = bigram_str(&engine, &fl, pair)?;
+                let raw = engine.pair_stretch(&fl, pair).abs();
+                Some(BigramEntryDto {
+                    bigram,
+                    percent: raw as f64 / bigram_total,
+                })
+            })
+            .collect(),
+        other => return Err(format!("Unknown bigram category: '{other}'")),
+    };
+
+    entries.sort_by(|a, b| b.percent.total_cmp(&a.percent));
+    entries.truncate(count);
+    Ok(entries)
+}
+
+#[tauri::command]
+fn swap_keys(
+    name: String,
+    swaps: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<LayoutDto, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let layouts = state.layouts.lock().unwrap();
+    let layout = layouts
+        .get(&name.to_lowercase())
+        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    let mut fl = engine.fast_layout(layout, &[]);
+
+    // Parse swap string: space-separated tokens, each token is 2+ chars.
+    // "ab" = swap a and b; "abc" = cycle a→b→c.
+    for token in swaps.split_whitespace() {
+        let chars: Vec<char> = token.chars().collect();
+        if chars.len() < 2 {
+            continue;
+        }
+        for window in chars.windows(2) {
+            let (c1, c2) = (window[0], window[1]);
+            let p1 = fl.keys.iter().position(|&k| k == engine.mapping.get_u(c1));
+            let p2 = fl.keys.iter().position(|&k| k == engine.mapping.get_u(c2));
+            match (p1, p2) {
+                (Some(p1), Some(p2)) => {
+                    fl.swap(p1 as u8, p2 as u8);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let stats = engine.get_layout_stats(&fl);
+    let stats_dto = stats_to_dto(&stats, engine.data.char_total);
+    Ok(LayoutDto {
+        name: format!("{name}*"),
+        keys: fl.layout_str(),
+        board: get_board_str(layout),
+        stats: stats_dto,
+    })
+}
+
+#[tauri::command]
+fn get_char_frequencies(state: tauri::State<'_, AppState>) -> Result<Vec<CharFreqDto>, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let total = engine.data.char_total as f64;
+    if total == 0.0 {
+        return Ok(vec![]);
+    }
+    let freqs: Vec<CharFreqDto> = (0..engine.data.len())
+        .filter_map(|i| {
+            let c = engine.mapping.get_c(i as u8);
+            // Skip the three special chars at indices 0-2
+            if c == char::REPLACEMENT_CHARACTER
+                || c == oxeylyzer_core::SHIFT_CHAR
+                || c == oxeylyzer_core::SPACE_CHAR
+            {
+                return None;
+            }
+            let count = engine.data.chars()[i] as f64;
+            Some(CharFreqDto {
+                char: c.to_string(),
+                percent: count / total * 100.0,
+            })
+        })
+        .collect();
+    Ok(freqs)
+}
+
+#[tauri::command]
+fn set_language(
+    language: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let config = state.config.lock().unwrap().clone();
+    let corpus_path = corpus_path_for(&state.base_path, &config, &language);
+    let data = Data::load(&corpus_path)
+        .map_err(|e| format!("Failed to load corpus for '{language}': {e}"))?;
+    let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
+    let new_layouts = load_all_layouts(&config, &state.base_path);
+
+    *state.engine.lock().unwrap() = new_engine;
+    *state.layouts.lock().unwrap() = new_layouts;
+    state.generated.lock().unwrap().clear();
+    Ok(())
+}
+
+#[tauri::command]
+fn reload_config(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let config =
+        Config::with_loaded_weights(state.base_path.join("config.toml"))
+            .map_err(|e| format!("Failed to reload config: {e}"))?;
+    let corpus_path = state.base_path.join(&config.corpus);
+    let data = Data::load(&corpus_path)
+        .map_err(|e| format!("Failed to load corpus: {e}"))?;
+    let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
+    let new_layouts = load_all_layouts(&config, &state.base_path);
+
+    *state.config.lock().unwrap() = config;
+    *state.engine.lock().unwrap() = new_engine;
+    *state.layouts.lock().unwrap() = new_layouts;
+    state.generated.lock().unwrap().clear();
+    Ok(())
+}
+
+#[tauri::command]
+fn lookup_ngram(
+    ngram: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<NgramResultDto, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let data = &engine.data;
+
+    match ngram.chars().count() {
+        1 => {
+            let c = ngram.chars().next().unwrap();
+            let u = data.mapping.get_u(c);
+            let percent =
+                (data.get_char_u(u) as f64 / data.char_total as f64) * 100.0;
+            Ok(NgramResultDto::Unigram {
+                ch: c.to_string(),
+                percent,
+            })
+        }
+        2 => {
+            let chars: Vec<char> = ngram.chars().collect();
+            let (c1, c2) = (chars[0], chars[1]);
+            let u1 = data.mapping.get_u(c1);
+            let u2 = data.mapping.get_u(c2);
+            let rev: String = [c2, c1].iter().collect();
+
+            let fwd = (data.get_bigram_u([u1, u2]) as f64 / data.bigram_total as f64) * 100.0;
+            let bwd = (data.get_bigram_u([u2, u1]) as f64 / data.bigram_total as f64) * 100.0;
+            let skip_fwd =
+                (data.get_skipgram_u([u1, u2]) as f64 / data.skipgram_total as f64) * 100.0;
+            let skip_bwd =
+                (data.get_skipgram_u([u2, u1]) as f64 / data.skipgram_total as f64) * 100.0;
+
+            Ok(NgramResultDto::Bigram {
+                bigram: ngram,
+                rev,
+                total: fwd + bwd,
+                fwd,
+                bwd,
+                skip_total: skip_fwd + skip_bwd,
+                skip_fwd,
+                skip_bwd,
+            })
+        }
+        3 => {
+            let chars: Vec<char> = ngram.chars().collect();
+            let t = [
+                data.mapping.get_u(chars[0]),
+                data.mapping.get_u(chars[1]),
+                data.mapping.get_u(chars[2]),
+            ];
+            let &(_, occ) = data
+                .gen_trigrams()
+                .iter()
+                .find(|&&(tf, _)| tf == t)
+                .unwrap_or(&(t, 0));
+            let percent = (occ as f64) / (data.trigram_total as f64) * 100.0;
+            Ok(NgramResultDto::Trigram {
+                trigram: ngram,
+                percent,
+            })
+        }
+        n => Err(format!(
+            "Invalid ngram length {n}. Allowed: 1, 2, or 3 characters."
+        )),
+    }
+}
+
+#[tauri::command]
+fn load_corpus(
+    language: String,
+    raw: bool,
+    state: tauri::State<'_, AppState>,
+) -> Result<String, String> {
+    use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
+
+    let base = &state.base_path;
+    let source_dir = base.join("static/text").join(&language);
+    if !source_dir.is_dir() {
+        return Err(format!(
+            "Source directory '{}' not found.",
+            source_dir.display()
+        ));
+    }
+
+    let paths: Vec<PathBuf> = std::fs::read_dir(&source_dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_file())
+        .collect();
+
+    let cleaner = if raw {
+        CorpusCleaner::raw()
+    } else {
+        CorpusCleaner::default()
+    };
+
+    let data = Data::from_paths(&paths, &language, &cleaner)
+        .map_err(|e| format!("Failed to process corpus: {e}"))?;
+
+    let save_dir = base.join("static/language_data");
+    data.save(save_dir).map_err(|e| format!("Failed to save corpus: {e}"))?;
+
+    Ok(format!("Corpus '{language}' processed and saved successfully."))
+}
+
+#[tauri::command]
+async fn start_generate(
+    base_layout: String,
+    count: usize,
+    pins: String,
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    state.cancel_flag.store(false, Ordering::Relaxed);
+
+    // Clone what we need before spawning — avoids moving tauri::State into a thread.
+    let engine = state.engine.lock().unwrap().clone();
+    let cancel = state.cancel_flag.clone();
+
+    let fast_base = {
+        let layouts = state.layouts.lock().unwrap();
+        let base = layouts
+            .get(&base_layout.to_lowercase())
+            .ok_or_else(|| format!("Layout '{base_layout}' not found"))?;
+        engine.fast_layout(base, &[])
+    };
+
+    let pin_pos = pin_positions(&fast_base, &engine, &pins);
+    let app = app_handle.clone();
+
+    std::thread::spawn(move || {
+        if cancel.load(Ordering::Relaxed) {
+            return;
+        }
+
+        let done_count = Arc::new(AtomicUsize::new(0));
+        let done_clone = done_count.clone();
+        let app_progress = app.clone();
+        let cancel_progress = cancel.clone();
+
+        // Emit progress updates every 200ms from a dedicated thread.
+        let progress_thread = std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            let d = done_clone.load(Ordering::Relaxed);
+            let _ = app_progress.emit(
+                "generate-progress",
+                serde_json::json!({ "done": d, "total": count }),
+            );
+            if d >= count || cancel_progress.load(Ordering::Relaxed) {
+                break;
+            }
+        });
+
+        let done_for_iter = done_count.clone();
+        let mut results: Vec<FastLayout> = engine
+            .generate_n_with_pins_iter(count, &fast_base, &pin_pos)
+            .inspect(|_| {
+                done_for_iter.fetch_add(1, Ordering::Relaxed);
+            })
+            .collect();
+
+        let _ = progress_thread.join();
+
+        // Sort by score descending.
+        let char_total = engine.data.char_total;
+        results.sort_unstable_by(|a, b| {
+            engine.score(b).cmp(&engine.score(a))
+        });
+
+        // Build DTOs for the top 50.
+        let layout_dtos: Vec<LayoutDto> = results
+            .iter()
+            .take(50)
+            .enumerate()
+            .map(|(i, fl)| {
+                let stats = engine.get_layout_stats(fl);
+                let stats_dto = stats_to_dto(&stats, char_total);
+                LayoutDto {
+                    name: fl
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| format!("gen-{}", i + 1)),
+                    keys: fl.layout_str(),
+                    board: "generated".to_string(),
+                    stats: stats_dto,
+                }
+            })
+            .collect();
+
+        // Store all results for save_generated.
+        let state = app.state::<AppState>();
+        *state.generated.lock().unwrap() = results;
+
+        let _ = app.emit("generate-done", serde_json::json!({ "results": layout_dtos }));
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+fn save_generated(
+    index: usize,
+    name: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<LayoutDto, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let mut generated = state.generated.lock().unwrap();
+
+    let len = generated.len();
+    let fl = generated
+        .get_mut(index)
+        .ok_or_else(|| format!("Index {index} out of bounds ({len} results)"))?;
+
+    // Assign the chosen name.
+    let save_name = name.unwrap_or_else(|| {
+        fl.keys
+            .iter()
+            .skip(10)
+            .take(4)
+            .map(|&u| engine.mapping.get_c(u))
+            .collect::<String>()
+    });
+    fl.name = Some(save_name.clone());
+
+    // Serialize to .dof JSON.
+    let layout: Layout = fl.clone().into();
+    let json = serde_json::to_string_pretty(&layout)
+        .map_err(|e| format!("Serialization failed: {e}"))?;
+
+    // Write to the layouts directory for the current language.
+    let lang = engine.language.clone();
+    let file_name = save_name.replace(' ', "_").to_lowercase();
+    let path = state
+        .base_path
+        .join("static/layouts")
+        .join(&lang)
+        .join(&file_name)
+        .with_extension("dof");
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
+
+    // Add to loaded layouts.
+    let layout_loaded = Layout::load(&path).map_err(|e| e.to_string())?;
+    let dto = layout_to_dto(&engine, &layout_loaded);
+    state
+        .layouts
+        .lock()
+        .unwrap()
+        .insert(save_name.to_lowercase(), layout_loaded);
+
+    Ok(dto)
+}
+
+#[tauri::command]
+fn cancel_generate(state: tauri::State<'_, AppState>) {
+    state.cancel_flag.store(true, Ordering::Relaxed);
+}
+
+#[tauri::command]
+fn get_layout_detail(
+    name: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let layouts = state.layouts.lock().unwrap();
+    let layout = layouts
+        .get(&name.to_lowercase())
+        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    serde_json::to_value(layout).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_layout_edit(
+    dof_json: serde_json::Value,
+    original_name: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let layout: Layout = serde_json::from_value(dof_json.clone())
+        .map_err(|e| format!("Invalid layout JSON: {e}"))?;
+    let new_name = layout.name.clone();
+
+    // Find the original file path.
+    let lang = state.engine.lock().unwrap().language.clone();
+    let file_name = original_name.replace(' ', "_").to_lowercase();
+    let path = state
+        .base_path
+        .join("static/layouts")
+        .join(&lang)
+        .join(&file_name)
+        .with_extension("dof");
+
+    let json = serde_json::to_string_pretty(&dof_json).map_err(|e| e.to_string())?;
+    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
+
+    // Reload into state.
+    let layout_loaded = Layout::load(&path).map_err(|e| e.to_string())?;
+    let mut layouts = state.layouts.lock().unwrap();
+    layouts.remove(&original_name.to_lowercase());
+    layouts.insert(new_name.to_lowercase(), layout_loaded);
+    Ok(())
+}
+
+#[tauri::command]
+fn fork_layout(
+    name: String,
+    new_name: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<LayoutDto, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let lang = engine.language.clone();
+
+    let mut layouts = state.layouts.lock().unwrap();
+    let original = layouts
+        .get(&name.to_lowercase())
+        .ok_or_else(|| format!("Layout '{name}' not found"))?
+        .clone();
+
+    let mut forked = original.clone();
+    forked.name = new_name.clone();
+
+    let file_name = new_name.replace(' ', "_").to_lowercase();
+    let path = state
+        .base_path
+        .join("static/layouts")
+        .join(&lang)
+        .join(&file_name)
+        .with_extension("dof");
+
+    if path.exists() {
+        return Err(format!("A layout named '{new_name}' already exists."));
+    }
+
+    let json = serde_json::to_string_pretty(&forked).map_err(|e| e.to_string())?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
+
+    let dto = layout_to_dto(&engine, &forked);
+    layouts.insert(new_name.to_lowercase(), forked);
+    Ok(dto)
+}
+
+#[tauri::command]
+fn get_session(state: tauri::State<'_, AppState>) -> Result<SessionDto, String> {
+    let path = state.base_path.join("session.json");
+    if !path.exists() {
+        return Ok(SessionDto {
+            view: "layouts".to_string(),
+            language: state.engine.lock().unwrap().language.clone(),
+            last_layout: None,
+        });
+    }
+    let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_session(session: SessionDto, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let path = state.base_path.join("session.json");
+    let json = serde_json::to_string_pretty(&session).map_err(|e| e.to_string())?;
+    std::fs::write(&path, &json).map_err(|e| e.to_string())
+}
+
+// ─── Config Commands ──────────────────────────────────────────────────────────
+
+fn config_dto_to_toml(dto: &ConfigDto) -> String {
+    let layouts_lines = dto
+        .layouts
+        .iter()
+        .map(|p| format!("  {p:?}"))
+        .collect::<Vec<_>>()
+        .join(",\n");
+    let fw = &dto.weights.finger_weights;
+    let mfu = &dto.weights.max_finger_use;
+    let w = &dto.weights;
+    format!(
+        "corpus = {:?}\nlayouts = [\n{}\n]\n\
+         corpus_configs = {:?}\ntrigram_precision = {}\nmax_cores = {}\n\n\
+         [weights]\n\
+         lateral_penalty = {}\nsfbs = {}\nsfs = {}\nstretches = {}\n\
+         pinky_ring_bigrams = {}\ninrolls = {}\noutrolls = {}\nonehands = {}\n\
+         alternates = {}\nalternates_sfs = {}\nredirects = {}\nredirects_sfs = {}\n\
+         bad_redirects = {}\nbad_redirects_sfs = {}\n\n\
+         [weights.finger_weights]\n\
+         lp = {}\nlr = {}\nlm = {}\nli = {}\nlt = {}\n\
+         rt = {}\nri = {}\nrm = {}\nrr = {}\nrp = {}\n\n\
+         [weights.max_finger_use]\n\
+         penalty = {}\npinky = {}\nring = {}\nmiddle = {}\nindex = {}\nthumb = {}\n",
+        dto.corpus,
+        layouts_lines,
+        dto.corpus_configs,
+        dto.trigram_precision,
+        dto.max_cores,
+        w.lateral_penalty, w.sfbs, w.sfs, w.stretches, w.pinky_ring_bigrams,
+        w.inrolls, w.outrolls, w.onehands, w.alternates, w.alternates_sfs,
+        w.redirects, w.redirects_sfs, w.bad_redirects, w.bad_redirects_sfs,
+        fw.lp, fw.lr, fw.lm, fw.li, fw.lt, fw.rt, fw.ri, fw.rm, fw.rr, fw.rp,
+        mfu.penalty, mfu.pinky, mfu.ring, mfu.middle, mfu.index, mfu.thumb,
+    )
+}
+
+fn config_to_dto(config: &Config) -> ConfigDto {
+    let w = &config.weights;
+    ConfigDto {
+        corpus: config.corpus.to_string_lossy().into_owned(),
+        layouts: config.layouts.iter().map(|p| p.to_string_lossy().into_owned()).collect(),
+        corpus_configs: config.corpus_configs.to_string_lossy().into_owned(),
+        trigram_precision: config.trigram_precision,
+        max_cores: config.max_cores,
+        weights: WeightsDto {
+            lateral_penalty: w.lateral_penalty,
+            sfbs: w.sfbs,
+            sfs: w.sfs,
+            stretches: w.stretches,
+            pinky_ring_bigrams: w.pinky_ring_bigrams,
+            inrolls: w.inrolls,
+            outrolls: w.outrolls,
+            onehands: w.onehands,
+            alternates: w.alternates,
+            alternates_sfs: w.alternates_sfs,
+            redirects: w.redirects,
+            redirects_sfs: w.redirects_sfs,
+            bad_redirects: w.bad_redirects,
+            bad_redirects_sfs: w.bad_redirects_sfs,
+            finger_weights: w.finger_weights.clone(),
+            max_finger_use: MaxFingerUseDto {
+                penalty: w.max_finger_use.penalty,
+                pinky: w.max_finger_use.pinky,
+                ring: w.max_finger_use.ring,
+                middle: w.max_finger_use.middle,
+                index: w.max_finger_use.index,
+                thumb: w.max_finger_use.thumb,
+            },
+        },
+    }
+}
+
+fn dto_to_weights(w: &WeightsDto) -> Weights {
+    Weights {
+        lateral_penalty: w.lateral_penalty,
+        sfbs: w.sfbs,
+        sfs: w.sfs,
+        stretches: w.stretches,
+        pinky_ring_bigrams: w.pinky_ring_bigrams,
+        inrolls: w.inrolls,
+        outrolls: w.outrolls,
+        onehands: w.onehands,
+        alternates: w.alternates,
+        alternates_sfs: w.alternates_sfs,
+        redirects: w.redirects,
+        redirects_sfs: w.redirects_sfs,
+        bad_redirects: w.bad_redirects,
+        bad_redirects_sfs: w.bad_redirects_sfs,
+        finger_weights: w.finger_weights.clone(),
+        max_finger_use: MaxFingerUse {
+            penalty: w.max_finger_use.penalty,
+            pinky: w.max_finger_use.pinky,
+            ring: w.max_finger_use.ring,
+            middle: w.max_finger_use.middle,
+            index: w.max_finger_use.index,
+            thumb: w.max_finger_use.thumb,
+        },
+    }
+}
+
+#[tauri::command]
+fn get_config(state: tauri::State<'_, AppState>) -> Result<ConfigDto, String> {
+    let config = state.config.lock().unwrap();
+    Ok(config_to_dto(&config))
+}
+
+#[tauri::command]
+fn set_config(config_dto: ConfigDto, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let new_weights = dto_to_weights(&config_dto.weights);
+    let new_config = Config {
+        corpus: PathBuf::from(&config_dto.corpus),
+        layouts: config_dto.layouts.iter().map(PathBuf::from).collect(),
+        corpus_configs: PathBuf::from(&config_dto.corpus_configs),
+        trigram_precision: config_dto.trigram_precision,
+        max_cores: config_dto.max_cores,
+        weights: new_weights,
+    };
+
+    // Write config.toml as hand-built TOML string.
+    let config_path = state.base_path.join("config.toml");
+    std::fs::write(&config_path, config_dto_to_toml(&config_dto))
+        .map_err(|e| format!("Write failed: {e}"))?;
+
+    // Rebuild engine with new config
+    let corpus_path = state.base_path.join(&new_config.corpus);
+    let data = Data::load(&corpus_path)
+        .map_err(|e| format!("Failed to load corpus: {e}"))?;
+    let new_engine = Arc::new(Oxeylyzer::new(data, new_config.clone()));
+    let new_layouts = load_all_layouts(&new_config, &state.base_path);
+
+    *state.config.lock().unwrap() = new_config;
+    *state.engine.lock().unwrap() = new_engine;
+    *state.layouts.lock().unwrap() = new_layouts;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_defaults() -> Result<ConfigDto, String> {
+    Ok(config_to_dto(&Config::with_defaults()))
+}
+
+// ─── Entry Point ──────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, what])
+        .setup(|app| {
+            let base_path = if cfg!(debug_assertions) {
+                PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            } else {
+                app.path().resource_dir().expect("failed to resolve resource dir")
+            };
+
+            let config = Config::with_loaded_weights(base_path.join("config.toml"))
+                .expect("failed to load config.toml");
+
+            let corpus_path = base_path.join(&config.corpus);
+            let data = Data::load(&corpus_path).expect("failed to load corpus");
+
+            let engine = Arc::new(Oxeylyzer::new(data, config.clone()));
+            let layouts = load_all_layouts(&config, &base_path);
+
+            app.manage(AppState {
+                engine: Mutex::new(engine),
+                layouts: Mutex::new(layouts),
+                generated: Mutex::new(Vec::new()),
+                base_path,
+                config: Mutex::new(config),
+                cancel_flag: Arc::new(AtomicBool::new(false)),
+            });
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            list_layouts,
+            list_languages,
+            current_language,
+            analyze_layout,
+            get_bigrams,
+            swap_keys,
+            get_char_frequencies,
+            set_language,
+            reload_config,
+            lookup_ngram,
+            load_corpus,
+            start_generate,
+            save_generated,
+            cancel_generate,
+            get_layout_detail,
+            save_layout_edit,
+            fork_layout,
+            get_session,
+            set_session,
+            get_config,
+            set_config,
+            get_defaults,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
