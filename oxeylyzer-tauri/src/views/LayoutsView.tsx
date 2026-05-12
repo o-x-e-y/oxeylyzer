@@ -175,7 +175,10 @@ export default function LayoutsView(props: Props) {
             <div class="flex flex-col gap-2">
                 <For each={sorted()}>
                     {(layout, i) => (
-                        <div class="border border-neutral-700 p-3 flex flex-col gap-2">
+                        <div
+                            class="border border-neutral-700 p-3 flex flex-col gap-2 cursor-pointer hover:bg-neutral-800/40"
+                            onClick={() => toggleExpand(layout.name)}
+                        >
                             {/* Header row */}
                             <div class="flex items-baseline gap-3 font-mono">
                                 <span class="text-neutral-500 text-sm w-6 text-right">
@@ -188,10 +191,21 @@ export default function LayoutsView(props: Props) {
                                 <span class="text-neutral-400 text-sm">
                                     score: {layout.stats.score.toFixed(3)}
                                 </span>
-                                <span class="text-neutral-500 text-xs">
-                                    sfb: {layout.stats.sfb.toFixed(3)}%
-                                </span>
-                                <div class="ml-auto flex gap-2">
+                                <Show
+                                    when={sortKey() !== "score" && sortKey() !== "sfb"}
+                                    fallback={
+                                        <span class="text-neutral-500 text-xs">
+                                            sfb: {layout.stats.sfb.toFixed(3)}%
+                                        </span>
+                                    }
+                                >
+                                    <span class="text-neutral-500 text-xs">
+                                        {SORT_COLS.find((c) => c.key === sortKey())?.label ?? sortKey()}:{" "}
+                                        {statForKey(layout.stats as any, sortKey()).toFixed(3)}
+                                        {sortKey() !== "fspeed" && sortKey() !== "stretches" ? "%" : ""}
+                                    </span>
+                                </Show>
+                                <div class="ml-auto flex gap-2" onClick={(e) => e.stopPropagation()}>
                                     <button
                                         class="border border-neutral-600 text-xs font-mono px-2 py-0.5 hover:bg-neutral-700"
                                         onClick={() => toggleExpand(layout.name)}
@@ -218,6 +232,8 @@ export default function LayoutsView(props: Props) {
                                 <div class="pt-1 pl-6">
                                     <KeyboardDisplay
                                         keys={layout.keys}
+                                        keyboard={layout.keyboard}
+                                        shape={layout.shape}
                                         heatmap={appStore.charFrequencies}
                                     />
                                     <div class="mt-2 flex gap-4 text-xs font-mono text-neutral-400">

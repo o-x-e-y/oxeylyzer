@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
 import { appStore, initStore } from "../store";
-import { setLanguage, loadCorpus, lookupNgram, reloadConfig } from "../api";
+import { setLanguage, loadCorpus, lookupNgram } from "../api";
 import type { NgramResult } from "../mock";
 
 export default function LanguageView() {
@@ -18,9 +18,6 @@ export default function LanguageView() {
     const [ngramInput, setNgramInput] = createSignal("");
     const [ngramResult, setNgramResult] = createSignal<NgramResult | null>(null);
     const [ngramError, setNgramError] = createSignal("");
-
-    const [reloadMsg, setReloadMsg] = createSignal<string | null>(null);
-    const [reloading, setReloading] = createSignal(false);
 
     async function handleSetLanguage() {
         setSettingLang(true);
@@ -43,7 +40,6 @@ export default function LanguageView() {
         try {
             const msg = await loadCorpus(lang, rawFlag());
             setLoadMsg(msg);
-            // Refresh languages list
             await initStore();
         } catch (e) {
             setLoadError(String(e));
@@ -69,20 +65,6 @@ export default function LanguageView() {
         }
     }
 
-    async function handleReload() {
-        setReloading(true);
-        setReloadMsg(null);
-        try {
-            await reloadConfig();
-            await initStore();
-            setReloadMsg("Config reloaded successfully.");
-        } catch (e) {
-            setReloadMsg(`Error: ${e}`);
-        } finally {
-            setReloading(false);
-        }
-    }
-
     return (
         <div class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-6 max-w-2xl">
             <h1 class="text-lg font-mono text-neutral-300">Language</h1>
@@ -92,13 +74,11 @@ export default function LanguageView() {
                 <div class="text-xs text-neutral-500 uppercase tracking-widest">
                     Current Language
                 </div>
-
                 <div class="flex items-center gap-3">
                     <span class="font-mono text-neutral-100 text-base">
                         {appStore.currentLanguage}
                     </span>
                 </div>
-
                 <div class="flex gap-2 items-center">
                     <select
                         class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
@@ -119,33 +99,6 @@ export default function LanguageView() {
                 </div>
             </section>
 
-            {/* ── Available languages ───────────────────────────── */}
-            <section class="border border-neutral-700 p-4 flex flex-col gap-3">
-                <div class="text-xs text-neutral-500 uppercase tracking-widest">
-                    Available Languages
-                </div>
-                <div class="flex flex-col gap-1 font-mono text-sm">
-                    <For each={appStore.languages}>
-                        {(lang) => (
-                            <div class="flex items-center gap-2">
-                                <span
-                                    class={
-                                        lang === appStore.currentLanguage
-                                            ? "text-neutral-100"
-                                            : "text-neutral-400"
-                                    }
-                                >
-                                    {lang}
-                                </span>
-                                <Show when={lang === appStore.currentLanguage}>
-                                    <span class="text-xs text-neutral-500">(current)</span>
-                                </Show>
-                            </div>
-                        )}
-                    </For>
-                </div>
-            </section>
-
             {/* ── Load corpus ───────────────────────────────────── */}
             <section class="border border-neutral-700 p-4 flex flex-col gap-3">
                 <div class="text-xs text-neutral-500 uppercase tracking-widest">Load Corpus</div>
@@ -163,7 +116,6 @@ export default function LanguageView() {
                         onInput={(e) => setLoadLang(e.currentTarget.value)}
                         onKeyDown={(e) => e.key === "Enter" && handleLoad()}
                     />
-
                     <label class="flex items-center gap-1.5 font-mono text-sm text-neutral-300 cursor-pointer select-none">
                         <input
                             type="checkbox"
@@ -173,7 +125,6 @@ export default function LanguageView() {
                         />
                         --raw
                     </label>
-
                     <button
                         class="border border-neutral-500 font-mono text-sm px-3 py-1 hover:bg-neutral-700 disabled:opacity-40"
                         disabled={loadRunning()}
@@ -230,7 +181,6 @@ export default function LanguageView() {
                                     <span>{result.percent.toFixed(3)}%</span>
                                 </div>
                             )}
-
                             {result.kind === "bigram" && (
                                 <>
                                     <div class="flex gap-3">
@@ -263,7 +213,6 @@ export default function LanguageView() {
                                     </div>
                                 </>
                             )}
-
                             {result.kind === "trigram" && (
                                 <div class="flex gap-3">
                                     <span class="text-neutral-400">"{result.trigram}"</span>
@@ -272,29 +221,6 @@ export default function LanguageView() {
                             )}
                         </div>
                     )}
-                </Show>
-            </section>
-
-            {/* ── Reload config ─────────────────────────────────── */}
-            <section class="border border-neutral-700 p-4 flex flex-col gap-3">
-                <div class="text-xs text-neutral-500 uppercase tracking-widest">Reload Config</div>
-                <div class="text-xs text-neutral-500">
-                    Refreshes weights and default settings from{" "}
-                    <span class="font-mono">config.toml</span>.
-                </div>
-                <div>
-                    <button
-                        class="border border-neutral-500 font-mono text-sm px-3 py-1 hover:bg-neutral-700 disabled:opacity-40"
-                        disabled={reloading()}
-                        onClick={handleReload}
-                    >
-                        {reloading() ? "Reloading…" : "Reload Config"}
-                    </button>
-                </div>
-                <Show when={reloadMsg()}>
-                    <div class="text-xs font-mono text-neutral-400 border border-neutral-700 px-2 py-1">
-                        {reloadMsg()}
-                    </div>
                 </Show>
             </section>
         </div>

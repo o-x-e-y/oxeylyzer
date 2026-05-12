@@ -107,6 +107,22 @@ export async function getDefaults(): Promise<ConfigDto> {
     return invoke("get_defaults");
 }
 
+export async function analyzeWithDisabled(name: string, disabledIndices: number[]): Promise<Layout> {
+    return invoke("analyze_with_disabled", { name, disabledIndices });
+}
+
+export async function listWeightPresets(): Promise<string[]> {
+    return invoke("list_weight_presets");
+}
+
+export async function saveWeightPreset(name: string, weights: WeightsDto): Promise<void> {
+    return invoke("save_weight_preset", { name, weights });
+}
+
+export async function loadWeightPreset(name: string): Promise<WeightsDto> {
+    return invoke("load_weight_preset", { name });
+}
+
 export async function getSession(): Promise<{ view: string; language: string; lastLayout: string | null }> {
     return invoke("get_session");
 }

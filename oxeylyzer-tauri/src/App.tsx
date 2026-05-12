@@ -1,4 +1,5 @@
-import { createSignal, Match, onMount, Show, Switch } from "solid-js";
+import { createSignal, Match, onMount, onCleanup, Show, Switch } from "solid-js";
+import { listen } from "@tauri-apps/api/event";
 import TitleBar from "./components/TitleBar";
 import LayoutsView from "./views/LayoutsView";
 import AnalyzeView from "./views/AnalyzeView";
@@ -29,6 +30,11 @@ function App() {
 
     onMount(async () => {
         await initStore();
+
+        // Auto-reload when config/layout files change on disk
+        const unlisten = await listen("config-reloaded", () => initStore());
+        onCleanup(unlisten);
+
         try {
             const session = await getSession();
             if (session.view && NAV_ITEMS.some((n) => n.id === session.view)) {

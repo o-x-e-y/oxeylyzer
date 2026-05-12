@@ -1,5 +1,6 @@
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import KeyboardDisplay from "../components/KeyboardDisplay";
+import LayoutSearch from "../components/LayoutSearch";
 import { appStore } from "../store";
 import { startGenerate, saveGenerated, cancelGenerate } from "../api";
 import type { Layout } from "../mock";
@@ -9,13 +10,13 @@ type SaveState = { name: string; saved: boolean };
 
 export default function GenerateView() {
     const [baseName, setBaseName] = createSignal(appStore.layouts[0]?.name ?? "");
-    const [count, setCount] = createSignal(1000);
+    const [countStr, setCountStr] = createSignal("1000");
+    const count = () => Math.max(1, parseInt(countStr()) || 1);
+    const [visibleCount, setVisibleCount] = createSignal(10);
     const [pinnedChars, setPinnedChars] = createSignal<Set<string>>(new Set());
 
     const pins = createMemo(() => [...pinnedChars()].join(""));
-    const baseKeys = createMemo(
-        () => appStore.layouts.find((l) => l.name === baseName())?.keys ?? "",
-    );
+    const baseLayout = createMemo(() => appStore.layouts.find((l) => l.name === baseName()));
 
     function togglePin(char: string) {
         setPinnedChars((prev) => {
@@ -59,13 +60,21 @@ export default function GenerateView() {
         const doneUnlisten = await listen<{ results: Layout[] }>("generate-done", (e) => {
             setResults(e.payload.results);
             initSaveStates(e.payload.results);
+            setVisibleCount(10);
             setRunning(false);
             setProgress(null);
             unlisteners.forEach((u) => u());
             unlisteners = [];
         });
 
-        unlisteners = [progressUnlisten, doneUnlisten];
+        const cancelUnlisten = await listen("generate-cancelled", () => {
+            setRunning(false);
+            setProgress(null);
+            unlisteners.forEach((u) => u());
+            unlisteners = [];
+        });
+
+        unlisteners = [progressUnlisten, doneUnlisten, cancelUnlisten];
 
         try {
             await startGenerate(baseName(), count(), pins());
@@ -109,15 +118,8 @@ export default function GenerateView() {
                 {/* Base layout */}
                 <div class="flex items-center gap-3">
                     <label class="text-sm text-neutral-400 font-mono w-28 shrink-0">Based on</label>
-                    <select
-                        class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
-                        value={baseName()}
-                        onChange={(e) => setBaseName(e.currentTarget.value)}
-                    >
-                        {appStore.layouts.map((l) => (
-                            <option value={l.name}>{l.name}</option>
-                        ))}
-                    </select>
+                    <LayoutSearch value={baseName()} onSelect={setBaseName} />
+                    <span class="text-xs text-neutral-400 font-mono">{baseName()}</span>
                 </div>
 
                 {/* Count */}
@@ -126,10 +128,10 @@ export default function GenerateView() {
                     <input
                         type="number"
                         class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 w-28"
-                        value={count()}
+                        value={countStr()}
                         min={1}
                         max={10000}
-                        onInput={(e) => setCount(parseInt(e.currentTarget.value, 10) || 1000)}
+                        onInput={(e) => setCountStr(e.currentTarget.value)}
                     />
                     <span class="text-xs text-neutral-500">500–1000 recommended</span>
                 </div>
@@ -143,14 +145,18 @@ export default function GenerateView() {
                         <div class="text-xs text-neutral-500">
                             Click keys to pin them. Pinned keys (⚑) won't move during generation.
                         </div>
-                        <Show when={baseKeys()}>
-                            <KeyboardDisplay
-                                keys={baseKeys()}
-                                heatmap={appStore.charFrequencies}
-                                interactive={true}
-                                pinned={pinnedChars()}
-                                onKeyClick={togglePin}
-                            />
+                        <Show when={baseLayout()}>
+                            {(bl) => (
+                                <KeyboardDisplay
+                                    keys={bl().keys}
+                                    keyboard={bl().keyboard}
+                                    shape={bl().shape}
+                                    heatmap={appStore.charFrequencies}
+                                    interactive={true}
+                                    pinned={pinnedChars()}
+                                    onKeyClick={(ch) => togglePin(ch)}
+                                />
+                            )}
                         </Show>
                         <Show when={pinnedChars().size > 0}>
                             <div class="flex items-center gap-2 text-xs font-mono text-neutral-400">
@@ -219,7 +225,7 @@ export default function GenerateView() {
                         Results — top {results().length}
                     </div>
 
-                    <For each={results()}>
+                    <For each={results().slice(0, visibleCount())}>
                         {(layout, i) => {
                             const save = () => saveStates()[i()];
                             return (
@@ -239,6 +245,8 @@ export default function GenerateView() {
                                     <div class="pl-8">
                                         <KeyboardDisplay
                                             keys={layout.keys}
+                                            keyboard={layout.keyboard}
+                                            shape={layout.shape}
                                             heatmap={appStore.charFrequencies}
                                         />
                                     </div>
@@ -278,6 +286,15 @@ export default function GenerateView() {
                             );
                         }}
                     </For>
+
+                    <Show when={visibleCount() < results().length}>
+                        <button
+                            class="border border-neutral-700 font-mono text-sm px-4 py-2 hover:bg-neutral-800 text-neutral-400 mt-1"
+                            onClick={() => setVisibleCount((n) => Math.min(n + 40, results().length))}
+                        >
+                            Show more ({results().length - visibleCount()} remaining)
+                        </button>
+                    </Show>
                 </div>
             </Show>
         </div>

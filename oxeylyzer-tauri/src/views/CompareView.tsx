@@ -1,4 +1,5 @@
-import { createSignal, Show } from "solid-js";
+import { createEffect, createSignal, Show } from "solid-js";
+import LayoutSearch from "../components/LayoutSearch";
 import KeyboardDisplay from "../components/KeyboardDisplay";
 import { appStore } from "../store";
 import { analyzeLayout } from "../api";
@@ -60,29 +61,22 @@ function CSep() {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function CompareView() {
-    const layoutNames = () => appStore.layouts.map((l) => l.name);
-
     const [name1, setName1] = createSignal(appStore.layouts[0]?.name ?? "");
     const [name2, setName2] = createSignal(appStore.layouts[1]?.name ?? "");
     const [compared, setCompared] = createSignal<[Layout, Layout] | null>(null);
     const [loading, setLoading] = createSignal(false);
     const [error, setError] = createSignal("");
 
-    const handleCompare = async () => {
+    createEffect(() => {
+        const n1 = name1(), n2 = name2();
+        if (!n1 || !n2) return;
         setLoading(true);
         setError("");
-        try {
-            const [l1, l2] = await Promise.all([
-                analyzeLayout(name1()),
-                analyzeLayout(name2()),
-            ]);
-            setCompared([l1, l2]);
-        } catch (e) {
-            setError(String(e));
-        } finally {
-            setLoading(false);
-        }
-    };
+        Promise.all([analyzeLayout(n1), analyzeLayout(n2)])
+            .then(([l1, l2]) => setCompared([l1, l2]))
+            .catch((e) => setError(String(e)))
+            .finally(() => setLoading(false));
+    });
 
     const pct = (v: number) => `${v.toFixed(3)}%`;
     const num = (v: number) => v.toFixed(3);
@@ -98,39 +92,17 @@ export default function CompareView() {
                     <label class="text-xs text-neutral-500 font-mono uppercase tracking-widest">
                         Layout 1
                     </label>
-                    <select
-                        class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
-                        value={name1()}
-                        onChange={(e) => setName1(e.currentTarget.value)}
-                    >
-                        {layoutNames().map((n) => (
-                            <option value={n}>{n}</option>
-                        ))}
-                    </select>
+                    <LayoutSearch value={name1()} onSelect={setName1} />
                 </div>
-
                 <div class="flex flex-col gap-1">
                     <label class="text-xs text-neutral-500 font-mono uppercase tracking-widest">
                         Layout 2
                     </label>
-                    <select
-                        class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
-                        value={name2()}
-                        onChange={(e) => setName2(e.currentTarget.value)}
-                    >
-                        {layoutNames().map((n) => (
-                            <option value={n}>{n}</option>
-                        ))}
-                    </select>
+                    <LayoutSearch value={name2()} onSelect={setName2} />
                 </div>
-
-                <button
-                    class="border border-neutral-500 text-neutral-100 font-mono text-sm px-4 py-1 hover:bg-neutral-700 disabled:opacity-40"
-                    disabled={loading()}
-                    onClick={handleCompare}
-                >
-                    {loading() ? "…" : "Compare"}
-                </button>
+                <Show when={loading()}>
+                    <span class="text-neutral-500 text-sm font-mono pb-1">…</span>
+                </Show>
             </div>
 
             <Show when={error()}>
@@ -150,6 +122,8 @@ export default function CompareView() {
                                     <div class="font-mono text-neutral-200">{l1.name}</div>
                                     <KeyboardDisplay
                                         keys={l1.keys}
+                                        keyboard={l1.keyboard}
+                                        shape={l1.shape}
                                         heatmap={appStore.charFrequencies}
                                     />
                                 </div>
@@ -157,6 +131,8 @@ export default function CompareView() {
                                     <div class="font-mono text-neutral-200">{l2.name}</div>
                                     <KeyboardDisplay
                                         keys={l2.keys}
+                                        keyboard={l2.keyboard}
+                                        shape={l2.shape}
                                         heatmap={appStore.charFrequencies}
                                     />
                                 </div>
@@ -194,8 +170,8 @@ export default function CompareView() {
                                     <CSep />
                                     <CRow
                                         label="Stretches"
-                                        v1={pct(s1.stretches)}
-                                        v2={pct(s2.stretches)}
+                                        v1={num(s1.stretches)}
+                                        v2={num(s2.stretches)}
                                         d={delta(s1.stretches, s2.stretches)}
                                     />
                                     <CRow

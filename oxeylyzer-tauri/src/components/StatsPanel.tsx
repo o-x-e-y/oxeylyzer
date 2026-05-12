@@ -40,7 +40,7 @@ export default function StatsPanel(props: Props) {
                         {(label, i) => (
                             <div class="text-center w-10 text-xs">
                                 <div class="text-neutral-500">{label}</div>
-                                <div>{s().finger_speed[i()].toFixed(2)}</div>
+                                <div>{(s().finger_speed[i()] * 10).toFixed(2)}</div>
                             </div>
                         )}
                     </For>
@@ -50,7 +50,7 @@ export default function StatsPanel(props: Props) {
                         {(label, i) => (
                             <div class="text-center w-10 text-xs">
                                 <div class="text-neutral-500">{label}</div>
-                                <div>{s().finger_speed[5 + i()].toFixed(2)}</div>
+                                <div>{(s().finger_speed[5 + i()] * 10).toFixed(2)}</div>
                             </div>
                         )}
                     </For>
@@ -60,7 +60,7 @@ export default function StatsPanel(props: Props) {
             <Sep />
 
             {/* ── Position Bigrams ──────────────────────── */}
-            <Stat label="Stretches" value={pct(s().stretches)} />
+            <Stat label="Stretches" value={num(s().stretches)} />
             <Stat label="Scissors" value={pct(s().scissors)} />
             <Stat label="LSBs" value={pct(s().lsbs)} />
             <Stat label="Pinky-Ring" value={pct(s().pinky_ring)} />

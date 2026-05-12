@@ -21,12 +21,19 @@ export type LayoutStats = {
     sfts: number;
 };
 
+/** [x, y, width, height] physical key geometry from the backend */
+export type PhysKey = [number, number, number, number];
+
 export type Layout = {
     name: string;
     /** 30 characters, row-major: 3 rows × 10 columns, left-to-right */
     keys: string;
     board: string;
     stats: LayoutStats;
+    /** Physical key positions — flat array, same order as `keys` */
+    keyboard: PhysKey[];
+    /** Keys per row */
+    shape: number[];
 };
 
 export type BigramEntry = {

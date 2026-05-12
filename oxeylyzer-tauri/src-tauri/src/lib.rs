@@ -17,6 +17,7 @@ use oxeylyzer_core::{
 };
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
+use toml;
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,10 @@ pub struct LayoutDto {
     pub keys: String,
     pub board: String,
     pub stats: LayoutStatsDto,
+    /// Physical key geometry: [x, y, width, height] per key (flat, same order as keys)
+    pub keyboard: Vec<[f64; 4]>,
+    /// Number of keys per row
+    pub shape: Vec<usize>,
 }
 
 #[derive(Serialize, Clone)]
@@ -192,16 +197,6 @@ fn stats_to_dto(stats: &LayoutStats, char_total: i64) -> LayoutStatsDto {
     }
 }
 
-fn fast_layout_to_dto(engine: &Oxeylyzer, fl: &FastLayout) -> LayoutDto {
-    let stats = engine.get_layout_stats(fl);
-    let stats_dto = stats_to_dto(&stats, engine.data.char_total);
-    LayoutDto {
-        name: fl.name.clone().unwrap_or_default(),
-        keys: fl.layout_str(),
-        board: "generated".to_string(),
-        stats: stats_dto,
-    }
-}
 
 fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
     let fast = engine.fast_layout(layout, &[]);
@@ -212,8 +207,11 @@ fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
         keys: fast.layout_str(),
         board: get_board_str(layout),
         stats: stats_dto,
+        keyboard: fast.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
+        shape: fast.shape.inner().to_vec(),
     }
 }
+
 
 fn get_board_str(layout: &Layout) -> String {
     serde_json::to_value(layout)
@@ -461,6 +459,43 @@ fn swap_keys(
         keys: fl.layout_str(),
         board: get_board_str(layout),
         stats: stats_dto,
+        keyboard: fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
+        shape: fl.shape.inner().to_vec(),
+    })
+}
+
+#[tauri::command]
+fn analyze_with_disabled(
+    name: String,
+    disabled_indices: Vec<usize>,
+    state: tauri::State<'_, AppState>,
+) -> Result<LayoutDto, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let layouts = state.layouts.lock().unwrap();
+    let layout = layouts
+        .get(&name.to_lowercase())
+        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    let mut fl = engine.fast_layout(layout, &[]);
+    let keyboard = fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect();
+    let shape = fl.shape.inner().to_vec();
+    let original_keys = fl.layout_str();
+
+    // Replace disabled key positions with REPLACEMENT_CHAR (byte 0 in the mapping)
+    for &idx in &disabled_indices {
+        if idx < fl.keys.len() {
+            fl.keys[idx] = 0;
+        }
+    }
+
+    let stats = engine.get_layout_stats(&fl);
+    let stats_dto = stats_to_dto(&stats, engine.data.char_total);
+    Ok(LayoutDto {
+        name: format!("{name}*"),
+        keys: original_keys,
+        board: get_board_str(layout),
+        stats: stats_dto,
+        keyboard,
+        shape,
     })
 }
 
@@ -511,20 +546,7 @@ fn set_language(
 
 #[tauri::command]
 fn reload_config(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let config =
-        Config::with_loaded_weights(state.base_path.join("config.toml"))
-            .map_err(|e| format!("Failed to reload config: {e}"))?;
-    let corpus_path = state.base_path.join(&config.corpus);
-    let data = Data::load(&corpus_path)
-        .map_err(|e| format!("Failed to load corpus: {e}"))?;
-    let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-    let new_layouts = load_all_layouts(&config, &state.base_path);
-
-    *state.config.lock().unwrap() = config;
-    *state.engine.lock().unwrap() = new_engine;
-    *state.layouts.lock().unwrap() = new_layouts;
-    state.generated.lock().unwrap().clear();
-    Ok(())
+    reload_state(&state)
 }
 
 #[tauri::command]
@@ -683,14 +705,27 @@ async fn start_generate(
         });
 
         let done_for_iter = done_count.clone();
-        let mut results: Vec<FastLayout> = engine
+        let results_arc: Arc<Mutex<Vec<FastLayout>>> = Arc::new(Mutex::new(Vec::new()));
+        let results_for_iter = results_arc.clone();
+        let cancel_for_iter = cancel.clone();
+
+        engine
             .generate_n_with_pins_iter(count, &fast_base, &pin_pos)
-            .inspect(|_| {
+            .for_each(|fl| {
                 done_for_iter.fetch_add(1, Ordering::Relaxed);
-            })
-            .collect();
+                if !cancel_for_iter.load(Ordering::Relaxed) {
+                    results_for_iter.lock().unwrap().push(fl);
+                }
+            });
 
         let _ = progress_thread.join();
+
+        if cancel.load(Ordering::Relaxed) {
+            let _ = app.emit("generate-cancelled", ());
+            return;
+        }
+
+        let mut results = std::mem::take(&mut *results_arc.lock().unwrap());
 
         // Sort by score descending.
         let char_total = engine.data.char_total;
@@ -714,6 +749,8 @@ async fn start_generate(
                     keys: fl.layout_str(),
                     board: "generated".to_string(),
                     stats: stats_dto,
+                    keyboard: fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
+                    shape: fl.shape.inner().to_vec(),
                 }
             })
             .collect();
@@ -1038,6 +1075,90 @@ fn get_defaults() -> Result<ConfigDto, String> {
     Ok(config_to_dto(&Config::with_defaults()))
 }
 
+// ─── Weight Presets ───────────────────────────────────────────────────────────
+
+fn preset_dir(base_path: &Path) -> PathBuf {
+    base_path.join("static/weight-presets")
+}
+
+fn weights_dto_to_toml(w: &WeightsDto) -> String {
+    let fw = &w.finger_weights;
+    let mfu = &w.max_finger_use;
+    format!(
+        "lateral_penalty = {}\nsfbs = {}\nsfs = {}\nstretches = {}\n\
+         pinky_ring_bigrams = {}\ninrolls = {}\noutrolls = {}\nonehands = {}\n\
+         alternates = {}\nalternates_sfs = {}\nredirects = {}\nredirects_sfs = {}\n\
+         bad_redirects = {}\nbad_redirects_sfs = {}\n\n\
+         [finger_weights]\n\
+         lp = {}\nlr = {}\nlm = {}\nli = {}\nlt = {}\n\
+         rt = {}\nri = {}\nrm = {}\nrr = {}\nrp = {}\n\n\
+         [max_finger_use]\n\
+         penalty = {}\npinky = {}\nring = {}\nmiddle = {}\nindex = {}\nthumb = {}\n",
+        w.lateral_penalty, w.sfbs, w.sfs, w.stretches, w.pinky_ring_bigrams,
+        w.inrolls, w.outrolls, w.onehands, w.alternates, w.alternates_sfs,
+        w.redirects, w.redirects_sfs, w.bad_redirects, w.bad_redirects_sfs,
+        fw.lp, fw.lr, fw.lm, fw.li, fw.lt, fw.rt, fw.ri, fw.rm, fw.rr, fw.rp,
+        mfu.penalty, mfu.pinky, mfu.ring, mfu.middle, mfu.index, mfu.thumb,
+    )
+}
+
+#[tauri::command]
+fn list_weight_presets(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+    let dir = preset_dir(&state.base_path);
+    if !dir.exists() {
+        return Ok(vec![]);
+    }
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().into_owned();
+            name.ends_with(".toml").then(|| name.trim_end_matches(".toml").to_string())
+        })
+        .collect();
+    names.sort();
+    Ok(names)
+}
+
+#[tauri::command]
+fn save_weight_preset(
+    name: String,
+    weights: WeightsDto,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let dir = preset_dir(&state.base_path);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(&name).with_extension("toml");
+    std::fs::write(&path, weights_dto_to_toml(&weights)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_weight_preset(
+    name: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<WeightsDto, String> {
+    let path = preset_dir(&state.base_path).join(&name).with_extension("toml");
+    let s = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    toml::from_str::<WeightsDto>(&s).map_err(|e| format!("Failed to parse preset '{name}': {e}"))
+}
+
+// ─── Reload Helper ────────────────────────────────────────────────────────────
+
+fn reload_state(state: &AppState) -> Result<(), String> {
+    let config = Config::with_loaded_weights(state.base_path.join("config.toml"))
+        .map_err(|e| format!("Failed to reload config: {e}"))?;
+    let corpus_path = state.base_path.join(&config.corpus);
+    let data = Data::load(&corpus_path)
+        .map_err(|e| format!("Failed to load corpus: {e}"))?;
+    let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
+    let new_layouts = load_all_layouts(&config, &state.base_path);
+    *state.config.lock().unwrap() = config;
+    *state.engine.lock().unwrap() = new_engine;
+    *state.layouts.lock().unwrap() = new_layouts;
+    state.generated.lock().unwrap().clear();
+    Ok(())
+}
+
 // ─── Entry Point ──────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1064,10 +1185,45 @@ pub fn run() {
                 engine: Mutex::new(engine),
                 layouts: Mutex::new(layouts),
                 generated: Mutex::new(Vec::new()),
-                base_path,
+                base_path: base_path.clone(),
                 config: Mutex::new(config),
                 cancel_flag: Arc::new(AtomicBool::new(false)),
             });
+
+            // File watcher: auto-reload when config.toml or layout files change.
+            {
+                use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
+                let app_handle = app.handle().clone();
+                let watch_config = base_path.join("config.toml");
+                let watch_layouts = base_path.join("static/layouts");
+                std::thread::spawn(move || {
+                    let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
+                    let mut watcher = match recommended_watcher(tx) {
+                        Ok(w) => w,
+                        Err(e) => { eprintln!("File watcher init failed: {e}"); return; }
+                    };
+                    let _ = watcher.watch(&watch_config, RecursiveMode::NonRecursive);
+                    let _ = watcher.watch(&watch_layouts, RecursiveMode::Recursive);
+                    let mut last_reload = std::time::Instant::now()
+                        .checked_sub(std::time::Duration::from_secs(5))
+                        .unwrap_or_else(std::time::Instant::now);
+                    for event in rx.into_iter().flatten() {
+                        if !matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+                            continue;
+                        }
+                        if last_reload.elapsed() < std::time::Duration::from_secs(2) {
+                            continue;
+                        }
+                        last_reload = std::time::Instant::now();
+                        let state = app_handle.state::<AppState>();
+                        if let Err(e) = reload_state(&state) {
+                            eprintln!("Auto-reload failed: {e}");
+                        } else {
+                            let _ = app_handle.emit("config-reloaded", ());
+                        }
+                    }
+                });
+            }
 
             Ok(())
         })
@@ -1076,6 +1232,7 @@ pub fn run() {
             list_languages,
             current_language,
             analyze_layout,
+            analyze_with_disabled,
             get_bigrams,
             swap_keys,
             get_char_frequencies,
@@ -1094,6 +1251,9 @@ pub fn run() {
             get_config,
             set_config,
             get_defaults,
+            list_weight_presets,
+            save_weight_preset,
+            load_weight_preset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

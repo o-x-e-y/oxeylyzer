@@ -1,8 +1,10 @@
-import { createSignal, onMount, Show } from "solid-js";
-import { getConfig, setConfig, getDefaults, type ConfigDto, type WeightsDto } from "../api";
+import { createSignal, For, onMount, Show } from "solid-js";
+import {
+    getConfig, setConfig, getDefaults,
+    listWeightPresets, saveWeightPreset, loadWeightPreset,
+    type ConfigDto, type WeightsDto,
+} from "../api";
 import { initStore } from "../store";
-
-type SavedPreset = { name: string; weights: WeightsDto };
 
 function NumInput(props: {
     label: string;
@@ -38,18 +40,13 @@ export default function ConfigView() {
     const [saving, setSaving] = createSignal(false);
     const [msg, setMsg] = createSignal<{ text: string; ok: boolean } | null>(null);
     const [presetName, setPresetName] = createSignal("");
-    const [presets, setPresets] = createSignal<SavedPreset[]>(() => {
-        try {
-            return JSON.parse(localStorage.getItem("oxeylyzer_presets") ?? "[]");
-        } catch {
-            return [];
-        }
-    });
+    const [presets, setPresets] = createSignal<string[]>([]);
 
     onMount(async () => {
         try {
-            const cfg = await getConfig();
+            const [cfg, ps] = await Promise.all([getConfig(), listWeightPresets()]);
             setConfigState(cfg);
+            setPresets(ps);
         } catch (e) {
             setMsg({ text: String(e), ok: false });
         }
@@ -110,26 +107,30 @@ export default function ConfigView() {
         }
     }
 
-    function savePreset() {
+    async function savePreset() {
         const name = presetName().trim();
         const c = config();
         if (!name || !c) return;
-        const updated = [...presets().filter((p) => p.name !== name), { name, weights: c.weights }];
-        setPresets(updated);
-        localStorage.setItem("oxeylyzer_presets", JSON.stringify(updated));
-        setPresetName("");
+        try {
+            await saveWeightPreset(name, c.weights);
+            const ps = await listWeightPresets();
+            setPresets(ps);
+            setPresetName("");
+            setMsg({ text: `Preset "${name}" saved.`, ok: true });
+        } catch (e) {
+            setMsg({ text: String(e), ok: false });
+        }
     }
 
-    function loadPreset(preset: SavedPreset) {
+    async function handleLoadPreset(name: string) {
         const c = config();
-        if (!c) return;
-        setConfigState({ ...c, weights: preset.weights });
-    }
-
-    function deletePreset(name: string) {
-        const updated = presets().filter((p) => p.name !== name);
-        setPresets(updated);
-        localStorage.setItem("oxeylyzer_presets", JSON.stringify(updated));
+        if (!c || !name) return;
+        try {
+            const weights = await loadWeightPreset(name);
+            setConfigState({ ...c, weights });
+        } catch (e) {
+            setMsg({ text: String(e), ok: false });
+        }
     }
 
     function exportWeights() {
@@ -365,6 +366,20 @@ middle=${mfu.middle} index=${mfu.index} thumb=${mfu.thumb}`;
                             <div class="text-xs text-neutral-500 uppercase tracking-widest">
                                 Weight Presets
                             </div>
+                            <Show when={presets().length > 0}>
+                                <div class="flex gap-2 items-center">
+                                    <label class="text-xs text-neutral-400 font-mono shrink-0">Load</label>
+                                    <select
+                                        class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 flex-1"
+                                        onChange={(e) => handleLoadPreset(e.currentTarget.value)}
+                                    >
+                                        <option value="">— select preset —</option>
+                                        <For each={presets()}>
+                                            {(name) => <option value={name}>{name}</option>}
+                                        </For>
+                                    </select>
+                                </div>
+                            </Show>
                             <div class="flex gap-2">
                                 <input
                                     class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 w-44"
@@ -380,27 +395,6 @@ middle=${mfu.middle} index=${mfu.index} thumb=${mfu.thumb}`;
                                     Save preset
                                 </button>
                             </div>
-                            <Show when={presets().length > 0}>
-                                <div class="flex flex-col gap-1">
-                                    {presets().map((p) => (
-                                        <div class="flex items-center gap-2 font-mono text-sm">
-                                            <span class="text-neutral-300 flex-1">{p.name}</span>
-                                            <button
-                                                class="border border-neutral-600 text-xs px-2 py-0.5 hover:bg-neutral-700"
-                                                onClick={() => loadPreset(p)}
-                                            >
-                                                Load
-                                            </button>
-                                            <button
-                                                class="text-neutral-500 hover:text-red-400 text-xs"
-                                                onClick={() => deletePreset(p.name)}
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </Show>
                         </section>
 
                         {/* Actions */}

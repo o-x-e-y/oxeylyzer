@@ -1,5 +1,6 @@
-import { createEffect, createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, Show } from "solid-js";
 import KeyboardDisplay from "../components/KeyboardDisplay";
+import LayoutSearch from "../components/LayoutSearch";
 import { appStore, initStore } from "../store";
 import { getLayoutDetail, saveLayoutEdit, forkLayout } from "../api";
 
@@ -13,7 +14,6 @@ type DofJson = {
 
 type Props = {
     layoutName?: string;
-    onNavigateLayouts?: () => void;
 };
 
 export default function EditView(props: Props) {
@@ -24,8 +24,7 @@ export default function EditView(props: Props) {
     const [editedName, setEditedName] = createSignal("");
     const [editedBoard, setEditedBoard] = createSignal("");
     const [editedFingering, setEditedFingering] = createSignal("");
-    const [selectedKey, setSelectedKey] = createSignal<number | null>(null);
-    const [keyInput, setKeyInput] = createSignal("");
+    const [editingIdx, setEditingIdx] = createSignal<number | null>(null);
     const [msg, setMsg] = createSignal<{ text: string; ok: boolean } | null>(null);
     const [forkName, setForkName] = createSignal("");
     const [loading, setLoading] = createSignal(false);
@@ -40,11 +39,11 @@ export default function EditView(props: Props) {
                 setEditedName(d.name);
                 setEditedBoard(d.board);
                 setEditedFingering(d.fingering);
+                setEditingIdx(null);
             })
             .catch((e) => setMsg({ text: String(e), ok: false }));
     });
 
-    /** Reconstructs the 30-char key string from the Dof main layer rows. */
     const keys = () => {
         const d = dof();
         if (!d) return "";
@@ -53,6 +52,9 @@ export default function EditView(props: Props) {
             .map((row) => row.replace(/\s+/g, " ").trim().split(/\s+/).join(""))
             .join("");
     };
+
+    // Use keyboard/shape from the store if available for the current layout
+    const storeLayout = () => appStore.layouts.find((l) => l.name === layoutName());
 
     function updateKeyAt(pos: number, newChar: string) {
         const d = dof();
@@ -66,7 +68,6 @@ export default function EditView(props: Props) {
             if (pos < offset + rowLen) {
                 const inRow = pos - offset;
                 rowChars[inRow] = c;
-                // Preserve the 5|5 split spacing
                 const left = rowChars.slice(0, 5).join(" ");
                 const right = rowChars.slice(5).join(" ");
                 rows[r] = rowChars.length <= 5 ? left : `${left}  ${right}`;
@@ -75,7 +76,20 @@ export default function EditView(props: Props) {
             offset += rowLen;
         }
         setDof({ ...d, layers: { ...d.layers, main: rows } });
-        setSelectedKey(null);
+    }
+
+    function handleEditCommit(idx: number, char: string) {
+        if (char) updateKeyAt(idx, char);
+        // Advance to next key
+        const total = keys().length;
+        if (idx + 1 < total) setEditingIdx(idx + 1);
+        else setEditingIdx(null);
+    }
+
+    function handleEditNext(idx: number) {
+        const total = keys().length;
+        if (idx + 1 < total) setEditingIdx(idx + 1);
+        else setEditingIdx(null);
     }
 
     async function handleSave() {
@@ -123,15 +137,8 @@ export default function EditView(props: Props) {
             {/* Layout selector */}
             <div class="flex gap-3 items-center">
                 <label class="text-sm text-neutral-400 font-mono">Layout</label>
-                <select
-                    class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
-                    value={layoutName()}
-                    onChange={(e) => setLayoutName(e.currentTarget.value)}
-                >
-                    {appStore.layouts.map((l) => (
-                        <option value={l.name}>{l.name}</option>
-                    ))}
-                </select>
+                <LayoutSearch value={layoutName()} onSelect={setLayoutName} />
+                <span class="text-sm font-mono text-neutral-400">{layoutName()}</span>
             </div>
 
             <Show when={dof()}>
@@ -157,15 +164,13 @@ export default function EditView(props: Props) {
                                     value={editedBoard()}
                                     onChange={(e) => setEditedBoard(e.currentTarget.value)}
                                 >
-                                    <For each={["ortho", "ansi", "iso", "colstag", "rowstag"]}>
-                                        {(bt) => <option value={bt}>{bt}</option>}
-                                    </For>
+                                    {["ortho", "ansi", "iso", "colstag", "rowstag"].map((bt) => (
+                                        <option value={bt}>{bt}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div class="flex flex-col gap-1">
-                                <label class="text-xs text-neutral-500 font-mono">
-                                    Fingering
-                                </label>
+                                <label class="text-xs text-neutral-500 font-mono">Fingering</label>
                                 <input
                                     class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
                                     value={editedFingering()}
@@ -175,57 +180,29 @@ export default function EditView(props: Props) {
                         </div>
                     </div>
 
-                    {/* Key editor — click a key to remap it */}
+                    {/* Key editor — click to edit inline */}
                     <div class="border border-neutral-700 p-4 flex flex-col gap-3">
                         <div class="text-xs text-neutral-500 uppercase tracking-widest">
                             Key Layout{" "}
                             <span class="text-neutral-600 normal-case">
-                                (click a key to change it)
+                                (click a key to edit · Tab/Enter advances · Esc cancels)
                             </span>
                         </div>
-                        <Show when={keys().length >= 30}>
-                            <KeyboardDisplay
-                                keys={keys()}
-                                interactive={true}
-                                heatmap={appStore.charFrequencies}
-                                onKeyClick={(char) => {
-                                    const pos = keys().indexOf(char);
-                                    setSelectedKey(pos >= 0 ? pos : null);
-                                    setKeyInput(char);
-                                }}
-                            />
-                        </Show>
-                        <Show when={selectedKey() !== null}>
-                            <div class="flex items-center gap-3 text-sm font-mono">
-                                <span class="text-neutral-400">
-                                    Replace key #{selectedKey()! + 1} (
-                                    <span class="text-neutral-200">{keys()[selectedKey()!]}</span>
-                                    ) with:
-                                </span>
-                                <input
-                                    class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 w-12 text-center"
-                                    maxLength={1}
-                                    value={keyInput()}
-                                    onInput={(e) => setKeyInput(e.currentTarget.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter") updateKeyAt(selectedKey()!, keyInput());
-                                        if (e.key === "Escape") setSelectedKey(null);
-                                    }}
-                                    ref={(el) => setTimeout(() => el?.focus(), 0)}
+                        <Show when={keys().length >= 30 && storeLayout()}>
+                            {(bl) => (
+                                <KeyboardDisplay
+                                    keys={keys()}
+                                    keyboard={bl().keyboard}
+                                    shape={bl().shape}
+                                    heatmap={appStore.charFrequencies}
+                                    interactive={true}
+                                    editingIdx={editingIdx()}
+                                    onKeyClick={(_ch, idx) => setEditingIdx(idx)}
+                                    onEditCommit={handleEditCommit}
+                                    onEditNext={handleEditNext}
+                                    onEditCancel={() => setEditingIdx(null)}
                                 />
-                                <button
-                                    class="border border-neutral-500 px-2 py-0.5 hover:bg-neutral-700"
-                                    onClick={() => updateKeyAt(selectedKey()!, keyInput())}
-                                >
-                                    Set
-                                </button>
-                                <button
-                                    class="text-neutral-500 hover:text-neutral-300"
-                                    onClick={() => setSelectedKey(null)}
-                                >
-                                    ×
-                                </button>
-                            </div>
+                            )}
                         </Show>
                     </div>
 

@@ -2,30 +2,51 @@ import { createEffect, createSignal, Show } from "solid-js";
 import KeyboardDisplay from "../components/KeyboardDisplay";
 import StatsPanel from "../components/StatsPanel";
 import BigramList from "../components/BigramList";
+import LayoutSearch from "../components/LayoutSearch";
 import { BIGRAM_TABS, type BigramTab, type Layout, type BigramEntry, type LayoutStats } from "../mock";
 import { appStore } from "../store";
-import { analyzeLayout, getBigrams, swapKeys } from "../api";
+import { analyzeLayout, getBigrams, swapKeys, analyzeWithDisabled } from "../api";
 
 type Props = {
     initialLayout?: string;
     onEdit?: (layoutName: string) => void;
 };
 
+function delta(v1: number, v2: number, higherIsBetter = false): { text: string; color: string } {
+    const d = v2 - v1;
+    if (Math.abs(d) < 0.00005) return { text: "=", color: "text-neutral-500" };
+    if (higherIsBetter)
+        return d > 0
+            ? { text: `▲ +${d.toFixed(3)}`, color: "text-green-400" }
+            : { text: `▼ ${d.toFixed(3)}`, color: "text-red-400" };
+    return d < 0
+        ? { text: `▲ ${d.toFixed(3)}`, color: "text-green-400" }
+        : { text: `▼ +${d.toFixed(3)}`, color: "text-red-400" };
+}
+
+function DRow(props: { label: string; v1: string; v2: string; d: { text: string; color: string } }) {
+    return (
+        <div class="flex gap-2 font-mono text-xs py-px">
+            <span class="w-28 shrink-0 text-neutral-500">{props.label}</span>
+            <span class="w-16 text-right shrink-0 text-neutral-400">{props.v1}</span>
+            <span class="w-16 text-right shrink-0 text-neutral-100">{props.v2}</span>
+            <span class={`w-20 text-right shrink-0 ${props.d.color}`}>{props.d.text}</span>
+        </div>
+    );
+}
+
 export default function AnalyzeView(props: Props) {
     const initialName = () =>
         props.initialLayout ?? appStore.layouts[0]?.name ?? "";
 
-    const [selectedName, setSelectedName] = createSignal(initialName());
-    const [nameOrNr, setNameOrNr] = createSignal("");
     const [layout, setLayout] = createSignal<Layout | null>(null);
-    const [baseline, setBaseline] = createSignal<LayoutStats | null>(null);
+    const [baseline, setBaseline] = createSignal<Layout | null>(null);
     const [activeTab, setActiveTab] = createSignal<BigramTab>("sfbs");
     const [count, setCount] = createSignal(10);
-    const [swapInput, setSwapInput] = createSignal("");
-    const [swapMsg, setSwapMsg] = createSignal("");
     const [bigramData, setBigramData] = createSignal<BigramEntry[]>([]);
     const [highlightedKeys, setHighlightedKeys] = createSignal<string[]>([]);
     const [loading, setLoading] = createSignal(false);
+    const [disabledIndices, setDisabledIndices] = createSignal<Set<number>>(new Set());
 
     // Load the initial layout once the store has data.
     createEffect(() => {
@@ -33,8 +54,7 @@ export default function AnalyzeView(props: Props) {
         if (!name || layout()) return;
         analyzeLayout(name).then((l) => {
             setLayout(l);
-            setBaseline(l.stats);
-            setSelectedName(l.name);
+            setBaseline(l);
         });
     });
 
@@ -42,121 +62,103 @@ export default function AnalyzeView(props: Props) {
     createEffect(() => {
         const name = layout()?.name;
         const tab = activeTab();
-        if (!name || name.endsWith("*")) {
-            // Swapped layout: use the original base name to fetch bigrams
-            const base = name?.replace(/\*+$/, "");
-            if (!base) return;
-            getBigrams(base, tab, 50).then(setBigramData);
-        } else if (name) {
-            getBigrams(name, tab, 50).then(setBigramData);
-        }
+        const base = name?.replace(/\*+$/, "");
+        if (!base) return;
+        getBigrams(base, tab, 50).then(setBigramData);
     });
 
-    async function handleAnalyze() {
-        const raw = nameOrNr().trim();
-        let targetName: string;
-        if (raw) {
-            // Check if it looks like an index
-            const idx = parseInt(raw, 10);
-            if (!isNaN(idx)) {
-                targetName = appStore.layouts[idx - 1]?.name ?? raw;
-            } else {
-                targetName = raw;
-            }
-        } else {
-            targetName = selectedName();
-        }
-        if (!targetName) return;
+    async function handleSelect(name: string) {
         setLoading(true);
+        setDisabledIndices(new Set());
         try {
-            const l = await analyzeLayout(targetName);
+            const l = await analyzeLayout(name);
             setLayout(l);
-            setBaseline(l.stats);
-            setSelectedName(l.name);
-            setSwapMsg("");
+            setBaseline(l);
         } catch (e) {
-            setSwapMsg(`Error: ${e}`);
+            console.error(e);
         } finally {
             setLoading(false);
         }
     }
 
-    async function handleSwap() {
-        const input = swapInput().trim();
-        if (!input || !layout()) return;
-        const baseName = layout()!.name.replace(/\*+$/, "");
-        setLoading(true);
-        try {
-            const l = await swapKeys(baseName, input);
-            setLayout(l);
-            setSwapMsg(`Swapped: "${input}"`);
-        } catch (e) {
-            setSwapMsg(`Error: ${e}`);
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    function handleUndo() {
-        // Reload the baseline (pre-swap) state
-        const bl = baseline();
+    async function handleSwap(fromIdx: number, toIdx: number) {
         const l = layout();
-        if (!bl || !l) return;
+        if (!l) return;
         const baseName = l.name.replace(/\*+$/, "");
+        const fromChar = l.keys[fromIdx];
+        const toChar = l.keys[toIdx];
+        if (!fromChar || !toChar) return;
+        setLoading(true);
+        try {
+            const updated = await swapKeys(baseName, fromChar + toChar);
+            setLayout(updated);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    async function handleToggleDisabled(idx: number) {
+        const l = layout();
+        if (!l) return;
+        const baseName = l.name.replace(/\*+$/, "");
+        const newDisabled = new Set(disabledIndices());
+        if (newDisabled.has(idx)) newDisabled.delete(idx);
+        else newDisabled.add(idx);
+        setDisabledIndices(newDisabled);
+        if (newDisabled.size === 0) {
+            const fresh = await analyzeLayout(baseName);
+            setLayout(fresh);
+        } else {
+            const updated = await analyzeWithDisabled(baseName, [...newDisabled]);
+            setLayout(updated);
+        }
+    }
+
+    function handleReset() {
+        const bl = baseline();
+        if (!bl) return;
+        const baseName = bl.name.replace(/\*+$/, "");
+        setDisabledIndices(new Set());
         analyzeLayout(baseName).then((fresh) => {
             setLayout(fresh);
-            setSwapMsg("");
         });
     }
 
     const displayBigrams = () => bigramData().slice(0, count());
+    const isModified = () => layout()?.name.endsWith("*") ?? false;
+    const baselineStats = () => baseline()?.stats;
+    const currentStats = () => layout()?.stats;
 
-    const statDiff = (): Partial<LayoutStats> | null => {
-        const base = baseline();
-        const current = layout()?.stats;
-        if (!base || !current || !layout()?.name.endsWith("*")) return null;
-        const diff: Partial<LayoutStats> = {};
-        (Object.keys(base) as (keyof LayoutStats)[]).forEach((k) => {
-            if (typeof base[k] === "number") {
-                (diff as Record<string, number>)[k as string] =
-                    (current[k] as number) - (base[k] as number);
-            }
-        });
-        return diff;
-    };
+    const pct = (v: number) => `${v.toFixed(3)}%`;
+    const num = (v: number) => v.toFixed(3);
+    const sum = (...vs: number[]) => `${vs.reduce((a, b) => a + b, 0).toFixed(3)}%`;
 
     return (
         <div class="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
             {/* ── Toolbar ─────────────────────────────────────────────── */}
             <div class="shrink-0 flex items-center gap-2 border border-neutral-700 p-2">
                 <label class="text-neutral-400 text-sm shrink-0">Layout</label>
-                <select
-                    class="bg-neutral-800 border border-neutral-600 text-sm px-2 py-1"
-                    value={selectedName()}
-                    onChange={(e) => setSelectedName(e.currentTarget.value)}
-                >
-                    {appStore.layouts.map((l) => (
-                        <option value={l.name}>{l.name}</option>
-                    ))}
-                </select>
-
-                <span class="text-neutral-600 text-sm">or</span>
-
-                <input
-                    class="bg-neutral-800 border border-neutral-600 text-sm px-2 py-1 w-40"
-                    placeholder="name / index"
-                    value={nameOrNr()}
-                    onInput={(e) => setNameOrNr(e.currentTarget.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
+                <LayoutSearch
+                    value={layout()?.name.replace(/\*+$/, "") ?? ""}
+                    onSelect={handleSelect}
                 />
-                <button
-                    class="border border-neutral-500 px-3 py-1 text-sm hover:bg-neutral-700 disabled:opacity-40"
-                    disabled={loading()}
-                    onClick={handleAnalyze}
-                >
-                    {loading() ? "…" : "Analyze"}
-                </button>
-                <Show when={layout() && !layout()!.name.endsWith("*")}>
+                <Show when={loading()}>
+                    <span class="text-neutral-500 text-sm">…</span>
+                </Show>
+                <Show when={layout()}>
+                    <span class="font-mono text-sm text-neutral-300">{layout()!.name}</span>
+                </Show>
+                <Show when={isModified()}>
+                    <button
+                        class="border border-neutral-600 text-xs font-mono px-2 py-0.5 hover:bg-neutral-700"
+                        onClick={handleReset}
+                    >
+                        ↩ Reset
+                    </button>
+                </Show>
+                <Show when={layout() && !isModified()}>
                     <button
                         class="border border-neutral-600 px-3 py-1 text-sm hover:bg-neutral-700"
                         onClick={() => props.onEdit?.(layout()!.name)}
@@ -168,95 +170,62 @@ export default function AnalyzeView(props: Props) {
 
             {/* ── Three columns ───────────────────────────────────────── */}
             <div class="flex gap-4 flex-1 min-h-0">
-                {/* Col 1 — keyboard + swap ─────────────────────────────── */}
+                {/* Col 1 — keyboard ───────────────────────────────────── */}
                 <div class="shrink-0 flex flex-col gap-3">
                     <div class="border border-neutral-700 p-3 flex flex-col gap-3">
-                        <span class="font-mono text-base">{layout()?.name ?? "—"}</span>
                         <Show when={layout()}>
                             {(l) => (
                                 <KeyboardDisplay
                                     keys={l().keys}
+                                    keyboard={l().keyboard}
+                                    shape={l().shape}
                                     heatmap={appStore.charFrequencies}
                                     highlight={highlightedKeys().length > 0 ? highlightedKeys() : undefined}
+                                    draggable={true}
+                                    onSwap={handleSwap}
+                                    disabledIndices={disabledIndices()}
+                                    onToggleDisabled={handleToggleDisabled}
                                 />
                             )}
                         </Show>
+                        <div class="text-xs text-neutral-600 font-mono">
+                            drag to swap · right-click to disable
+                        </div>
                     </div>
 
-                    {/* Swap Keys */}
-                    <div class="border border-neutral-700 p-3 flex flex-col gap-2">
-                        <div class="text-xs text-neutral-500 uppercase tracking-widest">
-                            Swap Keys
-                        </div>
-                        <div class="text-xs text-neutral-500">
-                            e.g.{" "}
-                            <span class="font-mono text-neutral-400">ab</span> swaps a↔b,{" "}
-                            <span class="font-mono text-neutral-400">abc</span> cycles a→b→c
-                        </div>
-                        <div class="flex gap-2">
-                            <input
-                                class="bg-neutral-800 border border-neutral-600 text-sm px-2 py-1 font-mono flex-1"
-                                placeholder="ab abc …"
-                                value={swapInput()}
-                                onInput={(e) => setSwapInput(e.currentTarget.value)}
-                                onKeyDown={(e) => e.key === "Enter" && handleSwap()}
-                            />
-                            <button
-                                class="border border-neutral-500 px-3 py-1 text-sm hover:bg-neutral-700 shrink-0 disabled:opacity-40"
-                                disabled={loading()}
-                                onClick={handleSwap}
-                            >
-                                Swap
-                            </button>
-                        </div>
-                        <Show when={layout()?.name.endsWith("*")}>
-                            <button
-                                class="border border-neutral-600 text-xs font-mono px-2 py-0.5 self-start hover:bg-neutral-700"
-                                onClick={handleUndo}
-                            >
-                                ↩ Reset
-                            </button>
-                        </Show>
-                        <Show when={swapMsg()}>
-                            <div class="text-xs text-neutral-400 font-mono">{swapMsg()}</div>
-                        </Show>
-                    </div>
-
-                    {/* Stat diff panel — shown after a swap */}
-                    <Show when={statDiff()}>
-                        {(diff) => (
-                            <div class="border border-neutral-700 p-3 flex flex-col gap-1 text-xs font-mono">
-                                <div class="text-neutral-500 uppercase tracking-widest mb-1">
-                                    Δ vs baseline
-                                </div>
-                                {(
-                                    [
-                                        ["sfb", "SFB"],
-                                        ["dsfb", "DSFB"],
-                                        ["fspeed", "Fspeed"],
-                                        ["scissors", "Scissors"],
-                                        ["score", "Score"],
-                                    ] as [keyof LayoutStats, string][]
-                                ).map(([k, label]) => {
-                                    const d = (diff() as Record<string, number>)[k as string] ?? 0;
-                                    const better =
-                                        k === "score" ? d > 0 : d < 0;
-                                    return (
-                                        <div class="flex gap-2 justify-between">
-                                            <span class="text-neutral-500">{label}</span>
-                                            <span
-                                                class={
-                                                    better ? "text-green-400" : "text-red-400"
-                                                }
-                                            >
-                                                {d > 0 ? "+" : ""}
-                                                {d.toFixed(3)}
-                                            </span>
-                                        </div>
-                                    );
-                                })}
+                    {/* Inline delta — shown after any swap or disable */}
+                    <Show when={isModified() && baselineStats() && currentStats()}>
+                        <div class="border border-neutral-700 p-3 flex flex-col gap-0.5 text-xs font-mono overflow-y-auto max-h-72">
+                            <div class="flex gap-2 text-neutral-600 pb-1 mb-1 border-b border-neutral-700">
+                                <span class="w-28 shrink-0" />
+                                <span class="w-16 text-right shrink-0">before</span>
+                                <span class="w-16 text-right shrink-0">after</span>
+                                <span class="w-20 text-right shrink-0">Δ</span>
                             </div>
-                        )}
+                            {(() => {
+                                const b = baselineStats()!;
+                                const c = currentStats()!;
+                                return (
+                                    <>
+                                        <DRow label="Score" v1={num(b.score)} v2={num(c.score)} d={delta(b.score, c.score, true)} />
+                                        <DRow label="SFB" v1={pct(b.sfb)} v2={pct(c.sfb)} d={delta(b.sfb, c.sfb)} />
+                                        <DRow label="DSFB" v1={pct(b.dsfb)} v2={pct(c.dsfb)} d={delta(b.dsfb, c.dsfb)} />
+                                        <DRow label="Fspeed" v1={num(b.fspeed)} v2={num(c.fspeed)} d={delta(b.fspeed, c.fspeed)} />
+                                        <DRow label="Stretches" v1={num(b.stretches)} v2={num(c.stretches)} d={delta(b.stretches, c.stretches)} />
+                                        <DRow label="Scissors" v1={pct(b.scissors)} v2={pct(c.scissors)} d={delta(b.scissors, c.scissors)} />
+                                        <DRow label="LSBs" v1={pct(b.lsbs)} v2={pct(c.lsbs)} d={delta(b.lsbs, c.lsbs)} />
+                                        <DRow label="Pinky-Ring" v1={pct(b.pinky_ring)} v2={pct(c.pinky_ring)} d={delta(b.pinky_ring, c.pinky_ring)} />
+                                        <DRow label="Inrolls" v1={pct(b.inrolls)} v2={pct(c.inrolls)} d={delta(b.inrolls, c.inrolls, true)} />
+                                        <DRow label="Outrolls" v1={pct(b.outrolls)} v2={pct(c.outrolls)} d={delta(b.outrolls, c.outrolls, true)} />
+                                        <DRow label="Alternates" v1={pct(b.alternates)} v2={pct(c.alternates)} d={delta(b.alternates, c.alternates, true)} />
+                                        <DRow label="Alt. SFS" v1={pct(b.alternates_sfs)} v2={pct(c.alternates_sfs)} d={delta(b.alternates_sfs, c.alternates_sfs, true)} />
+                                        <DRow label="Redirects" v1={pct(b.redirects)} v2={pct(c.redirects)} d={delta(b.redirects, c.redirects)} />
+                                        <DRow label="Bad Redir." v1={pct(b.bad_redirects)} v2={pct(c.bad_redirects)} d={delta(b.bad_redirects, c.bad_redirects)} />
+                                        <DRow label="Bad SFBs" v1={pct(b.bad_sfbs)} v2={pct(c.bad_sfbs)} d={delta(b.bad_sfbs, c.bad_sfbs)} />
+                                    </>
+                                );
+                            })()}
+                        </div>
                     </Show>
                 </div>
 
@@ -292,7 +261,7 @@ export default function AnalyzeView(props: Props) {
                                 min={1}
                                 max={50}
                                 onInput={(e) =>
-                                    setCount(parseInt(e.currentTarget.value, 10) || 10)
+                                    setCount(Math.max(1, parseInt(e.currentTarget.value) || 1))
                                 }
                             />
                         </div>

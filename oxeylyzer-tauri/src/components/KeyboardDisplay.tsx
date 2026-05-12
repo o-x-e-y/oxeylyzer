@@ -1,85 +1,258 @@
-import { For, Index } from "solid-js";
+import { For, Show, createMemo, onCleanup } from "solid-js";
+import {
+    DragDropProvider,
+    DragDropSensors,
+    createDraggable,
+    createDroppable,
+    useDragDropContext,
+} from "@thisbeyond/solid-dnd";
+import type { PhysKey } from "../mock";
+
+declare module "solid-js" {
+    namespace JSX {
+        interface Directives {
+            draggable: ReturnType<typeof createDraggable>;
+            droppable: ReturnType<typeof createDroppable>;
+        }
+    }
+}
+
+const GAP = 0.3;
 
 type Props = {
     keys: string;
-    /** Optional: highlight these key characters */
+    keyboard: PhysKey[];
+    shape: number[];
     highlight?: string[];
-    /** Optional: char → frequency percent (0–100), drives heat coloring */
     heatmap?: Record<string, number>;
-    /** When true, keys are clickable and call onKeyClick */
+    /** Enable drag-and-drop swapping */
+    draggable?: boolean;
+    onSwap?: (fromIdx: number, toIdx: number) => void;
+    /** Interactive click mode */
     interactive?: boolean;
-    /** Chars that are currently pinned (shown with lock indicator) */
+    onKeyClick?: (char: string, idx: number) => void;
+    /** Pinned key indices (GenerateView) */
     pinned?: Set<string>;
-    /** Called when a key is clicked in interactive mode */
-    onKeyClick?: (char: string) => void;
+    /** Disabled key indices for analysis (AnalyzeView right-click) */
+    disabledIndices?: Set<number>;
+    onToggleDisabled?: (idx: number) => void;
+    /** Inline edit mode: which flat index is being edited */
+    editingIdx?: number | null;
+    onEditCommit?: (idx: number, char: string) => void;
+    onEditNext?: (idx: number) => void;
+    onEditCancel?: () => void;
 };
 
-const ROW_OFFSETS_REM = [0.25, 0, 0.75];
-
-/** Returns an rgb() string on a red heat scale. 0% → cool grey, 100% → deep red. */
 function heatColor(percent: number): string {
-    // Match the repl's formula: complement = 215 - (freq/total) * 1720, clamped [0, 215]
     const complement = Math.max(0, Math.min(215, 215 - (percent / 100) * 1720));
-    const c = Math.round(complement);
-    return `rgb(215, ${c}, ${c})`;
+    return `rgb(215, ${Math.round(complement)}, ${Math.round(complement)})`;
 }
 
+interface KeyTileProps {
+    char: string;
+    flatIdx: number;
+    isHighlighted: boolean;
+    isPinned: boolean;
+    isDisabled: boolean;
+    heatStyle: string;
+    interactive: boolean;
+    draggableEnabled: boolean;
+    editingIdx: number | null | undefined;
+    onContextMenu: (idx: number) => void;
+    onClick: (char: string, idx: number) => void;
+    onEditCommit: (idx: number, char: string) => void;
+    onEditNext: (idx: number) => void;
+    onEditCancel: () => void;
+}
+
+const KeyTile = (props: KeyTileProps) => {
+    // eslint-disable-next-line no-unused-vars
+    const draggable = createDraggable(props.flatIdx);
+    // eslint-disable-next-line no-unused-vars
+    const droppable = createDroppable(props.flatIdx);
+
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let longPressFired = false;
+
+    const cancelLongPress = () => {
+        if (longPressTimer !== null) { clearTimeout(longPressTimer); longPressTimer = null; }
+    };
+
+    onCleanup(cancelLongPress);
+
+    const isEditing = () => props.editingIdx === props.flatIdx;
+
+    const baseClass =
+        "w-full h-full border rounded-[12%] flex items-center justify-center select-none touch-none relative";
+
+    return (
+        <div
+            use:draggable
+            use:droppable
+            class={baseClass}
+            classList={{
+                "border-white bg-neutral-600": props.isHighlighted,
+                "border-neutral-400 ring-1 ring-yellow-400/50": props.isPinned,
+                "border-neutral-500 opacity-30": props.isDisabled,
+                "border-neutral-500": !props.isHighlighted && !props.isPinned && !props.isDisabled,
+                "cursor-pointer hover:border-neutral-300": props.interactive || props.draggableEnabled,
+            }}
+            style={props.isHighlighted ? "" : props.heatStyle}
+            onContextMenu={(e) => { e.preventDefault(); props.onContextMenu(props.flatIdx); }}
+            onClick={() => props.onClick(props.char, props.flatIdx)}
+            onTouchStart={() => {
+                longPressFired = false;
+                cancelLongPress();
+                longPressTimer = setTimeout(() => {
+                    longPressTimer = null;
+                    longPressFired = true;
+                    props.onContextMenu(props.flatIdx);
+                }, 500);
+            }}
+            onTouchMove={cancelLongPress}
+            onTouchEnd={(e) => {
+                cancelLongPress();
+                if (longPressFired) { e.preventDefault(); longPressFired = false; }
+            }}
+        >
+            <Show
+                when={isEditing()}
+                fallback={
+                    <>
+                        {props.char}
+                        {props.isPinned && (
+                            <span class="absolute top-0 right-0 text-[9px] text-yellow-300 leading-none p-px">
+                                ⚑
+                            </span>
+                        )}
+                    </>
+                }
+            >
+                <input
+                    class="w-full h-full text-center bg-transparent outline-none font-mono text-[1em]"
+                    maxLength={1}
+                    value={props.char}
+                    ref={(el) => setTimeout(() => el?.focus(), 0)}
+                    onInput={(e) => props.onEditCommit(props.flatIdx, e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === "Tab") {
+                            e.preventDefault();
+                            props.onEditNext(props.flatIdx);
+                        } else if (e.key === "Escape") {
+                            props.onEditCancel();
+                        }
+                    }}
+                />
+            </Show>
+        </div>
+    );
+};
+
 export default function KeyboardDisplay(props: Props) {
-    const rows = () => [
-        props.keys.slice(0, 10).split(""),
-        props.keys.slice(10, 20).split(""),
-        props.keys.slice(20, 30).split(""),
-    ];
+    const geom = createMemo(() => {
+        const kb = props.keyboard;
+        if (!kb || kb.length === 0) return null;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const [x, y, w, h] of kb) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + w);
+            maxY = Math.max(maxY, y + h);
+        }
+        const dx = maxX - minX, dy = maxY - minY;
+        const kw = 100 / dx;
+        const ym = dx / dy;
+        return { kw, ym, heightCss: dy * kw, fontSizeCqw: kw / 2.25, minX, minY };
+    });
 
-    const isHighlighted = (key: string) =>
-        props.highlight ? props.highlight.includes(key) : false;
+    const chars = () => props.keys.split("");
 
+    const isHighlighted = (key: string) => props.highlight?.includes(key) ?? false;
     const isPinned = (key: string) => props.pinned?.has(key) ?? false;
 
-    const keyBg = (key: string): string => {
-        if (isHighlighted(key)) return "";
+    const heatStyle = (key: string): string => {
         if (!props.heatmap) return "";
         const pct = props.heatmap[key] ?? 0;
-        if (pct === 0) return "";
-        return `background-color: ${heatColor(pct)}`;
+        return pct > 0 ? `background-color: ${heatColor(pct)}` : "";
+    };
+
+    const handleDragEnd = ({ draggable, droppable }: { draggable: { id: number }; droppable: { id: number } | null }) => {
+        if (!droppable || draggable.id === droppable.id) return;
+        props.onSwap?.(draggable.id, droppable.id);
+    };
+
+    const inner = () => {
+        const g = geom();
+        if (!g) return null;
+        const { kw, ym, heightCss, fontSizeCqw, minX, minY } = g;
+
+        return (
+            <div
+                class="relative w-full"
+                style={{
+                    "aspect-ratio": `100 / ${heightCss}`,
+                    "font-size": `${fontSizeCqw.toFixed(2)}cqw`,
+                    "line-height": "0",
+                }}
+            >
+                <For each={chars()}>
+                    {(char, i) => {
+                        const flatIdx = i();
+                        const pk = props.keyboard[flatIdx];
+                        if (!pk) return null;
+                        const [px, py, pw, ph] = pk;
+                        const dndCtx = useDragDropContext();
+                        const isActiveDrag = () =>
+                            dndCtx ? dndCtx[0].active.draggable?.id === flatIdx : false;
+
+                        return (
+                            <div
+                                class="absolute"
+                                style={{
+                                    left: `${(px - minX) * kw + GAP}%`,
+                                    top: `${(py - minY) * kw * ym + GAP * ym}%`,
+                                    width: `${pw * kw - GAP * 2}%`,
+                                    height: `${(ph * kw - GAP * 2) * ym}%`,
+                                    opacity: isActiveDrag() ? "0.7" : "1",
+                                    "z-index": isActiveDrag() ? "10" : "auto",
+                                }}
+                            >
+                                <KeyTile
+                                    char={char}
+                                    flatIdx={flatIdx}
+                                    isHighlighted={isHighlighted(char)}
+                                    isPinned={isPinned(char)}
+                                    isDisabled={props.disabledIndices?.has(flatIdx) ?? false}
+                                    heatStyle={heatStyle(char)}
+                                    interactive={props.interactive ?? false}
+                                    draggableEnabled={props.draggable ?? false}
+                                    editingIdx={props.editingIdx}
+                                    onContextMenu={(idx) => props.onToggleDisabled?.(idx)}
+                                    onClick={(ch, idx) => props.onKeyClick?.(ch, idx)}
+                                    onEditCommit={(idx, ch) => props.onEditCommit?.(idx, ch)}
+                                    onEditNext={(idx) => props.onEditNext?.(idx)}
+                                    onEditCancel={() => props.onEditCancel?.()}
+                                />
+                            </div>
+                        );
+                    }}
+                </For>
+            </div>
+        );
     };
 
     return (
-        <div class="inline-flex flex-col gap-[3px] font-mono select-none">
-            <Index each={rows()}>
-                {(row, rowIdx) => (
-                    <div
-                        class="flex gap-[3px]"
-                        style={{ "margin-left": `${ROW_OFFSETS_REM[rowIdx]}rem` }}
-                    >
-                        <For each={row()}>
-                            {(key, colIdx) => (
-                                <>
-                                    {colIdx() === 5 && <div class="w-3" />}
-                                    <div
-                                        class="w-7 h-7 border flex items-center justify-center text-xs relative"
-                                        classList={{
-                                            "border-white bg-neutral-700": isHighlighted(key),
-                                            "border-neutral-400 ring-1 ring-neutral-400": isPinned(key),
-                                            "border-neutral-500": !isHighlighted(key) && !isPinned(key),
-                                            "cursor-pointer hover:border-neutral-300": !!props.interactive,
-                                        }}
-                                        style={keyBg(key)}
-                                        onClick={() => props.interactive && props.onKeyClick?.(key)}
-                                    >
-                                        {key}
-                                        {isPinned(key) && (
-                                            <span class="absolute top-0 right-0 text-[7px] text-neutral-300 leading-none p-px">
-                                                ⚑
-                                            </span>
-                                        )}
-                                    </div>
-                                </>
-                            )}
-                        </For>
-                    </div>
-                )}
-            </Index>
-        </div>
+        <Show when={geom()}>
+            <div
+                class="w-full max-w-sm bg-neutral-700 rounded-[1.5cqw] p-[0.8cqw] overflow-hidden"
+                style={{ "container-type": "inline-size" }}
+            >
+                <Show when={props.draggable} fallback={inner()}>
+                    <DragDropProvider onDragEnd={handleDragEnd}>
+                        <DragDropSensors>{inner()}</DragDropSensors>
+                    </DragDropProvider>
+                </Show>
+            </div>
+        </Show>
     );
 }
