@@ -44,22 +44,16 @@ export default function LayoutSearch(props: Props) {
         const found = q ? searchLayouts(q, names()) : [];
         setResults(found);
         setSelectedIdx(0);
-        // Auto-select exact match (not a pure integer)
+        // Auto-select on exact or unique match (not a pure integer), keep dropdown open
         if (q && isNaN(parseInt(q))) {
             const exact = names().find((n) => n.toLowerCase() === q.toLowerCase());
-            if (exact) {
-                props.onSelect(exact);
-                setQuery("");
-                setResults([]);
-            } else if (found.length === 1) {
-                props.onSelect(found[0]);
-                setQuery("");
-                setResults([]);
-            }
+            const hit = exact ?? (found.length === 1 ? found[0] : null);
+            if (hit) props.onSelect(hit);
         }
     };
 
-    const select = (name: string) => {
+    // Click or Enter: select and clear so the box is blank (shows placeholder = selected name)
+    const selectAndClear = (name: string) => {
         props.onSelect(name);
         setQuery("");
         setResults([]);
@@ -72,32 +66,37 @@ export default function LayoutSearch(props: Props) {
                 class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 w-44"
                 placeholder={props.placeholder ?? (props.value || "search layout…")}
                 value={query()}
+                onFocus={() => {
+                    // Clear on refocus so the user sees a blank box ready to type
+                    setQuery("");
+                    setResults([]);
+                }}
                 onInput={(e) => {
                     setQuery(e.currentTarget.value);
                     doSearch(e.currentTarget.value);
                 }}
-                onFocus={(e) => {
-                    if (e.currentTarget.value) doSearch(e.currentTarget.value);
-                }}
                 onBlur={() => {
                     setTimeout(() => {
-                        if (!hovering()) setResults([]);
+                        if (!hovering()) {
+                            setResults([]);
+                            setQuery("");
+                        }
                     }, 150);
                 }}
                 onKeyDown={(e) => {
                     const res = results();
-                    if (!res.length) return;
                     if (e.key === "ArrowDown") {
                         e.preventDefault();
-                        setSelectedIdx((i) => (i + 1) % res.length);
+                        setSelectedIdx((i) => (i + 1) % Math.max(res.length, 1));
                     } else if (e.key === "ArrowUp") {
                         e.preventDefault();
-                        setSelectedIdx((i) => (i - 1 + res.length) % res.length);
+                        setSelectedIdx((i) => (i - 1 + Math.max(res.length, 1)) % Math.max(res.length, 1));
                     } else if (e.key === "Enter") {
                         e.preventDefault();
-                        select(res[selectedIdx()]);
+                        if (res.length) selectAndClear(res[selectedIdx()]);
                     } else if (e.key === "Escape") {
                         setResults([]);
+                        setQuery("");
                     }
                 }}
             />
@@ -116,7 +115,7 @@ export default function LayoutSearch(props: Props) {
                                     "text-neutral-300 hover:bg-neutral-700": i() !== selectedIdx(),
                                 }}
                                 onMouseEnter={() => setSelectedIdx(i())}
-                                onClick={() => select(name)}
+                                onClick={() => selectAndClear(name)}
                             >
                                 {name}
                             </div>
