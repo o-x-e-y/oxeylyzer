@@ -247,11 +247,9 @@ export default function KeyboardDisplay(props: Props) {
                 class="w-full max-w-sm bg-neutral-700 rounded-[1.5cqw] p-[0.8cqw] overflow-hidden"
                 style={{ "container-type": "inline-size" }}
             >
-                <Show when={props.draggable} fallback={inner()}>
-                    <DragDropProvider onDragEnd={handleDragEnd}>
-                        <DragDropSensors>{inner()}</DragDropSensors>
-                    </DragDropProvider>
-                </Show>
+                <DragDropProvider onDragEnd={handleDragEnd}>
+                    <DragDropSensors>{inner()}</DragDropSensors>
+                </DragDropProvider>
             </div>
         </Show>
     );
