@@ -2,143 +2,178 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Layout, BigramEntry, NgramResult } from "./mock";
 
 export async function listLayouts(): Promise<Layout[]> {
-    return invoke("list_layouts");
+  return invoke("list_layouts");
 }
 
 export async function listLanguages(): Promise<string[]> {
-    return invoke("list_languages");
+  return invoke("list_languages");
 }
 
 export async function currentLanguage(): Promise<string> {
-    return invoke("current_language");
+  return invoke("current_language");
 }
 
 export async function analyzeLayout(name: string): Promise<Layout> {
-    return invoke("analyze_layout", { name });
+  return invoke("analyze_layout", { name });
 }
 
 export async function getBigrams(
-    name: string,
-    category: string,
-    count: number,
+  name: string,
+  category: string,
+  count: number,
 ): Promise<BigramEntry[]> {
-    return invoke("get_bigrams", { name, category, count });
+  return invoke("get_bigrams", { name, category, count });
 }
 
 export async function swapKeys(name: string, swaps: string): Promise<Layout> {
-    return invoke("swap_keys", { name, swaps });
+  return invoke("swap_keys", { name, swaps });
 }
 
 export async function getCharFrequencies(): Promise<{ char: string; percent: number }[]> {
-    return invoke("get_char_frequencies");
+  return invoke("get_char_frequencies");
 }
 
 export async function setLanguage(language: string): Promise<void> {
-    return invoke("set_language", { language });
+  return invoke("set_language", { language });
 }
 
 export async function reloadConfig(): Promise<void> {
-    return invoke("reload_config");
+  return invoke("reload_config");
 }
 
 export async function lookupNgram(ngram: string): Promise<NgramResult> {
-    return invoke("lookup_ngram", { ngram });
+  return invoke("lookup_ngram", { ngram });
 }
 
 export async function loadCorpus(language: string, raw: boolean): Promise<string> {
-    return invoke("load_corpus", { language, raw });
+  return invoke("load_corpus", { language, raw });
 }
 
 export async function startGenerate(
-    baseLayout: string,
-    count: number,
-    pins: string,
+  baseLayout: string,
+  count: number,
+  pins: string,
 ): Promise<void> {
-    return invoke("start_generate", { baseLayout, count, pins });
+  return invoke("start_generate", { baseLayout, count, pins });
 }
 
 export async function saveGenerated(index: number, name?: string): Promise<Layout> {
-    return invoke("save_generated", { index, name });
+  return invoke("save_generated", { index, name });
 }
 
 export async function cancelGenerate(): Promise<void> {
-    return invoke("cancel_generate");
+  return invoke("cancel_generate");
 }
 
 export async function getLayoutDetail(name: string): Promise<unknown> {
-    return invoke("get_layout_detail", { name });
+  return invoke("get_layout_detail", { name });
 }
 
 export async function saveLayoutEdit(dofJson: unknown, originalName: string): Promise<void> {
-    return invoke("save_layout_edit", { dofJson, originalName });
+  return invoke("save_layout_edit", { dofJson, originalName });
 }
 
 export async function forkLayout(name: string, newName: string): Promise<Layout> {
-    return invoke("fork_layout", { name, newName });
+  return invoke("fork_layout", { name, newName });
 }
 
 export type WeightsDto = {
-    lateral_penalty: number; sfbs: number; sfs: number; stretches: number;
-    pinky_ring_bigrams: number; inrolls: number; outrolls: number; onehands: number;
-    alternates: number; alternates_sfs: number; redirects: number; redirects_sfs: number;
-    bad_redirects: number; bad_redirects_sfs: number;
-    finger_weights: { lp: number; lr: number; lm: number; li: number; lt: number; rt: number; ri: number; rm: number; rr: number; rp: number };
-    max_finger_use: { penalty: number; pinky: number; ring: number; middle: number; index: number; thumb: number };
+  lateral_penalty: number;
+  sfbs: number;
+  sfs: number;
+  stretches: number;
+  pinky_ring_bigrams: number;
+  inrolls: number;
+  outrolls: number;
+  onehands: number;
+  alternates: number;
+  alternates_sfs: number;
+  redirects: number;
+  redirects_sfs: number;
+  bad_redirects: number;
+  bad_redirects_sfs: number;
+  finger_weights: {
+    lp: number;
+    lr: number;
+    lm: number;
+    li: number;
+    lt: number;
+    rt: number;
+    ri: number;
+    rm: number;
+    rr: number;
+    rp: number;
+  };
+  max_finger_use: {
+    penalty: number;
+    pinky: number;
+    ring: number;
+    middle: number;
+    index: number;
+    thumb: number;
+  };
 };
 
 export type ConfigDto = {
-    corpus: string;
-    layouts: string[];
-    corpus_configs: string;
-    trigram_precision: number;
-    max_cores: number;
-    weights: WeightsDto;
+  corpus: string;
+  layouts: string[];
+  corpus_configs: string;
+  trigram_precision: number;
+  max_cores: number;
+  weights: WeightsDto;
 };
 
 export async function getConfig(): Promise<ConfigDto> {
-    return invoke("get_config");
+  return invoke("get_config");
 }
 
 export async function setConfig(configDto: ConfigDto): Promise<void> {
-    return invoke("set_config", { configDto });
+  return invoke("set_config", { configDto });
 }
 
 export async function getDefaults(): Promise<ConfigDto> {
-    return invoke("get_defaults");
+  return invoke("get_defaults");
 }
 
-export async function analyzeWithDisabled(name: string, disabledIndices: number[]): Promise<Layout> {
-    return invoke("analyze_with_disabled", { name, disabledIndices });
+export async function analyzeWithDisabled(
+  name: string,
+  disabledIndices: number[],
+): Promise<Layout> {
+  return invoke("analyze_with_disabled", { name, disabledIndices });
 }
 
 export async function analyzeCustom(
-    name: string,
-    keys: string,
-    disabledIndices: number[],
+  name: string,
+  keys: string,
+  disabledIndices: number[],
 ): Promise<Layout> {
-    return invoke("analyze_custom", { name, keys, disabledIndices });
+  return invoke("analyze_custom", { name, keys, disabledIndices });
 }
 
 export async function listWeightPresets(): Promise<string[]> {
-    return invoke("list_weight_presets");
+  return invoke("list_weight_presets");
 }
 
 export async function saveWeightPreset(name: string, weights: WeightsDto): Promise<void> {
-    return invoke("save_weight_preset", { name, weights });
+  return invoke("save_weight_preset", { name, weights });
 }
 
 export async function loadWeightPreset(name: string): Promise<WeightsDto> {
-    return invoke("load_weight_preset", { name });
+  return invoke("load_weight_preset", { name });
 }
 
-export async function getSession(): Promise<{ view: string; language: string; lastLayout: string | null }> {
-    return invoke("get_session");
+export async function getSession(): Promise<{
+  view: string;
+  language: string;
+  lastLayout: string | null;
+}> {
+  return invoke("get_session");
 }
 
 export async function setSession(session: {
-    view: string;
-    language: string;
-    lastLayout: string | null;
+  view: string;
+  language: string;
+  lastLayout: string | null;
 }): Promise<void> {
-    return invoke("set_session", { session });
+  return invoke("set_session", { session });
 }
