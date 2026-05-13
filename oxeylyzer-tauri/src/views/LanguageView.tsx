@@ -81,7 +81,7 @@ export default function LanguageView() {
                 </div>
                 <div class="flex gap-2 items-center">
                     <select
-                        class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
+                        class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
                         value={pendingLanguage()}
                         onChange={(e) => setPendingLanguage(e.currentTarget.value)}
                     >

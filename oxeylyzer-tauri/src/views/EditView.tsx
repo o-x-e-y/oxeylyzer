@@ -157,7 +157,7 @@ export default function EditView(props: Props) {
                             <div class="flex flex-col gap-1">
                                 <label class="text-xs text-neutral-500 font-mono">Board</label>
                                 <select
-                                    class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
+                                    class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
                                     value={editedBoard()}
                                     onChange={(e) => setEditedBoard(e.currentTarget.value)}
                                 >

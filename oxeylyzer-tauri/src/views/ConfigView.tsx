@@ -370,7 +370,7 @@ middle=${mfu.middle} index=${mfu.index} thumb=${mfu.thumb}`;
                                 <div class="flex gap-2 items-center">
                                     <label class="text-xs text-neutral-400 font-mono shrink-0">Load</label>
                                     <select
-                                        class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 flex-1"
+                                        class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 flex-1"
                                         onChange={(e) => handleLoadPreset(e.currentTarget.value)}
                                     >
                                         <option value="">— select preset —</option>
