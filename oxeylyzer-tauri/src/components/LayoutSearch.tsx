@@ -3,7 +3,7 @@ import { appStore } from "../store";
 
 type Props = {
   value: string;
-  onSelect: (name: string) => void;
+  onSelect: (_name: string) => void;
   placeholder?: string;
   class?: string;
 };

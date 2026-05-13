@@ -47,7 +47,7 @@ export default function StatsPanel(props: Props) {
   const num = (v: number) => v.toFixed(3);
   const sum = (...vs: number[]) => `${vs.reduce((a, c) => a + c, 0).toFixed(3)}%`;
 
-  const d = (get: (s: LayoutStats) => number, higher = false) => {
+  const d = (get: (_s: LayoutStats) => number, higher = false) => {
     const bl = b();
     return bl ? diff(get(s()), get(bl), higher) : null;
   };

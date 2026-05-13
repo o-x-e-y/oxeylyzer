@@ -6,7 +6,7 @@ import * as tsParser from "@typescript-eslint/parser";
 export default [
   js.configs.recommended,
   {
-    ignores: ["dist/**", "node_modules/**", "public/**"],
+    ignores: ["dist/**", "node_modules/**", "public/**", "vite.config.ts"],
   },
   {
     files: ["**/*.{ts,tsx}"],
@@ -17,7 +17,7 @@ export default [
       },
       parser: tsParser,
       parserOptions: {
-        project: "tsconfig.json",
+        project: ["tsconfig.json", "tsconfig.node.json"],
       },
     },
     rules: {

@@ -2,7 +2,7 @@ import type { JSX } from "solid-js";
 
 type Props = {
   value?: string;
-  onChange: (value: string) => void;
+  onChange: (_value: string) => void;
   class?: string;
   children: JSX.Element;
 };

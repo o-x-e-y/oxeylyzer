@@ -5,8 +5,8 @@ import { appStore, initStore } from "../store";
 import { setLanguage } from "../api";
 
 type Props = {
-  onAnalyze?: (layoutName: string) => void;
-  onEdit?: (layoutName: string) => void;
+  onAnalyze?: (_layoutName: string) => void;
+  onEdit?: (_layoutName: string) => void;
 };
 
 type SortKey = "score" | "sfb" | "dsfb" | "fspeed" | "scissors" | "lsbs" | "stretches";

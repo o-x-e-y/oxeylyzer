@@ -8,7 +8,6 @@ import {
   type BigramTab,
   type Layout,
   type BigramEntry,
-  type LayoutStats,
 } from "../mock";
 import { appStore, heatScheme, setHeatScheme, type HeatScheme } from "../store";
 import Dropdown from "../components/Dropdown";
@@ -16,7 +15,7 @@ import { analyzeLayout, getBigrams, analyzeCustom } from "../api";
 
 type Props = {
   initialLayout?: string;
-  onEdit?: (layoutName: string) => void;
+  onEdit?: (_layoutName: string) => void;
 };
 
 export default function AnalyzeView(props: Props) {

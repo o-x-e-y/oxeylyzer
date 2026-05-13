@@ -9,6 +9,7 @@ import {
 import type { PhysKey } from "../mock";
 import { heatScheme } from "../store";
 
+/* eslint-disable no-unused-vars */
 declare module "solid-js" {
   namespace JSX {
     interface Directives {
@@ -17,6 +18,7 @@ declare module "solid-js" {
     }
   }
 }
+/* eslint-enable no-unused-vars */
 
 const GAP = 0.3;
 
@@ -29,19 +31,19 @@ type Props = {
   heatmap?: Record<string, number>;
   /** Enable drag-and-drop swapping */
   draggable?: boolean;
-  onSwap?: (fromIdx: number, toIdx: number) => void;
+  onSwap?: (_fromIdx: number, _toIdx: number) => void;
   /** Interactive click mode */
   interactive?: boolean;
-  onKeyClick?: (char: string, idx: number) => void;
+  onKeyClick?: (_char: string, _idx: number) => void;
   /** Pinned key indices (GenerateView) */
   pinned?: Set<string>;
   /** Disabled key indices for analysis (AnalyzeView right-click) */
   disabledIndices?: Set<number>;
-  onToggleDisabled?: (idx: number) => void;
+  onToggleDisabled?: (_idx: number) => void;
   /** Inline edit mode: which flat index is being edited */
   editingIdx?: number | null;
-  onEditCommit?: (idx: number, char: string) => void;
-  onEditNext?: (idx: number) => void;
+  onEditCommit?: (_idx: number, _char: string) => void;
+  onEditNext?: (_idx: number) => void;
   onEditCancel?: () => void;
 };
 
@@ -72,10 +74,10 @@ interface KeyTileProps {
   interactive: boolean;
   draggableEnabled: boolean;
   editingIdx: number | null | undefined;
-  onContextMenu: (idx: number) => void;
-  onClick: (char: string, idx: number) => void;
-  onEditCommit: (idx: number, char: string) => void;
-  onEditNext: (idx: number) => void;
+  onContextMenu: (_idx: number) => void;
+  onClick: (_char: string, _idx: number) => void;
+  onEditCommit: (_idx: number, _char: string) => void;
+  onEditNext: (_idx: number) => void;
   onEditCancel: () => void;
 }
 

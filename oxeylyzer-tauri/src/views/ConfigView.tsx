@@ -15,7 +15,7 @@ import { initStore } from "../store";
 function NumInput(props: {
   label: string;
   value: number;
-  onChange: (v: number) => void;
+  onChange: (_v: number) => void;
   step?: number;
   tooltip?: string;
 }) {

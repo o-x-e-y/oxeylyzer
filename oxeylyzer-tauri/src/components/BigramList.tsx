@@ -5,7 +5,7 @@ type Props = {
   entries: BigramEntry[];
   count?: number;
   columns?: 1 | 2;
-  onHoverBigram?: (chars: string[]) => void;
+  onHoverBigram?: (_chars: string[]) => void;
   onLeave?: () => void;
 };
 
