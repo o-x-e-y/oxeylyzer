@@ -5,6 +5,7 @@ import BigramList from "../components/BigramList";
 import LayoutSearch from "../components/LayoutSearch";
 import { BIGRAM_TABS, type BigramTab, type Layout, type BigramEntry, type LayoutStats } from "../mock";
 import { appStore, heatScheme, setHeatScheme, type HeatScheme } from "../store";
+import Dropdown from "../components/Dropdown";
 import { analyzeLayout, getBigrams, analyzeCustom } from "../api";
 
 type Props = {
@@ -191,18 +192,11 @@ export default function AnalyzeView(props: Props) {
                 </Show>
                 <div class="ml-auto flex items-center gap-2">
                     <label class="text-neutral-400 text-sm shrink-0">Colors</label>
-                    <div class="relative">
-                        <select
-                            class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 pr-6"
-                            value={heatScheme()}
-                            onChange={(e) => setHeatScheme(e.currentTarget.value as HeatScheme)}
-                        >
-                            <option value="original">Original</option>
-                            <option value="playground">Playground</option>
-                            <option value="v2">v2</option>
-                        </select>
-                        <span class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-neutral-400 text-[10px]">▼</span>
-                    </div>
+                    <Dropdown value={heatScheme()} onChange={(v) => setHeatScheme(v as HeatScheme)}>
+                        <option value="original">Original</option>
+                        <option value="playground">Playground</option>
+                        <option value="v2">v2</option>
+                    </Dropdown>
                 </div>
             </div>
 

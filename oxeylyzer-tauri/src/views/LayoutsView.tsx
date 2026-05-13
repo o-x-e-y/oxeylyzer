@@ -1,5 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
 import KeyboardDisplay from "../components/KeyboardDisplay";
+import Dropdown from "../components/Dropdown";
 import { appStore, initStore } from "../store";
 import { setLanguage } from "../api";
 
@@ -89,18 +90,11 @@ export default function LayoutsView(props: Props) {
                         Language
                     </label>
                     <div class="flex gap-2 items-center">
-                        <div class="relative">
-                            <select
-                                class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 pr-6"
-                                value={pendingLang()}
-                                onChange={(e) => setPendingLang(e.currentTarget.value)}
-                            >
-                                <For each={appStore.languages}>
-                                    {(lang) => <option value={lang}>{lang}</option>}
-                                </For>
-                            </select>
-                            <span class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-neutral-400 text-[10px]">▼</span>
-                        </div>
+                        <Dropdown value={pendingLang()} onChange={setPendingLang}>
+                            <For each={appStore.languages}>
+                                {(lang) => <option value={lang}>{lang}</option>}
+                            </For>
+                        </Dropdown>
                         <button
                             class="border border-neutral-600 font-mono text-sm px-2 py-1 hover:bg-neutral-700 disabled:opacity-40"
                             disabled={changingLanguage()}
