@@ -198,7 +198,7 @@ export default function EditView(props: Props) {
                                     onEditCommit={handleEditCommit}
                                     onEditNext={handleEditNext}
                                     onEditCancel={() => setEditingIdx(null)}
-                                    class="max-w-xs"
+                                    class="max-w-sm"
                                 />
                             )}
                         </Show>

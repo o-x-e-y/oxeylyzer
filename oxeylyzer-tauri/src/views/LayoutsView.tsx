@@ -229,7 +229,7 @@ export default function LayoutsView(props: Props) {
 
                             {/* Expanded keyboard */}
                             <Show when={expandedLayout() === layout.name}>
-                                <div class="pt-1 pl-6">
+                                <div class="pt-1 pl-6 w-96">
                                     <KeyboardDisplay
                                         keys={layout.keys}
                                         keyboard={layout.keyboard}

@@ -147,15 +147,17 @@ export default function GenerateView() {
                         </div>
                         <Show when={baseLayout()}>
                             {(bl) => (
-                                <KeyboardDisplay
-                                    keys={bl().keys}
-                                    keyboard={bl().keyboard}
-                                    shape={bl().shape}
-                                    heatmap={appStore.charFrequencies}
-                                    interactive={true}
-                                    pinned={pinnedChars()}
-                                    onKeyClick={(ch) => togglePin(ch)}
-                                />
+                                <div class="w-96">
+                                    <KeyboardDisplay
+                                        keys={bl().keys}
+                                        keyboard={bl().keyboard}
+                                        shape={bl().shape}
+                                        heatmap={appStore.charFrequencies}
+                                        interactive={true}
+                                        pinned={pinnedChars()}
+                                        onKeyClick={(ch) => togglePin(ch)}
+                                    />
+                                </div>
                             )}
                         </Show>
                         <Show when={pinnedChars().size > 0}>
@@ -242,7 +244,7 @@ export default function GenerateView() {
                                         </span>
                                     </div>
 
-                                    <div class="pl-8">
+                                    <div class="pl-8 w-96">
                                         <KeyboardDisplay
                                             keys={layout.keys}
                                             keyboard={layout.keyboard}

@@ -118,7 +118,7 @@ export default function CompareView() {
                         <div class="flex flex-col gap-6">
                             {/* Keyboards */}
                             <div class="flex gap-8 items-start">
-                                <div class="flex flex-col gap-2 w-72">
+                                <div class="flex flex-col gap-2 w-96">
                                     <div class="font-mono text-neutral-200">{l1.name}</div>
                                     <KeyboardDisplay
                                         keys={l1.keys}
@@ -127,7 +127,7 @@ export default function CompareView() {
                                         heatmap={appStore.charFrequencies}
                                     />
                                 </div>
-                                <div class="flex flex-col gap-2 w-72">
+                                <div class="flex flex-col gap-2 w-96">
                                     <div class="font-mono text-neutral-200">{l2.name}</div>
                                     <KeyboardDisplay
                                         keys={l2.keys}
