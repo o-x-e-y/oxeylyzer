@@ -7,6 +7,7 @@ import {
     useDragDropContext,
 } from "@thisbeyond/solid-dnd";
 import type { PhysKey } from "../mock";
+import { heatScheme } from "../store";
 
 declare module "solid-js" {
     namespace JSX {
@@ -44,9 +45,21 @@ type Props = {
     onEditCancel?: () => void;
 };
 
-function heatColor(percent: number): string {
-    const complement = Math.max(0, Math.min(215, 215 - (percent / 100) * 1720));
-    return `rgb(215, ${Math.round(complement)}, ${Math.round(complement)})`;
+function heatColorOriginal(pct: number): string {
+    const c = Math.max(0, Math.min(215, 215 - (pct / 100) * 1720));
+    return `background-color:rgb(215,${Math.round(c)},${Math.round(c)});color:#111`;
+}
+
+function heatColorPlayground(pct: number): string {
+    const p = pct / 100;
+    const v = p * 30 + Math.log(p * 120 + 1);
+    const b = 95;
+    return `background-color:rgb(${Math.round(b * 0.9 + v * 18)},${Math.round(b * 1.3 - v * 10)},${Math.round(b * 1.325 - v * 10)})`;
+}
+
+function heatColorV2(pct: number): string {
+    const f = Math.min(pct, 14) / 14;
+    return `background-color:rgb(${Math.round(140 + f * 115)},${Math.round(140 - f * 140)},${Math.round(140 - f * 140)});color:#111`;
 }
 
 interface KeyTileProps {
@@ -84,7 +97,7 @@ const KeyTile = (props: KeyTileProps) => {
     const isEditing = () => props.editingIdx === props.flatIdx;
 
     const baseClass =
-        "w-full h-full border rounded-[12%] flex items-center justify-center select-none touch-none relative";
+        "w-full h-full rounded-[12%] flex items-center justify-center select-none touch-none relative";
 
     return (
         <div
@@ -178,7 +191,11 @@ export default function KeyboardDisplay(props: Props) {
     const heatStyle = (key: string): string => {
         if (!props.heatmap) return "";
         const pct = props.heatmap[key] ?? 0;
-        return pct > 0 ? `background-color: ${heatColor(pct)}` : "";
+        switch (heatScheme()) {
+            case "original": return heatColorOriginal(pct);
+            case "v2": return heatColorV2(pct);
+            default: return heatColorPlayground(pct);
+        }
     };
 
     const handleDragEnd = ({ draggable, droppable }: { draggable: { id: number }; droppable: { id: number } | null }) => {

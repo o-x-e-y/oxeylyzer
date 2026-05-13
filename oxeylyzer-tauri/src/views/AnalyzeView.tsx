@@ -4,7 +4,7 @@ import StatsPanel from "../components/StatsPanel";
 import BigramList from "../components/BigramList";
 import LayoutSearch from "../components/LayoutSearch";
 import { BIGRAM_TABS, type BigramTab, type Layout, type BigramEntry, type LayoutStats } from "../mock";
-import { appStore } from "../store";
+import { appStore, heatScheme, setHeatScheme, type HeatScheme } from "../store";
 import { analyzeLayout, getBigrams, analyzeCustom } from "../api";
 
 type Props = {
@@ -189,6 +189,18 @@ export default function AnalyzeView(props: Props) {
                         Edit
                     </button>
                 </Show>
+                <div class="ml-auto flex items-center gap-2">
+                    <label class="text-neutral-400 text-sm shrink-0">Colors</label>
+                    <select
+                        class="bg-neutral-800 border border-neutral-600 text-neutral-100 text-sm px-2 py-0.5"
+                        value={heatScheme()}
+                        onChange={(e) => setHeatScheme(e.currentTarget.value as HeatScheme)}
+                    >
+                        <option value="original">Original</option>
+                        <option value="playground">Playground</option>
+                        <option value="v2">v2</option>
+                    </select>
+                </div>
             </div>
 
             {/* ── Three columns ───────────────────────────────────────── */}
