@@ -156,15 +156,18 @@ export default function EditView(props: Props) {
                             </div>
                             <div class="flex flex-col gap-1">
                                 <label class="text-xs text-neutral-500 font-mono">Board</label>
-                                <select
-                                    class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
-                                    value={editedBoard()}
-                                    onChange={(e) => setEditedBoard(e.currentTarget.value)}
-                                >
-                                    {["ortho", "ansi", "iso", "colstag", "rowstag"].map((bt) => (
-                                        <option value={bt}>{bt}</option>
-                                    ))}
-                                </select>
+                                <div class="relative">
+                                    <select
+                                        class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 pr-6"
+                                        value={editedBoard()}
+                                        onChange={(e) => setEditedBoard(e.currentTarget.value)}
+                                    >
+                                        {["ortho", "ansi", "iso", "colstag", "rowstag"].map((bt) => (
+                                            <option value={bt}>{bt}</option>
+                                        ))}
+                                    </select>
+                                    <span class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-neutral-400 text-[10px]">▼</span>
+                                </div>
                             </div>
                             <div class="flex flex-col gap-1">
                                 <label class="text-xs text-neutral-500 font-mono">Fingering</label>

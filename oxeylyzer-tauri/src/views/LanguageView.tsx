@@ -80,15 +80,18 @@ export default function LanguageView() {
                     </span>
                 </div>
                 <div class="flex gap-2 items-center">
-                    <select
-                        class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
-                        value={pendingLanguage()}
-                        onChange={(e) => setPendingLanguage(e.currentTarget.value)}
-                    >
-                        <For each={appStore.languages}>
-                            {(lang) => <option value={lang}>{lang}</option>}
-                        </For>
-                    </select>
+                    <div class="relative">
+                        <select
+                            class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 pr-6"
+                            value={pendingLanguage()}
+                            onChange={(e) => setPendingLanguage(e.currentTarget.value)}
+                        >
+                            <For each={appStore.languages}>
+                                {(lang) => <option value={lang}>{lang}</option>}
+                            </For>
+                        </select>
+                        <span class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-neutral-400 text-[10px]">▼</span>
+                    </div>
                     <button
                         class="border border-neutral-500 font-mono text-sm px-3 py-1 hover:bg-neutral-700 disabled:opacity-40"
                         disabled={settingLang()}

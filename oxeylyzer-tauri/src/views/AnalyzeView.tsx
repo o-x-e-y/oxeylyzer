@@ -191,15 +191,18 @@ export default function AnalyzeView(props: Props) {
                 </Show>
                 <div class="ml-auto flex items-center gap-2">
                     <label class="text-neutral-400 text-sm shrink-0">Colors</label>
-                    <select
-                        class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1"
-                        value={heatScheme()}
-                        onChange={(e) => setHeatScheme(e.currentTarget.value as HeatScheme)}
-                    >
-                        <option value="original">Original</option>
-                        <option value="playground">Playground</option>
-                        <option value="v2">v2</option>
-                    </select>
+                    <div class="relative">
+                        <select
+                            class="appearance-none bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 pr-6"
+                            value={heatScheme()}
+                            onChange={(e) => setHeatScheme(e.currentTarget.value as HeatScheme)}
+                        >
+                            <option value="original">Original</option>
+                            <option value="playground">Playground</option>
+                            <option value="v2">v2</option>
+                        </select>
+                        <span class="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-neutral-400 text-[10px]">▼</span>
+                    </div>
                 </div>
             </div>
 
