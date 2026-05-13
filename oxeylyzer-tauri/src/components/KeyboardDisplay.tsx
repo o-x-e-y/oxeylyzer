@@ -23,6 +23,7 @@ type Props = {
     keys: string;
     keyboard: PhysKey[];
     shape: number[];
+    class?: string;
     highlight?: string[];
     heatmap?: Record<string, number>;
     /** Enable drag-and-drop swapping */
@@ -129,17 +130,21 @@ const KeyTile = (props: KeyTileProps) => {
                 }
             >
                 <input
-                    class="w-full h-full text-center bg-transparent outline-none font-mono text-[1em]"
+                    class="w-full h-full text-center bg-transparent outline-none font-mono text-[1em] caret-neutral-300"
                     maxLength={1}
-                    value={props.char}
                     ref={(el) => setTimeout(() => el?.focus(), 0)}
-                    onInput={(e) => props.onEditCommit(props.flatIdx, e.currentTarget.value)}
+                    onInput={(e) => {
+                        const val = e.currentTarget.value;
+                        if (val) props.onEditCommit(props.flatIdx, val);
+                    }}
                     onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === "Tab") {
                             e.preventDefault();
                             props.onEditNext(props.flatIdx);
                         } else if (e.key === "Escape") {
                             props.onEditCancel();
+                        } else if (e.key === "Backspace" || e.key === "Delete") {
+                            e.preventDefault();
                         }
                     }}
                 />
@@ -244,7 +249,7 @@ export default function KeyboardDisplay(props: Props) {
     return (
         <Show when={geom()}>
             <div
-                class="w-full max-w-sm bg-neutral-700 rounded-[1.5cqw] p-[0.8cqw] overflow-hidden"
+                class={`w-full overflow-hidden ${props.class ?? ""}`}
                 style={{ "container-type": "inline-size" }}
             >
                 <DragDropProvider onDragEnd={handleDragEnd}>

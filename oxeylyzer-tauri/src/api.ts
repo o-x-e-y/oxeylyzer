@@ -111,6 +111,14 @@ export async function analyzeWithDisabled(name: string, disabledIndices: number[
     return invoke("analyze_with_disabled", { name, disabledIndices });
 }
 
+export async function analyzeCustom(
+    name: string,
+    keys: string,
+    disabledIndices: number[],
+): Promise<Layout> {
+    return invoke("analyze_custom", { name, keys, disabledIndices });
+}
+
 export async function listWeightPresets(): Promise<string[]> {
     return invoke("list_weight_presets");
 }

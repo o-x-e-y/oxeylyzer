@@ -79,11 +79,8 @@ export default function EditView(props: Props) {
     }
 
     function handleEditCommit(idx: number, char: string) {
+        // Only update the key; Enter/Tab (onEditNext) is what advances.
         if (char) updateKeyAt(idx, char);
-        // Advance to next key
-        const total = keys().length;
-        if (idx + 1 < total) setEditingIdx(idx + 1);
-        else setEditingIdx(null);
     }
 
     function handleEditNext(idx: number) {
@@ -201,6 +198,7 @@ export default function EditView(props: Props) {
                                     onEditCommit={handleEditCommit}
                                     onEditNext={handleEditNext}
                                     onEditCancel={() => setEditingIdx(null)}
+                                    class="max-w-xs"
                                 />
                             )}
                         </Show>

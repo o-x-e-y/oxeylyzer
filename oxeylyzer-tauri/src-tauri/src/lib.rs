@@ -464,6 +464,58 @@ fn swap_keys(
     })
 }
 
+/// Analyze an arbitrary key arrangement (swaps + disabled keys) derived from a named base layout.
+/// `keys` is the full 30-char current arrangement; `disabled_indices` are zeroed out before scoring.
+/// Returns `keys` unchanged so the frontend always has the clean arrangement available.
+#[tauri::command]
+fn analyze_custom(
+    name: String,
+    keys: String,
+    disabled_indices: Vec<usize>,
+    state: tauri::State<'_, AppState>,
+) -> Result<LayoutDto, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let layouts = state.layouts.lock().unwrap();
+    let layout = layouts
+        .get(&name.to_lowercase())
+        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    let mut fl = engine.fast_layout(layout, &[]);
+
+    let keyboard = fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect();
+    let shape = fl.shape.inner().to_vec();
+
+    // Apply the custom key arrangement.
+    let chars: Vec<char> = keys.chars().collect();
+    if chars.len() != fl.keys.len() {
+        return Err(format!(
+            "Key count mismatch: layout has {} keys, got {}",
+            fl.keys.len(),
+            chars.len()
+        ));
+    }
+    for (i, &c) in chars.iter().enumerate() {
+        fl.keys[i] = engine.mapping.get_u(c);
+    }
+
+    // Apply disabled positions on top.
+    for &idx in &disabled_indices {
+        if idx < fl.keys.len() {
+            fl.keys[idx] = 0;
+        }
+    }
+
+    let stats = engine.get_layout_stats(&fl);
+    let stats_dto = stats_to_dto(&stats, engine.data.char_total);
+    Ok(LayoutDto {
+        name: format!("{name}*"),
+        keys, // return the clean arrangement, not the disabled-substituted one
+        board: get_board_str(layout),
+        stats: stats_dto,
+        keyboard,
+        shape,
+    })
+}
+
 #[tauri::command]
 fn analyze_with_disabled(
     name: String,
@@ -1232,6 +1284,7 @@ pub fn run() {
             list_languages,
             current_language,
             analyze_layout,
+            analyze_custom,
             analyze_with_disabled,
             get_bigrams,
             swap_keys,
