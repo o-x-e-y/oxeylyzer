@@ -12,7 +12,7 @@ use oxeylyzer_core::{
     fast_layout::{BigramPair, FastLayout},
     generate::{LayoutStats, Oxeylyzer},
     layout::Layout,
-    rayon::iter::ParallelIterator,
+    rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     weights::{Config, FingerWeights, MaxFingerUse, Weights},
 };
 use serde::{Deserialize, Serialize};
@@ -752,16 +752,21 @@ async fn start_generate(
         let done_clone = done_count.clone();
         let app_progress = app.clone();
         let cancel_progress = cancel.clone();
+        let progress_done = Arc::new(AtomicBool::new(false));
+        let progress_done_check = progress_done.clone();
 
         // Emit progress updates every 200ms from a dedicated thread.
-        let progress_thread = std::thread::spawn(move || loop {
+        // Uses progress_done flag so we never have to join (no blocking wait).
+        std::thread::spawn(move || loop {
             std::thread::sleep(std::time::Duration::from_millis(200));
             let d = done_clone.load(Ordering::Relaxed);
             let _ = app_progress.emit(
                 "generate-progress",
                 serde_json::json!({ "done": d, "total": count }),
             );
-            if d >= count || cancel_progress.load(Ordering::Relaxed) {
+            if progress_done_check.load(Ordering::Relaxed)
+                || cancel_progress.load(Ordering::Relaxed)
+            {
                 break;
             }
         });
@@ -780,27 +785,32 @@ async fn start_generate(
                 }
             });
 
-        let _ = progress_thread.join();
+        // Signal the progress thread to exit — no join needed (thread holds only Arcs).
+        progress_done.store(true, Ordering::Relaxed);
 
         if cancel.load(Ordering::Relaxed) {
             let _ = app.emit("generate-cancelled", ());
             return;
         }
 
-        let mut results = std::mem::take(&mut *results_arc.lock().unwrap());
+        let results = std::mem::take(&mut *results_arc.lock().unwrap());
 
-        // Sort by score descending.
+        // Pre-compute scores once per layout, then sort by cached value.
+        // Avoids calling engine.score() O(N log N) times inside the comparator.
         let char_total = engine.data.char_total;
-        results.sort_unstable_by(|a, b| {
-            engine.score(b).cmp(&engine.score(a))
-        });
+        let mut scored: Vec<(i64, FastLayout)> = results
+            .into_iter()
+            .map(|fl| (engine.score(&fl), fl))
+            .collect();
+        scored.sort_unstable_by(|a, b| b.0.cmp(&a.0));
 
-        // Build DTOs for the top 50.
-        let layout_dtos: Vec<LayoutDto> = results
-            .iter()
-            .take(50)
+        // Build DTOs for the top 50 in parallel — get_layout_stats is expensive
+        // but read-only, so rayon can safely run it across threads.
+        let top = &scored[..50.min(scored.len())];
+        let layout_dtos: Vec<LayoutDto> = top
+            .par_iter()
             .enumerate()
-            .map(|(i, fl)| {
+            .map(|(i, (_, fl))| {
                 let stats = engine.get_layout_stats(fl);
                 let stats_dto = stats_to_dto(&stats, char_total);
                 LayoutDto {
@@ -817,9 +827,9 @@ async fn start_generate(
             })
             .collect();
 
-        // Store all results for save_generated.
+        // Store all results (sorted) for save_generated.
         let state = app.state::<AppState>();
-        *state.generated.lock().unwrap() = results;
+        *state.generated.lock().unwrap() = scored.into_iter().map(|(_, fl)| fl).collect();
 
         let _ = app.emit("generate-done", serde_json::json!({ "results": layout_dtos }));
     });
