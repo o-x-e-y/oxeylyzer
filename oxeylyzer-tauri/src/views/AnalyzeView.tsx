@@ -18,6 +18,7 @@ export default function AnalyzeView(props: Props) {
 
   const [layout, setLayout] = createSignal<Layout | null>(null);
   const [baseline, setBaseline] = createSignal<Layout | null>(null);
+  const [previous, setPrevious] = createSignal<Layout | null>(null);
   const [activeTab, setActiveTab] = createSignal<BigramTab>("sfbs");
   const [count, setCount] = createSignal(10);
   const [bigramData, setBigramData] = createSignal<BigramEntry[]>([]);
@@ -55,6 +56,7 @@ export default function AnalyzeView(props: Props) {
       applyIfCurrent(s, () => {
         setLayout(l);
         setBaseline(l);
+        setPrevious(null);
       });
     });
   });
@@ -77,6 +79,7 @@ export default function AnalyzeView(props: Props) {
       applyIfCurrent(s, () => {
         setLayout(l);
         setBaseline(l);
+        setPrevious(null);
       });
     } catch (e) {
       console.error(e);
@@ -117,7 +120,10 @@ export default function AnalyzeView(props: Props) {
     setLoading(true);
     try {
       const updated = await analyzeState(baseName, newKeys, newDisabledIdxs);
-      applyIfCurrent(s, () => setLayout(updated));
+      applyIfCurrent(s, () => {
+        setPrevious(l);
+        setLayout(updated);
+      });
     } catch (e) {
       console.error(e);
     } finally {
@@ -139,7 +145,10 @@ export default function AnalyzeView(props: Props) {
     try {
       const idxs = disabledIdxsFor(newChars, l.keys);
       const updated = await analyzeState(baseName, l.keys, idxs);
-      applyIfCurrent(s, () => setLayout(updated));
+      applyIfCurrent(s, () => {
+        setPrevious(l);
+        setLayout(updated);
+      });
     } catch (e) {
       console.error(e);
     }
@@ -151,7 +160,12 @@ export default function AnalyzeView(props: Props) {
     const baseName = bl.name.replace(/\*+$/, "");
     const s = nextSeq();
     setDisabledChars(new Set());
-    analyzeLayout(baseName).then((fresh) => applyIfCurrent(s, () => setLayout(fresh)));
+    analyzeLayout(baseName).then((fresh) =>
+      applyIfCurrent(s, () => {
+        setLayout(fresh);
+        setPrevious(null);
+      }),
+    );
   }
 
   const displayBigrams = () => bigramData().slice(0, count());
@@ -198,69 +212,67 @@ export default function AnalyzeView(props: Props) {
       <Show when={layout()}>
         {(l) => (
           <div class="flex flex-col gap-6">
-            {/* ── Keyboard + bigrams ────────────────────────────── */}
-            <div class="flex gap-8 items-start">
-              <div class="flex flex-col gap-2 w-96 shrink-0">
-                <div class="font-mono text-neutral-200">{l().name}</div>
-                <KeyboardDisplay
-                  keys={l().keys}
-                  keyboard={l().keyboard}
-                  shape={l().shape}
-                  heatmap={appStore.charFrequencies}
-                  highlight={highlightedKeys().length > 0 ? highlightedKeys() : undefined}
-                  draggable={true}
-                  onSwap={handleSwap}
-                  disabledIndices={disabledIndices()}
-                  onToggleDisabled={handleToggleDisabled}
-                />
-                <div class="text-xs text-neutral-700 font-mono">
-                  drag to swap · right-click to disable
-                </div>
-              </div>
-
-              {/* Bigram tabs */}
-              <div class="flex-1 flex flex-col border border-neutral-700" style="min-height:280px">
-                <div class="shrink-0 flex items-center border-b border-neutral-700">
-                  {BIGRAM_TABS.map((tab) => (
-                    <button
-                      class="px-4 py-2 text-sm border-r border-neutral-700 hover:bg-neutral-800"
-                      classList={{
-                        "bg-neutral-700 text-white": activeTab() === tab.id,
-                        "text-neutral-400": activeTab() !== tab.id,
-                      }}
-                      onClick={() => setActiveTab(tab.id)}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                  <div class="flex items-center gap-2 ml-auto px-3">
-                    <label class="text-neutral-500 text-xs">Count</label>
-                    <input
-                      type="number"
-                      class="bg-neutral-800 border border-neutral-600 text-sm px-2 py-1 w-16 text-right"
-                      value={count()}
-                      min={1}
-                      max={50}
-                      onInput={(e) => setCount(Math.max(1, parseInt(e.currentTarget.value) || 1))}
-                    />
-                  </div>
-                </div>
-                <div class="flex-1 overflow-y-auto p-3">
-                  <BigramList
-                    entries={displayBigrams()}
-                    columns={2}
-                    onHoverBigram={(chars) => setHighlightedKeys(chars)}
-                    onLeave={() => setHighlightedKeys([])}
-                  />
-                </div>
+            {/* ── Keyboard ─────────────────────────────────────── */}
+            <div class="flex flex-col gap-2 w-96">
+              <div class="font-mono text-neutral-200">{l().name}</div>
+              <KeyboardDisplay
+                keys={l().keys}
+                keyboard={l().keyboard}
+                shape={l().shape}
+                heatmap={appStore.charFrequencies}
+                highlight={highlightedKeys().length > 0 ? highlightedKeys() : undefined}
+                draggable={true}
+                onSwap={handleSwap}
+                disabledIndices={disabledIndices()}
+                onToggleDisabled={handleToggleDisabled}
+              />
+              <div class="text-xs text-neutral-700 font-mono">
+                drag to swap · right-click to disable
               </div>
             </div>
 
             {/* ── Stat columns ─────────────────────────────────── */}
             <AnalyzeStatColumns
               stats={l().stats}
-              baseline={isModified() ? baseline()?.stats : undefined}
+              baseline={previous()?.stats}
             />
+
+            {/* ── Bigram tabs ───────────────────────────────────── */}
+            <div class="flex flex-col border border-neutral-700">
+              <div class="shrink-0 flex items-center border-b border-neutral-700">
+                {BIGRAM_TABS.map((tab) => (
+                  <button
+                    class="px-4 py-2 text-sm border-r border-neutral-700 hover:bg-neutral-800"
+                    classList={{
+                      "bg-neutral-700 text-white": activeTab() === tab.id,
+                      "text-neutral-400": activeTab() !== tab.id,
+                    }}
+                    onClick={() => setActiveTab(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+                <div class="flex items-center gap-2 ml-auto px-3">
+                  <label class="text-neutral-500 text-xs">Count</label>
+                  <input
+                    type="number"
+                    class="bg-neutral-800 border border-neutral-600 text-sm px-2 py-1 w-16 text-right"
+                    value={count()}
+                    min={1}
+                    max={50}
+                    onInput={(e) => setCount(Math.max(1, parseInt(e.currentTarget.value) || 1))}
+                  />
+                </div>
+              </div>
+              <div class="p-3">
+                <BigramList
+                  entries={displayBigrams()}
+                  columns={2}
+                  onHoverBigram={(chars) => setHighlightedKeys(chars)}
+                  onLeave={() => setHighlightedKeys([])}
+                />
+              </div>
+            </div>
           </div>
         )}
       </Show>

@@ -1,4 +1,4 @@
-import { For } from "solid-js";
+import { For, createMemo } from "solid-js";
 import type { LayoutStats } from "../mock";
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
@@ -219,25 +219,65 @@ const RIGHT: StatEntry[] = [
   { kind: "stat", label: "Sft", getValue: (s) => pct(s.sfts), getNum: (s) => s.sfts },
 ];
 
+// ── Per-row components (proper SolidJS components so prop getters are reactive) ──
+
+function AnalyzeRow(rowProps: {
+  entry: Exclude<StatEntry, { kind: "sep" }>;
+  stats: LayoutStats;
+  baseline?: LayoutStats;
+}) {
+  const d = createMemo(() => {
+    if (!rowProps.entry.getNum || !rowProps.baseline) return null;
+    return calcDelta(
+      rowProps.entry.getNum(rowProps.baseline),
+      rowProps.entry.getNum(rowProps.stats),
+      rowProps.entry.higherIsBetter,
+    );
+  });
+  return (
+    <ARow
+      label={rowProps.entry.label}
+      value={rowProps.entry.getValue(rowProps.stats)}
+      delta={d()}
+      dim={rowProps.entry.dim}
+    />
+  );
+}
+
+function CompareRow(rowProps: {
+  entry: Exclude<StatEntry, { kind: "sep" }>;
+  s1: LayoutStats;
+  s2: LayoutStats;
+}) {
+  const d = createMemo(() => {
+    if (!rowProps.entry.getNum) return undefined;
+    return (
+      calcDelta(
+        rowProps.entry.getNum(rowProps.s1),
+        rowProps.entry.getNum(rowProps.s2),
+        rowProps.entry.higherIsBetter,
+        true,
+      ) ?? undefined
+    );
+  });
+  return (
+    <CmpRow
+      label={rowProps.entry.label}
+      v1={rowProps.entry.getValue(rowProps.s1)}
+      v2={rowProps.entry.getValue(rowProps.s2)}
+      delta={d()}
+      dim={rowProps.entry.dim}
+    />
+  );
+}
+
 // ── AnalyzeStatColumns ──────────────────────────────────────────────────────
 
 export function AnalyzeStatColumns(props: { stats: LayoutStats; baseline?: LayoutStats }) {
-  function renderEntry(entry: StatEntry) {
+  const renderEntry = (entry: StatEntry) => {
     if (entry.kind === "sep") return <StatSep />;
-    const delta = () => {
-      const bl = props.baseline;
-      if (!bl || !entry.getNum) return null;
-      return calcDelta(entry.getNum(bl), entry.getNum(props.stats), entry.higherIsBetter);
-    };
-    return (
-      <ARow
-        label={entry.label}
-        value={entry.getValue(props.stats)}
-        delta={delta()}
-        dim={entry.dim}
-      />
-    );
-  }
+    return <AnalyzeRow entry={entry} stats={props.stats} baseline={props.baseline} />;
+  };
 
   return (
     <div class="grid grid-cols-2 gap-x-16 items-start">
@@ -259,25 +299,10 @@ export function CompareStatColumns(props: {
   name1: string;
   name2: string;
 }) {
-  function renderEntry(entry: StatEntry) {
+  const renderEntry = (entry: StatEntry) => {
     if (entry.kind === "sep") return <StatSep />;
-    const delta = () => {
-      if (!entry.getNum) return undefined;
-      return (
-        calcDelta(entry.getNum(props.s1), entry.getNum(props.s2), entry.higherIsBetter, true) ??
-        undefined
-      );
-    };
-    return (
-      <CmpRow
-        label={entry.label}
-        v1={entry.getValue(props.s1)}
-        v2={entry.getValue(props.s2)}
-        delta={delta()}
-        dim={entry.dim}
-      />
-    );
-  }
+    return <CompareRow entry={entry} s1={props.s1} s2={props.s2} />;
+  };
 
   return (
     <div class="grid grid-cols-2 gap-x-16 items-start">

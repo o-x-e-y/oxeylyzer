@@ -504,6 +504,16 @@ fn analyze_custom(
         }
     }
 
+    // Rebuild char_to_finger to match the new key arrangement.
+    // Trigram stats use char_to_finger for character→finger lookups, so without
+    // this rebuild they would use the original layout's finger assignments.
+    fl.char_to_finger.iter_mut().for_each(|f| *f = None);
+    fl.keys.iter().enumerate().for_each(|(i, &c)| {
+        if c != 0 {
+            fl.char_to_finger[c as usize] = Some(fl.fingers[i]);
+        }
+    });
+
     let stats = engine.get_layout_stats(&fl);
     let stats_dto = stats_to_dto(&stats, engine.data.char_total);
     Ok(LayoutDto {
