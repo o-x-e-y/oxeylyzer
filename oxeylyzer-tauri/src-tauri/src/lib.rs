@@ -1352,39 +1352,37 @@ pub fn run() {
                 OxeylyzerDirs::resolve().expect("failed to resolve data directory")
             };
 
-            // Always ensure a config.toml exists before trying to load it.
-            dirs.ensure_config().expect("failed to write default config");
-
-            // On first run, download data files in the background and emit progress events.
+            // On first run, download data files synchronously before initialising the
+            // engine — corpus and layout files must exist before we try to load them.
+            // Progress events are emitted so a frontend loading screen can react.
             if dirs.is_first_run() {
+                use oxeylyzer_resources::DownloadProgress;
                 let app_handle = app.handle().clone();
-                let dirs_clone = dirs.clone();
-                std::thread::spawn(move || {
-                    if let Err(e) = dirs_clone.ensure_data(move |p| {
-                        use oxeylyzer_resources::DownloadProgress;
-                        let payload = match &p {
-                            DownloadProgress::Connecting => {
-                                serde_json::json!({"status": "connecting"})
-                            }
-                            DownloadProgress::Downloading {
-                                bytes_done,
-                                bytes_total,
-                            } => serde_json::json!({
+                dirs.ensure_data(move |p| {
+                    let payload = match &p {
+                        DownloadProgress::Connecting => {
+                            serde_json::json!({"status": "connecting"})
+                        }
+                        DownloadProgress::Downloading { bytes_done, bytes_total } => {
+                            serde_json::json!({
                                 "status": "downloading",
                                 "bytesDone": bytes_done,
                                 "bytesTotal": bytes_total,
-                            }),
-                            DownloadProgress::Extracting => {
-                                serde_json::json!({"status": "extracting"})
-                            }
-                            DownloadProgress::Done => serde_json::json!({"status": "done"}),
-                        };
-                        let _ = app_handle.emit("download-progress", payload);
-                    }) {
-                        eprintln!("Resource download failed: {e}");
-                    }
-                });
+                            })
+                        }
+                        DownloadProgress::Extracting => {
+                            serde_json::json!({"status": "extracting"})
+                        }
+                        DownloadProgress::Done => serde_json::json!({"status": "done"}),
+                    };
+                    let _ = app_handle.emit("download-progress", payload);
+                })
+                .expect("failed to download resources");
             }
+
+            // ensure_config is idempotent; ensure_data already calls it on first run,
+            // but call it here too so a missing config is always recovered.
+            dirs.ensure_config().expect("failed to write default config");
 
             let config = Config::with_loaded_weights(dirs.config_file())
                 .expect("failed to load config.toml");
