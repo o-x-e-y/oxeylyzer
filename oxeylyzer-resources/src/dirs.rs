@@ -4,109 +4,128 @@ use directories::ProjectDirs;
 
 use crate::{ResourceError, download::DownloadProgress, seed};
 
-/// Manages platform-appropriate paths for oxeylyzer data and configuration.
+/// Manages platform-appropriate paths for oxeylyzer configuration and data.
 ///
-/// The `root` acts as the project root — analogous to the old `CARGO_MANIFEST_DIR/..`.
-/// Static data files (layouts, language data, corpus configs) live under `root/static/`.
-/// User configuration (`config.toml`) and session state live directly in `root`.
+/// Follows XDG conventions on Linux — configuration lives in `$XDG_CONFIG_HOME`
+/// and downloaded/generated data lives in `$XDG_DATA_HOME`:
 ///
-/// Platform roots when using `resolve()`:
-/// - Linux:   `$XDG_CONFIG_HOME/oxeylyzer` (default: `~/.config/oxeylyzer`)
-/// - Windows: `%APPDATA%\oxeylyzer`
-/// - macOS:   `~/Library/Application Support/oxeylyzer`
+/// | Location            | Linux                              | Windows/macOS          |
+/// |---------------------|------------------------------------|------------------------|
+/// | `config_root`       | `$XDG_CONFIG_HOME/oxeylyzer`       | `%APPDATA%\oxeylyzer`  |
+/// | `data_root`         | `$XDG_DATA_HOME/oxeylyzer`         | same as config_root    |
 ///
-/// For development, set the `OXEYLYZER_DATA_DIR` environment variable to `.`
-/// (the workspace root) and the existing `./static/` tree is used directly.
+/// **Config root** holds: `config.toml`, `session.json`, `history.txt`, `weight-presets/`
+/// **Data root** holds:   `static/layouts/`, `static/language_data/`, `static/corpus_configs/`
+///
+/// For development set `OXEYLYZER_DATA_DIR=.` (workspace root); both roots collapse to
+/// the same directory so the existing `./static/` tree is used directly.
 #[derive(Clone)]
 pub struct OxeylyzerDirs {
-    root: PathBuf,
+    config_root: PathBuf,
+    data_root: PathBuf,
     first_run: bool,
 }
 
 impl OxeylyzerDirs {
-    /// Resolves the platform config directory and creates it if needed.
+    /// Resolves platform directories and creates them if needed.
     ///
-    /// `is_first_run()` returns `true` if the data version sentinel is absent,
-    /// meaning resources have never been downloaded.
+    /// `is_first_run()` returns `true` when data has never been downloaded
+    /// (the `.data-version` sentinel is absent from the data root).
     pub fn resolve() -> Result<Self, ResourceError> {
-        let root = ProjectDirs::from("", "", "oxeylyzer")
-            .ok_or(ResourceError::NoDirFound)?
-            .config_dir()
-            .to_path_buf();
+        let proj =
+            ProjectDirs::from("", "", "oxeylyzer").ok_or(ResourceError::NoDirFound)?;
 
-        std::fs::create_dir_all(&root)?;
-        let first_run = !root.join(".data-version").exists();
+        let config_root = proj.config_dir().to_path_buf();
+        let data_root = proj.data_dir().to_path_buf();
 
-        Ok(Self { root, first_run })
+        std::fs::create_dir_all(&config_root)?;
+        std::fs::create_dir_all(&data_root)?;
+
+        let first_run = !data_root.join(".data-version").exists();
+
+        Ok(Self { config_root, data_root, first_run })
     }
 
-    /// Creates an `OxeylyzerDirs` pointing at an arbitrary root path.
+    /// Creates an `OxeylyzerDirs` pointing at a single override root.
     ///
-    /// `first_run` is always `false` — no download is triggered.
-    /// Use this for development (`OXEYLYZER_DATA_DIR=.`) or tests.
+    /// Both config and data resolve under the same directory — intended for
+    /// development (`OXEYLYZER_DATA_DIR=.`) and tests. `is_first_run()` is
+    /// always `false` so no download is triggered.
     pub fn with_override(root: PathBuf) -> Self {
-        Self { root, first_run: false }
+        Self { config_root: root.clone(), data_root: root, first_run: false }
     }
 
-    /// Returns `true` if resources have never been downloaded (fresh install).
+    /// `true` if data files have never been downloaded (fresh install).
     pub fn is_first_run(&self) -> bool {
         self.first_run
     }
 
-    /// The project root directory.
+    // ── Data root (XDG_DATA_HOME) ────────────────────────────────────────────
+
+    /// The data root directory — used to resolve relative paths from `config.toml`.
     pub fn data_dir(&self) -> &Path {
-        &self.root
+        &self.data_root
     }
 
-    /// `root/static/layouts`
+    /// `data_root/static/layouts`
     pub fn layouts_dir(&self) -> PathBuf {
-        self.root.join("static/layouts")
+        self.data_root.join("static/layouts")
     }
 
-    /// `root/static/language_data`
+    /// `data_root/static/language_data`
     pub fn language_data_dir(&self) -> PathBuf {
-        self.root.join("static/language_data")
+        self.data_root.join("static/language_data")
     }
 
-    /// `root/static/corpus_configs`
+    /// `data_root/static/corpus_configs`
     pub fn corpus_configs_dir(&self) -> PathBuf {
-        self.root.join("static/corpus_configs")
+        self.data_root.join("static/corpus_configs")
     }
 
-    /// `root/static/text`
+    /// `data_root/static/text`
     pub fn text_dir(&self) -> PathBuf {
-        self.root.join("static/text")
+        self.data_root.join("static/text")
     }
 
-    /// `root/static/weight-presets`
-    pub fn weight_presets_dir(&self) -> PathBuf {
-        self.root.join("static/weight-presets")
-    }
+    // ── Config root (XDG_CONFIG_HOME) ────────────────────────────────────────
 
-    /// `root/static/history.txt`
-    pub fn history_file(&self) -> PathBuf {
-        self.root.join("static/history.txt")
-    }
-
-    /// `root/config.toml`
+    /// `config_root/config.toml`
     pub fn config_file(&self) -> PathBuf {
-        self.root.join("config.toml")
+        self.config_root.join("config.toml")
     }
 
-    /// `root/session.json`
+    /// `config_root/session.json`
     pub fn session_file(&self) -> PathBuf {
-        self.root.join("session.json")
+        self.config_root.join("session.json")
     }
 
-    /// Downloads and extracts resources if not already present, then writes
-    /// a default `config.toml` if one does not exist.
+    /// `config_root/history.txt`
+    pub fn history_file(&self) -> PathBuf {
+        self.config_root.join("history.txt")
+    }
+
+    /// `config_root/weight-presets`
+    pub fn weight_presets_dir(&self) -> PathBuf {
+        self.config_root.join("weight-presets")
+    }
+
+    // ── Bootstrap ────────────────────────────────────────────────────────────
+
+    /// Downloads and extracts data files if not already present, then writes
+    /// a default `config.toml` to the config root if one does not exist.
     ///
-    /// The `progress` callback is called with download/extraction events.
-    /// This function blocks the current thread; wrap in `spawn_blocking` for async contexts.
+    /// Calls `progress` with download/extraction events. Blocks the current
+    /// thread — wrap in `spawn_blocking` for async contexts.
     pub fn ensure_data<F>(&self, progress: F) -> Result<(), ResourceError>
     where
         F: Fn(DownloadProgress) + Send + 'static,
     {
         seed::ensure_data(self, progress)
+    }
+
+    // ── Internal helpers ─────────────────────────────────────────────────────
+
+    pub(crate) fn config_root(&self) -> &Path {
+        &self.config_root
     }
 }
