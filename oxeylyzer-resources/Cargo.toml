@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 directories = { workspace = true }
+oxeylyzer-core = { path = "../oxeylyzer-core" }
+toml = { workspace = true }
 ureq = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 thiserror = { workspace = true }

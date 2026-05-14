@@ -4,7 +4,7 @@ mod seed;
 
 pub use dirs::OxeylyzerDirs;
 pub use download::DownloadProgress;
-pub use seed::default_config_toml;
+pub use seed::ensure_config;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceError {
@@ -16,4 +16,6 @@ pub enum ResourceError {
     Io(#[from] std::io::Error),
     #[error("Archive extraction failed: {0}")]
     Extraction(String),
+    #[error("Failed to serialize config: {0}")]
+    Config(String),
 }

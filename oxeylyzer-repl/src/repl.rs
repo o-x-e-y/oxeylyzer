@@ -163,6 +163,7 @@ pub struct Repl {
 
 impl Repl {
     pub fn new(dirs: OxeylyzerDirs) -> Result<Self> {
+        dirs.ensure_config()?;
         let config = Config::with_loaded_weights(dirs.config_file())?;
         let data = Data::load(dirs.data_dir().join(&config.corpus)).unwrap();
         let language = data.name.clone();

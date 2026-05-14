@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::{OxeylyzerError, OxeylyzerResultExt, Result};
 
 /// Configuration for penalizing excessive finger usage.
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct MaxFingerUse {
     /// The penalty multiplier applied when a finger exceeds its usage limit.
     pub penalty: f64,
@@ -22,7 +22,7 @@ pub struct MaxFingerUse {
     pub thumb: f64,
 }
 
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 /// Holds weights used for calculating various layout penalties and rewards.
 ///
 /// # Examples:
@@ -166,7 +166,7 @@ impl From<Weights> for AnalyzerWeights {
 }
 
 #[serde_as]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 /// Configuration for the layout generation.
 ///
 /// # Examples:
@@ -190,28 +190,8 @@ pub struct Config {
     pub weights: Weights,
 }
 
-impl Config {
-    /// Loads a configuration from a file path.
-    ///
-    /// # Examples:
-    /// ```
-    /// # use oxeylyzer_core::weights::Config;
-    /// let config = Config::with_loaded_weights("config.toml");
-    /// ```
-    pub fn with_loaded_weights<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = std::fs::read_to_string(&path).path_context(&path)?;
-
-        toml::from_str::<Self>(&content).path_context(path)
-    }
-
-    /// Creates a configuration with default values.
-    ///
-    /// # Examples:
-    /// ```
-    /// # use oxeylyzer_core::weights::Config;
-    /// let config = Config::with_defaults();
-    /// ```
-    pub fn with_defaults() -> Self {
+impl Default for Config {
+    fn default() -> Self {
         Self {
             corpus: PathBuf::from("./static/language_data/english.json"),
             layouts: vec![PathBuf::from("./static/layouts/english")],
@@ -255,6 +235,26 @@ impl Config {
                 },
             },
         }
+    }
+}
+
+impl Config {
+    /// Loads a configuration from a file path.
+    ///
+    /// # Examples:
+    /// ```
+    /// # use oxeylyzer_core::weights::Config;
+    /// let config = Config::with_loaded_weights("config.toml");
+    /// ```
+    pub fn with_loaded_weights<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let content = std::fs::read_to_string(&path).path_context(&path)?;
+
+        toml::from_str::<Self>(&content).path_context(path)
+    }
+
+    /// Creates a configuration with default values. Equivalent to `Config::default()`.
+    pub fn with_defaults() -> Self {
+        Self::default()
     }
 
     /// Gets the trigram precision.

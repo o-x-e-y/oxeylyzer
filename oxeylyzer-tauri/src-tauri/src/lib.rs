@@ -1352,7 +1352,10 @@ pub fn run() {
                 OxeylyzerDirs::resolve().expect("failed to resolve data directory")
             };
 
-            // On first run, download resources in the background and emit progress events.
+            // Always ensure a config.toml exists before trying to load it.
+            dirs.ensure_config().expect("failed to write default config");
+
+            // On first run, download data files in the background and emit progress events.
             if dirs.is_first_run() {
                 let app_handle = app.handle().clone();
                 let dirs_clone = dirs.clone();

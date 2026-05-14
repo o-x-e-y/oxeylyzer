@@ -118,8 +118,15 @@ impl OxeylyzerDirs {
 
     // ── Bootstrap ────────────────────────────────────────────────────────────
 
-    /// Downloads and extracts data files if not already present, then writes
-    /// a default `config.toml` to the config root if one does not exist.
+    /// Writes a default `config.toml` to the config root if one does not exist.
+    ///
+    /// Idempotent — safe to call on every startup before loading config.
+    pub fn ensure_config(&self) -> Result<(), ResourceError> {
+        seed::ensure_config(self)
+    }
+
+    /// Downloads and extracts data files if not already present, then ensures
+    /// a default `config.toml` exists in the config root.
     ///
     /// Calls `progress` with download/extraction events. Blocks the current
     /// thread — wrap in `spawn_blocking` for async contexts.
@@ -130,9 +137,4 @@ impl OxeylyzerDirs {
         seed::ensure_data(self, progress)
     }
 
-    // ── Internal helpers ─────────────────────────────────────────────────────
-
-    pub(crate) fn config_root(&self) -> &Path {
-        &self.config_root
-    }
 }
