@@ -3,15 +3,17 @@ use std::path::Path;
 
 use crate::ResourceError;
 
-const DATA_URL: &str =
-    "https://github.com/o-x-e-y/oxeylyzer/archive/refs/heads/data-files.zip";
+const DATA_URL: &str = "https://github.com/o-x-e-y/oxeylyzer/archive/refs/heads/data-files.zip";
 
 // GitHub archive zip puts all files under a root folder named "{repo}-{branch}/"
 const ZIP_INNER_PREFIX: &str = "oxeylyzer-data-files/";
 
 pub enum DownloadProgress {
     Connecting,
-    Downloading { bytes_done: u64, bytes_total: Option<u64> },
+    Downloading {
+        bytes_done: u64,
+        bytes_total: Option<u64>,
+    },
     Extracting,
     Done,
 }
@@ -42,7 +44,10 @@ where
         }
         body.extend_from_slice(&buf[..n]);
         bytes_done += n as u64;
-        progress(DownloadProgress::Downloading { bytes_done, bytes_total: content_length });
+        progress(DownloadProgress::Downloading {
+            bytes_done,
+            bytes_total: content_length,
+        });
     }
 
     progress(DownloadProgress::Extracting);
@@ -52,8 +57,9 @@ where
         zip::ZipArchive::new(cursor).map_err(|e| ResourceError::Extraction(e.to_string()))?;
 
     for i in 0..archive.len() {
-        let mut file =
-            archive.by_index(i).map_err(|e| ResourceError::Extraction(e.to_string()))?;
+        let mut file = archive
+            .by_index(i)
+            .map_err(|e| ResourceError::Extraction(e.to_string()))?;
 
         let raw_name = file.name().to_string();
         let stripped = match raw_name.strip_prefix(ZIP_INNER_PREFIX) {

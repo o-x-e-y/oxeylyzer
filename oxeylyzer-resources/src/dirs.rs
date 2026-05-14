@@ -32,8 +32,7 @@ impl OxeylyzerDirs {
     /// `is_first_run()` returns `true` when data has never been downloaded
     /// (the `.data-version` sentinel is absent from the data root).
     pub fn resolve() -> Result<Self, ResourceError> {
-        let proj =
-            ProjectDirs::from("", "", "oxeylyzer").ok_or(ResourceError::NoDirFound)?;
+        let proj = ProjectDirs::from("", "", "oxeylyzer").ok_or(ResourceError::NoDirFound)?;
 
         let config_root = proj.config_dir().to_path_buf();
         let data_root = proj.data_dir().to_path_buf();
@@ -43,7 +42,11 @@ impl OxeylyzerDirs {
 
         let first_run = !data_root.join(".data-version").exists();
 
-        Ok(Self { config_root, data_root, first_run })
+        Ok(Self {
+            config_root,
+            data_root,
+            first_run,
+        })
     }
 
     /// Creates an `OxeylyzerDirs` pointing at a single override root.
@@ -52,7 +55,11 @@ impl OxeylyzerDirs {
     /// development (`OXEYLYZER_DATA_DIR=.`) and tests. `is_first_run()` is
     /// always `false` so no download is triggered.
     pub fn with_override(root: PathBuf) -> Self {
-        Self { config_root: root.clone(), data_root: root, first_run: false }
+        Self {
+            config_root: root.clone(),
+            data_root: root,
+            first_run: false,
+        }
     }
 
     /// `true` if data files have never been downloaded (fresh install).

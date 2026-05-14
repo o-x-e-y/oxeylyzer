@@ -199,7 +199,6 @@ fn stats_to_dto(stats: &LayoutStats, char_total: i64) -> LayoutStatsDto {
     }
 }
 
-
 fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
     let fast = engine.fast_layout(layout, &[]);
     let stats = engine.get_layout_stats(&fast);
@@ -208,13 +207,20 @@ fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
         name: layout.name.clone(),
         keys: fast.layout_str(),
         board: get_board_str(layout),
-        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
+        fingering_name: layout
+            .metadata
+            .fingering_name
+            .as_ref()
+            .map(|n| n.to_string()),
         stats: stats_dto,
-        keyboard: fast.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
+        keyboard: fast
+            .keyboard
+            .iter()
+            .map(|k| [k.x(), k.y(), k.width(), k.height()])
+            .collect(),
         shape: fast.shape.inner().to_vec(),
     }
 }
-
 
 fn get_board_str(layout: &Layout) -> String {
     serde_json::to_value(layout)
@@ -235,8 +241,9 @@ fn load_all_layouts(config: &Config, base_path: &Path) -> HashMap<String, Layout
                 .flatten()
                 .flatten()
                 .flat_map(|path| {
-                    Layout::load(&path)
-                        .inspect_err(|e| eprintln!("Error loading layout '{}': {e}", path.display()))
+                    Layout::load(&path).inspect_err(|e| {
+                        eprintln!("Error loading layout '{}': {e}", path.display())
+                    })
                 })
                 .map(|l| (l.name.to_lowercase(), l))
         })
@@ -285,7 +292,10 @@ fn corpus_path_for(language_data_dir: &Path, language: &str) -> PathBuf {
 fn list_layouts(state: tauri::State<'_, AppState>) -> Result<Vec<LayoutDto>, String> {
     let engine = state.engine.lock().unwrap().clone();
     let layouts = state.layouts.lock().unwrap();
-    let mut dtos: Vec<LayoutDto> = layouts.values().map(|l| layout_to_dto(&engine, l)).collect();
+    let mut dtos: Vec<LayoutDto> = layouts
+        .values()
+        .map(|l| layout_to_dto(&engine, l))
+        .collect();
     dtos.sort_by(|a, b| b.stats.score.total_cmp(&a.stats.score));
     Ok(dtos)
 }
@@ -344,7 +354,10 @@ fn get_bigrams(
             .pairs
             .iter()
             .filter_map(|&pos_pair| {
-                let pair = BigramPair { pair: pos_pair, dist: 1 };
+                let pair = BigramPair {
+                    pair: pos_pair,
+                    dist: 1,
+                };
                 let bigram = bigram_str(&engine, &fl, &pair)?;
                 let raw = engine.pair_sfb(&fl, &pair);
                 Some(BigramEntryDto {
@@ -358,7 +371,10 @@ fn get_bigrams(
             .pairs
             .iter()
             .filter_map(|&pos_pair| {
-                let pair = BigramPair { pair: pos_pair, dist: 1 };
+                let pair = BigramPair {
+                    pair: pos_pair,
+                    dist: 1,
+                };
                 let bigram = bigram_str(&engine, &fl, &pair)?;
                 let raw = engine.pair_sfb(&fl, &pair);
                 Some(BigramEntryDto {
@@ -372,7 +388,10 @@ fn get_bigrams(
             .pairs
             .iter()
             .filter_map(|&pos_pair| {
-                let pair = BigramPair { pair: pos_pair, dist: 1 };
+                let pair = BigramPair {
+                    pair: pos_pair,
+                    dist: 1,
+                };
                 let bigram = bigram_str(&engine, &fl, &pair)?;
                 let raw = engine.pair_sfb(&fl, &pair);
                 Some(BigramEntryDto {
@@ -454,9 +473,17 @@ fn swap_keys(
         name: format!("{name}*"),
         keys: fl.layout_str(),
         board: get_board_str(layout),
-        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
+        fingering_name: layout
+            .metadata
+            .fingering_name
+            .as_ref()
+            .map(|n| n.to_string()),
         stats: stats_dto,
-        keyboard: fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
+        keyboard: fl
+            .keyboard
+            .iter()
+            .map(|k| [k.x(), k.y(), k.width(), k.height()])
+            .collect(),
         shape: fl.shape.inner().to_vec(),
     })
 }
@@ -478,7 +505,11 @@ fn analyze_custom(
         .ok_or_else(|| format!("Layout '{name}' not found"))?;
     let mut fl = engine.fast_layout(layout, &[]);
 
-    let keyboard = fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect();
+    let keyboard = fl
+        .keyboard
+        .iter()
+        .map(|k| [k.x(), k.y(), k.width(), k.height()])
+        .collect();
     let shape = fl.shape.inner().to_vec();
 
     // Apply the custom key arrangement.
@@ -517,7 +548,11 @@ fn analyze_custom(
         name: format!("{name}*"),
         keys,
         board: get_board_str(layout),
-        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
+        fingering_name: layout
+            .metadata
+            .fingering_name
+            .as_ref()
+            .map(|n| n.to_string()),
         stats: stats_dto,
         keyboard,
         shape,
@@ -536,7 +571,11 @@ fn analyze_with_disabled(
         .get(&name.to_lowercase())
         .ok_or_else(|| format!("Layout '{name}' not found"))?;
     let mut fl = engine.fast_layout(layout, &[]);
-    let keyboard = fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect();
+    let keyboard = fl
+        .keyboard
+        .iter()
+        .map(|k| [k.x(), k.y(), k.width(), k.height()])
+        .collect();
     let shape = fl.shape.inner().to_vec();
     let original_keys = fl.layout_str();
 
@@ -553,7 +592,11 @@ fn analyze_with_disabled(
         name: format!("{name}*"),
         keys: original_keys,
         board: get_board_str(layout),
-        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
+        fingering_name: layout
+            .metadata
+            .fingering_name
+            .as_ref()
+            .map(|n| n.to_string()),
         stats: stats_dto,
         keyboard,
         shape,
@@ -588,10 +631,7 @@ fn get_char_frequencies(state: tauri::State<'_, AppState>) -> Result<Vec<CharFre
 }
 
 #[tauri::command]
-fn set_language(
-    language: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+fn set_language(language: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let config = state.config.lock().unwrap().clone();
     let corpus_path = corpus_path_for(&state.dirs.language_data_dir(), &language);
     let data = Data::load(&corpus_path)
@@ -622,8 +662,7 @@ fn lookup_ngram(
         1 => {
             let c = ngram.chars().next().unwrap();
             let u = data.mapping.get_u(c);
-            let percent =
-                (data.get_char_u(u) as f64 / data.char_total as f64) * 100.0;
+            let percent = (data.get_char_u(u) as f64 / data.char_total as f64) * 100.0;
             Ok(NgramResultDto::Unigram {
                 ch: c.to_string(),
                 percent,
@@ -710,9 +749,12 @@ fn load_corpus(
     let data = Data::from_paths(&paths, &language, &cleaner)
         .map_err(|e| format!("Failed to process corpus: {e}"))?;
 
-    data.save(state.dirs.language_data_dir()).map_err(|e| format!("Failed to save corpus: {e}"))?;
+    data.save(state.dirs.language_data_dir())
+        .map_err(|e| format!("Failed to save corpus: {e}"))?;
 
-    Ok(format!("Corpus '{language}' processed and saved successfully."))
+    Ok(format!(
+        "Corpus '{language}' processed and saved successfully."
+    ))
 }
 
 #[tauri::command]
@@ -754,17 +796,19 @@ async fn start_generate(
 
         // Emit progress updates every 200ms from a dedicated thread.
         // Uses progress_done flag so we never have to join (no blocking wait).
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            let d = done_clone.load(Ordering::Relaxed);
-            let _ = app_progress.emit(
-                "generate-progress",
-                serde_json::json!({ "done": d, "total": count }),
-            );
-            if progress_done_check.load(Ordering::Relaxed)
-                || cancel_progress.load(Ordering::Relaxed)
-            {
-                break;
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                let d = done_clone.load(Ordering::Relaxed);
+                let _ = app_progress.emit(
+                    "generate-progress",
+                    serde_json::json!({ "done": d, "total": count }),
+                );
+                if progress_done_check.load(Ordering::Relaxed)
+                    || cancel_progress.load(Ordering::Relaxed)
+                {
+                    break;
+                }
             }
         });
 
@@ -811,15 +855,16 @@ async fn start_generate(
                 let stats = engine.get_layout_stats(fl);
                 let stats_dto = stats_to_dto(&stats, char_total);
                 LayoutDto {
-                    name: fl
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| format!("gen-{}", i + 1)),
+                    name: fl.name.clone().unwrap_or_else(|| format!("gen-{}", i + 1)),
                     keys: fl.layout_str(),
                     board: "generated".to_string(),
                     fingering_name: fl.metadata.fingering_name.as_ref().map(|n| n.to_string()),
                     stats: stats_dto,
-                    keyboard: fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
+                    keyboard: fl
+                        .keyboard
+                        .iter()
+                        .map(|k| [k.x(), k.y(), k.width(), k.height()])
+                        .collect(),
                     shape: fl.shape.inner().to_vec(),
                 }
             })
@@ -829,7 +874,10 @@ async fn start_generate(
         let state = app.state::<AppState>();
         *state.generated.lock().unwrap() = scored.into_iter().map(|(_, fl)| fl).collect();
 
-        let _ = app.emit("generate-done", serde_json::json!({ "results": layout_dtos }));
+        let _ = app.emit(
+            "generate-done",
+            serde_json::json!({ "results": layout_dtos }),
+        );
     });
 
     Ok(())
@@ -871,13 +919,15 @@ fn save_generated(
         }),
         ..layout
     };
-    let json = serde_json::to_string_pretty(&layout)
-        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let json =
+        serde_json::to_string_pretty(&layout).map_err(|e| format!("Serialization failed: {e}"))?;
 
     // Write to the layouts directory for the current language.
     let lang = engine.language.clone();
     let file_name = save_name.replace(' ', "_").to_lowercase();
-    let path = state.dirs.layouts_dir()
+    let path = state
+        .dirs
+        .layouts_dir()
         .join(&lang)
         .join(&file_name)
         .with_extension("dof");
@@ -929,7 +979,9 @@ fn save_layout_edit(
     // Find the original file path.
     let lang = state.engine.lock().unwrap().language.clone();
     let file_name = original_name.replace(' ', "_").to_lowercase();
-    let path = state.dirs.layouts_dir()
+    let path = state
+        .dirs
+        .layouts_dir()
         .join(&lang)
         .join(&file_name)
         .with_extension("dof");
@@ -964,7 +1016,9 @@ fn fork_layout(
     forked.name = new_name.clone();
 
     let file_name = new_name.replace(' ', "_").to_lowercase();
-    let path = state.dirs.layouts_dir()
+    let path = state
+        .dirs
+        .layouts_dir()
         .join(&lang)
         .join(&file_name)
         .with_extension("dof");
@@ -1035,11 +1089,36 @@ fn config_dto_to_toml(dto: &ConfigDto) -> String {
         dto.corpus_configs,
         dto.trigram_precision,
         dto.max_cores,
-        w.lateral_penalty, w.sfbs, w.sfs, w.stretches, w.pinky_ring_bigrams,
-        w.inrolls, w.outrolls, w.onehands, w.alternates, w.alternates_sfs,
-        w.redirects, w.redirects_sfs, w.bad_redirects, w.bad_redirects_sfs,
-        fw.lp, fw.lr, fw.lm, fw.li, fw.lt, fw.rt, fw.ri, fw.rm, fw.rr, fw.rp,
-        mfu.penalty, mfu.pinky, mfu.ring, mfu.middle, mfu.index, mfu.thumb,
+        w.lateral_penalty,
+        w.sfbs,
+        w.sfs,
+        w.stretches,
+        w.pinky_ring_bigrams,
+        w.inrolls,
+        w.outrolls,
+        w.onehands,
+        w.alternates,
+        w.alternates_sfs,
+        w.redirects,
+        w.redirects_sfs,
+        w.bad_redirects,
+        w.bad_redirects_sfs,
+        fw.lp,
+        fw.lr,
+        fw.lm,
+        fw.li,
+        fw.lt,
+        fw.rt,
+        fw.ri,
+        fw.rm,
+        fw.rr,
+        fw.rp,
+        mfu.penalty,
+        mfu.pinky,
+        mfu.ring,
+        mfu.middle,
+        mfu.index,
+        mfu.thumb,
     )
 }
 
@@ -1047,7 +1126,11 @@ fn config_to_dto(config: &Config) -> ConfigDto {
     let w = &config.weights;
     ConfigDto {
         corpus: config.corpus.to_string_lossy().into_owned(),
-        layouts: config.layouts.iter().map(|p| p.to_string_lossy().into_owned()).collect(),
+        layouts: config
+            .layouts
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect(),
         corpus_configs: config.corpus_configs.to_string_lossy().into_owned(),
         trigram_precision: config.trigram_precision,
         max_cores: config.max_cores,
@@ -1132,8 +1215,7 @@ fn set_config(config_dto: ConfigDto, state: tauri::State<'_, AppState>) -> Resul
 
     // Rebuild engine with new config
     let corpus_path = state.dirs.data_dir().join(&new_config.corpus);
-    let data = Data::load(&corpus_path)
-        .map_err(|e| format!("Failed to load corpus: {e}"))?;
+    let data = Data::load(&corpus_path).map_err(|e| format!("Failed to load corpus: {e}"))?;
     let new_engine = Arc::new(Oxeylyzer::new(data, new_config.clone()));
     let new_layouts = load_all_layouts(&new_config, state.dirs.data_dir());
 
@@ -1167,11 +1249,36 @@ fn weights_dto_to_toml(w: &WeightsDto) -> String {
          rt = {}\nri = {}\nrm = {}\nrr = {}\nrp = {}\n\n\
          [max_finger_use]\n\
          penalty = {}\npinky = {}\nring = {}\nmiddle = {}\nindex = {}\nthumb = {}\n",
-        w.lateral_penalty, w.sfbs, w.sfs, w.stretches, w.pinky_ring_bigrams,
-        w.inrolls, w.outrolls, w.onehands, w.alternates, w.alternates_sfs,
-        w.redirects, w.redirects_sfs, w.bad_redirects, w.bad_redirects_sfs,
-        fw.lp, fw.lr, fw.lm, fw.li, fw.lt, fw.rt, fw.ri, fw.rm, fw.rr, fw.rp,
-        mfu.penalty, mfu.pinky, mfu.ring, mfu.middle, mfu.index, mfu.thumb,
+        w.lateral_penalty,
+        w.sfbs,
+        w.sfs,
+        w.stretches,
+        w.pinky_ring_bigrams,
+        w.inrolls,
+        w.outrolls,
+        w.onehands,
+        w.alternates,
+        w.alternates_sfs,
+        w.redirects,
+        w.redirects_sfs,
+        w.bad_redirects,
+        w.bad_redirects_sfs,
+        fw.lp,
+        fw.lr,
+        fw.lm,
+        fw.li,
+        fw.lt,
+        fw.rt,
+        fw.ri,
+        fw.rm,
+        fw.rr,
+        fw.rp,
+        mfu.penalty,
+        mfu.pinky,
+        mfu.ring,
+        mfu.middle,
+        mfu.index,
+        mfu.thumb,
     )
 }
 
@@ -1186,7 +1293,8 @@ fn list_weight_presets(state: tauri::State<'_, AppState>) -> Result<Vec<String>,
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().into_owned();
-            name.ends_with(".toml").then(|| name.trim_end_matches(".toml").to_string())
+            name.ends_with(".toml")
+                .then(|| name.trim_end_matches(".toml").to_string())
         })
         .collect();
     names.sort();
@@ -1221,8 +1329,7 @@ fn reload_state(state: &AppState) -> Result<(), String> {
     let config = Config::with_loaded_weights(state.dirs.config_file())
         .map_err(|e| format!("Failed to reload config: {e}"))?;
     let corpus_path = state.dirs.data_dir().join(&config.corpus);
-    let data = Data::load(&corpus_path)
-        .map_err(|e| format!("Failed to load corpus: {e}"))?;
+    let data = Data::load(&corpus_path).map_err(|e| format!("Failed to load corpus: {e}"))?;
     let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
     let new_layouts = load_all_layouts(&config, state.dirs.data_dir());
     *state.config.lock().unwrap() = config;
@@ -1253,13 +1360,20 @@ pub fn run() {
                     if let Err(e) = dirs_clone.ensure_data(move |p| {
                         use oxeylyzer_resources::DownloadProgress;
                         let payload = match &p {
-                            DownloadProgress::Connecting => serde_json::json!({"status": "connecting"}),
-                            DownloadProgress::Downloading { bytes_done, bytes_total } => serde_json::json!({
+                            DownloadProgress::Connecting => {
+                                serde_json::json!({"status": "connecting"})
+                            }
+                            DownloadProgress::Downloading {
+                                bytes_done,
+                                bytes_total,
+                            } => serde_json::json!({
                                 "status": "downloading",
                                 "bytesDone": bytes_done,
                                 "bytesTotal": bytes_total,
                             }),
-                            DownloadProgress::Extracting => serde_json::json!({"status": "extracting"}),
+                            DownloadProgress::Extracting => {
+                                serde_json::json!({"status": "extracting"})
+                            }
                             DownloadProgress::Done => serde_json::json!({"status": "done"}),
                         };
                         let _ = app_handle.emit("download-progress", payload);
@@ -1298,7 +1412,10 @@ pub fn run() {
                     let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
                     let mut watcher = match recommended_watcher(tx) {
                         Ok(w) => w,
-                        Err(e) => { eprintln!("File watcher init failed: {e}"); return; }
+                        Err(e) => {
+                            eprintln!("File watcher init failed: {e}");
+                            return;
+                        }
                     };
                     let _ = watcher.watch(&watch_config, RecursiveMode::NonRecursive);
                     let _ = watcher.watch(&watch_layouts, RecursiveMode::Recursive);

@@ -214,7 +214,10 @@ impl Repl {
 
         dirs.ensure_data(|p| match p {
             DownloadProgress::Connecting => print!("Connecting to download resources..."),
-            DownloadProgress::Downloading { bytes_done, bytes_total } => {
+            DownloadProgress::Downloading {
+                bytes_done,
+                bytes_total,
+            } => {
                 if let Some(total) = bytes_total {
                     eprint!("\rDownloading: {bytes_done}/{total} bytes");
                 } else {
@@ -417,7 +420,9 @@ impl Repl {
 
         layout.name = Some(new_name.clone());
         let name_path = new_name.replace(' ', "_").to_lowercase();
-        let path = self.dirs.layouts_dir()
+        let path = self
+            .dirs
+            .layouts_dir()
             .join(&self.language)
             .join(name_path)
             .with_extension("dof");
@@ -954,7 +959,9 @@ impl Repl {
             .parent()
             .ok_or_else(|| ReplError::FailedToGetCorpusPath(config.corpus.clone()))?
             .to_path_buf();
-        let corpus_path = self.dirs.data_dir()
+        let corpus_path = self
+            .dirs
+            .data_dir()
             .join(&language_data)
             .join(language)
             .with_extension("json");
@@ -1035,9 +1042,8 @@ mod tests {
     use super::*;
 
     static REPL: Lazy<Repl> = Lazy::new(|| {
-        let dirs = OxeylyzerDirs::with_override(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."),
-        );
+        let dirs =
+            OxeylyzerDirs::with_override(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."));
         Repl::new(dirs).unwrap()
     });
 

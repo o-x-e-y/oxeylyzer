@@ -1,4 +1,7 @@
-use crate::{OxeylyzerDirs, ResourceError, download::{DownloadProgress, download_and_extract}};
+use crate::{
+    OxeylyzerDirs, ResourceError,
+    download::{DownloadProgress, download_and_extract},
+};
 
 pub fn ensure_data<F>(dirs: &OxeylyzerDirs, progress: F) -> Result<(), ResourceError>
 where
