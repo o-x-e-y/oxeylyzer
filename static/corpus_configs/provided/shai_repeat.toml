@@ -1,5 +1,0 @@
-sources = [ "../../text/shai_repeat" ]
-
-inherits = [ "./default.toml" ]
-
-repeat_key = true

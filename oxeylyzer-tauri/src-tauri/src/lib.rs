@@ -15,6 +15,7 @@ use oxeylyzer_core::{
     rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     weights::{Config, FingerWeights, MaxFingerUse, Weights},
 };
+use oxeylyzer_resources::OxeylyzerDirs;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 use toml;
@@ -155,8 +156,8 @@ pub struct AppState {
     pub layouts: Mutex<HashMap<String, Layout>>,
     /// Results from the most recent generation run. Cleared on language switch.
     pub generated: Mutex<Vec<FastLayout>>,
-    /// Absolute path to the workspace root (where config.toml lives).
-    pub base_path: PathBuf,
+    /// Managed resource paths (XDG/AppData config dir in release, override in dev).
+    pub dirs: OxeylyzerDirs,
     /// Cached config for reload and language switching.
     pub config: Mutex<Config>,
     /// Set to true to request cancellation of an in-progress generation.
@@ -198,7 +199,6 @@ fn stats_to_dto(stats: &LayoutStats, char_total: i64) -> LayoutStatsDto {
     }
 }
 
-
 fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
     let fast = engine.fast_layout(layout, &[]);
     let stats = engine.get_layout_stats(&fast);
@@ -207,13 +207,20 @@ fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
         name: layout.name.clone(),
         keys: fast.layout_str(),
         board: get_board_str(layout),
-        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
+        fingering_name: layout
+            .metadata
+            .fingering_name
+            .as_ref()
+            .map(|n| n.to_string()),
         stats: stats_dto,
-        keyboard: fast.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
+        keyboard: fast
+            .keyboard
+            .iter()
+            .map(|k| [k.x(), k.y(), k.width(), k.height()])
+            .collect(),
         shape: fast.shape.inner().to_vec(),
     }
 }
-
 
 fn get_board_str(layout: &Layout) -> String {
     serde_json::to_value(layout)
@@ -234,8 +241,9 @@ fn load_all_layouts(config: &Config, base_path: &Path) -> HashMap<String, Layout
                 .flatten()
                 .flatten()
                 .flat_map(|path| {
-                    Layout::load(&path)
-                        .inspect_err(|e| eprintln!("Error loading layout '{}': {e}", path.display()))
+                    Layout::load(&path).inspect_err(|e| {
+                        eprintln!("Error loading layout '{}': {e}", path.display())
+                    })
                 })
                 .map(|l| (l.name.to_lowercase(), l))
         })
@@ -258,9 +266,8 @@ fn bigram_str(engine: &Oxeylyzer, fl: &FastLayout, pair: &BigramPair) -> Option<
     Some(engine.mapping.map_us(&[u1, u2]).collect())
 }
 
-fn list_languages_from_dir(base_path: &Path) -> Vec<String> {
-    let dir = base_path.join("static/language_data");
-    std::fs::read_dir(&dir)
+fn list_languages_from_dir(dir: &Path) -> Vec<String> {
+    std::fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
@@ -275,14 +282,8 @@ fn list_languages_from_dir(base_path: &Path) -> Vec<String> {
         .collect()
 }
 
-fn corpus_path_for(base_path: &Path, config: &Config, language: &str) -> PathBuf {
-    // Corpus path from config, swapping the filename to the requested language.
-    // e.g. ./static/language_data/shai.json → ./static/language_data/{language}.json
-    let parent = config
-        .corpus
-        .parent()
-        .unwrap_or_else(|| Path::new("./static/language_data"));
-    base_path.join(parent).join(language).with_extension("json")
+fn corpus_path_for(language_data_dir: &Path, language: &str) -> PathBuf {
+    language_data_dir.join(language).with_extension("json")
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -291,14 +292,17 @@ fn corpus_path_for(base_path: &Path, config: &Config, language: &str) -> PathBuf
 fn list_layouts(state: tauri::State<'_, AppState>) -> Result<Vec<LayoutDto>, String> {
     let engine = state.engine.lock().unwrap().clone();
     let layouts = state.layouts.lock().unwrap();
-    let mut dtos: Vec<LayoutDto> = layouts.values().map(|l| layout_to_dto(&engine, l)).collect();
+    let mut dtos: Vec<LayoutDto> = layouts
+        .values()
+        .map(|l| layout_to_dto(&engine, l))
+        .collect();
     dtos.sort_by(|a, b| b.stats.score.total_cmp(&a.stats.score));
     Ok(dtos)
 }
 
 #[tauri::command]
 fn list_languages(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
-    Ok(list_languages_from_dir(&state.base_path))
+    Ok(list_languages_from_dir(&state.dirs.language_data_dir()))
 }
 
 #[tauri::command]
@@ -350,7 +354,10 @@ fn get_bigrams(
             .pairs
             .iter()
             .filter_map(|&pos_pair| {
-                let pair = BigramPair { pair: pos_pair, dist: 1 };
+                let pair = BigramPair {
+                    pair: pos_pair,
+                    dist: 1,
+                };
                 let bigram = bigram_str(&engine, &fl, &pair)?;
                 let raw = engine.pair_sfb(&fl, &pair);
                 Some(BigramEntryDto {
@@ -364,7 +371,10 @@ fn get_bigrams(
             .pairs
             .iter()
             .filter_map(|&pos_pair| {
-                let pair = BigramPair { pair: pos_pair, dist: 1 };
+                let pair = BigramPair {
+                    pair: pos_pair,
+                    dist: 1,
+                };
                 let bigram = bigram_str(&engine, &fl, &pair)?;
                 let raw = engine.pair_sfb(&fl, &pair);
                 Some(BigramEntryDto {
@@ -378,7 +388,10 @@ fn get_bigrams(
             .pairs
             .iter()
             .filter_map(|&pos_pair| {
-                let pair = BigramPair { pair: pos_pair, dist: 1 };
+                let pair = BigramPair {
+                    pair: pos_pair,
+                    dist: 1,
+                };
                 let bigram = bigram_str(&engine, &fl, &pair)?;
                 let raw = engine.pair_sfb(&fl, &pair);
                 Some(BigramEntryDto {
@@ -460,9 +473,17 @@ fn swap_keys(
         name: format!("{name}*"),
         keys: fl.layout_str(),
         board: get_board_str(layout),
-        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
+        fingering_name: layout
+            .metadata
+            .fingering_name
+            .as_ref()
+            .map(|n| n.to_string()),
         stats: stats_dto,
-        keyboard: fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
+        keyboard: fl
+            .keyboard
+            .iter()
+            .map(|k| [k.x(), k.y(), k.width(), k.height()])
+            .collect(),
         shape: fl.shape.inner().to_vec(),
     })
 }
@@ -484,7 +505,11 @@ fn analyze_custom(
         .ok_or_else(|| format!("Layout '{name}' not found"))?;
     let mut fl = engine.fast_layout(layout, &[]);
 
-    let keyboard = fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect();
+    let keyboard = fl
+        .keyboard
+        .iter()
+        .map(|k| [k.x(), k.y(), k.width(), k.height()])
+        .collect();
     let shape = fl.shape.inner().to_vec();
 
     // Apply the custom key arrangement.
@@ -523,7 +548,11 @@ fn analyze_custom(
         name: format!("{name}*"),
         keys,
         board: get_board_str(layout),
-        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
+        fingering_name: layout
+            .metadata
+            .fingering_name
+            .as_ref()
+            .map(|n| n.to_string()),
         stats: stats_dto,
         keyboard,
         shape,
@@ -542,7 +571,11 @@ fn analyze_with_disabled(
         .get(&name.to_lowercase())
         .ok_or_else(|| format!("Layout '{name}' not found"))?;
     let mut fl = engine.fast_layout(layout, &[]);
-    let keyboard = fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect();
+    let keyboard = fl
+        .keyboard
+        .iter()
+        .map(|k| [k.x(), k.y(), k.width(), k.height()])
+        .collect();
     let shape = fl.shape.inner().to_vec();
     let original_keys = fl.layout_str();
 
@@ -559,7 +592,11 @@ fn analyze_with_disabled(
         name: format!("{name}*"),
         keys: original_keys,
         board: get_board_str(layout),
-        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
+        fingering_name: layout
+            .metadata
+            .fingering_name
+            .as_ref()
+            .map(|n| n.to_string()),
         stats: stats_dto,
         keyboard,
         shape,
@@ -594,16 +631,13 @@ fn get_char_frequencies(state: tauri::State<'_, AppState>) -> Result<Vec<CharFre
 }
 
 #[tauri::command]
-fn set_language(
-    language: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+fn set_language(language: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let config = state.config.lock().unwrap().clone();
-    let corpus_path = corpus_path_for(&state.base_path, &config, &language);
+    let corpus_path = corpus_path_for(&state.dirs.language_data_dir(), &language);
     let data = Data::load(&corpus_path)
         .map_err(|e| format!("Failed to load corpus for '{language}': {e}"))?;
     let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-    let new_layouts = load_all_layouts(&config, &state.base_path);
+    let new_layouts = load_all_layouts(&config, state.dirs.data_dir());
 
     *state.engine.lock().unwrap() = new_engine;
     *state.layouts.lock().unwrap() = new_layouts;
@@ -628,8 +662,7 @@ fn lookup_ngram(
         1 => {
             let c = ngram.chars().next().unwrap();
             let u = data.mapping.get_u(c);
-            let percent =
-                (data.get_char_u(u) as f64 / data.char_total as f64) * 100.0;
+            let percent = (data.get_char_u(u) as f64 / data.char_total as f64) * 100.0;
             Ok(NgramResultDto::Unigram {
                 ch: c.to_string(),
                 percent,
@@ -692,8 +725,7 @@ fn load_corpus(
 ) -> Result<String, String> {
     use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 
-    let base = &state.base_path;
-    let source_dir = base.join("static/text").join(&language);
+    let source_dir = state.dirs.text_dir().join(&language);
     if !source_dir.is_dir() {
         return Err(format!(
             "Source directory '{}' not found.",
@@ -717,10 +749,12 @@ fn load_corpus(
     let data = Data::from_paths(&paths, &language, &cleaner)
         .map_err(|e| format!("Failed to process corpus: {e}"))?;
 
-    let save_dir = base.join("static/language_data");
-    data.save(save_dir).map_err(|e| format!("Failed to save corpus: {e}"))?;
+    data.save(state.dirs.language_data_dir())
+        .map_err(|e| format!("Failed to save corpus: {e}"))?;
 
-    Ok(format!("Corpus '{language}' processed and saved successfully."))
+    Ok(format!(
+        "Corpus '{language}' processed and saved successfully."
+    ))
 }
 
 #[tauri::command]
@@ -762,17 +796,19 @@ async fn start_generate(
 
         // Emit progress updates every 200ms from a dedicated thread.
         // Uses progress_done flag so we never have to join (no blocking wait).
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            let d = done_clone.load(Ordering::Relaxed);
-            let _ = app_progress.emit(
-                "generate-progress",
-                serde_json::json!({ "done": d, "total": count }),
-            );
-            if progress_done_check.load(Ordering::Relaxed)
-                || cancel_progress.load(Ordering::Relaxed)
-            {
-                break;
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                let d = done_clone.load(Ordering::Relaxed);
+                let _ = app_progress.emit(
+                    "generate-progress",
+                    serde_json::json!({ "done": d, "total": count }),
+                );
+                if progress_done_check.load(Ordering::Relaxed)
+                    || cancel_progress.load(Ordering::Relaxed)
+                {
+                    break;
+                }
             }
         });
 
@@ -819,15 +855,16 @@ async fn start_generate(
                 let stats = engine.get_layout_stats(fl);
                 let stats_dto = stats_to_dto(&stats, char_total);
                 LayoutDto {
-                    name: fl
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| format!("gen-{}", i + 1)),
+                    name: fl.name.clone().unwrap_or_else(|| format!("gen-{}", i + 1)),
                     keys: fl.layout_str(),
                     board: "generated".to_string(),
                     fingering_name: fl.metadata.fingering_name.as_ref().map(|n| n.to_string()),
                     stats: stats_dto,
-                    keyboard: fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
+                    keyboard: fl
+                        .keyboard
+                        .iter()
+                        .map(|k| [k.x(), k.y(), k.width(), k.height()])
+                        .collect(),
                     shape: fl.shape.inner().to_vec(),
                 }
             })
@@ -837,7 +874,10 @@ async fn start_generate(
         let state = app.state::<AppState>();
         *state.generated.lock().unwrap() = scored.into_iter().map(|(_, fl)| fl).collect();
 
-        let _ = app.emit("generate-done", serde_json::json!({ "results": layout_dtos }));
+        let _ = app.emit(
+            "generate-done",
+            serde_json::json!({ "results": layout_dtos }),
+        );
     });
 
     Ok(())
@@ -879,15 +919,15 @@ fn save_generated(
         }),
         ..layout
     };
-    let json = serde_json::to_string_pretty(&layout)
-        .map_err(|e| format!("Serialization failed: {e}"))?;
+    let json =
+        serde_json::to_string_pretty(&layout).map_err(|e| format!("Serialization failed: {e}"))?;
 
     // Write to the layouts directory for the current language.
     let lang = engine.language.clone();
     let file_name = save_name.replace(' ', "_").to_lowercase();
     let path = state
-        .base_path
-        .join("static/layouts")
+        .dirs
+        .layouts_dir()
         .join(&lang)
         .join(&file_name)
         .with_extension("dof");
@@ -940,8 +980,8 @@ fn save_layout_edit(
     let lang = state.engine.lock().unwrap().language.clone();
     let file_name = original_name.replace(' ', "_").to_lowercase();
     let path = state
-        .base_path
-        .join("static/layouts")
+        .dirs
+        .layouts_dir()
         .join(&lang)
         .join(&file_name)
         .with_extension("dof");
@@ -977,8 +1017,8 @@ fn fork_layout(
 
     let file_name = new_name.replace(' ', "_").to_lowercase();
     let path = state
-        .base_path
-        .join("static/layouts")
+        .dirs
+        .layouts_dir()
         .join(&lang)
         .join(&file_name)
         .with_extension("dof");
@@ -1000,7 +1040,7 @@ fn fork_layout(
 
 #[tauri::command]
 fn get_session(state: tauri::State<'_, AppState>) -> Result<SessionDto, String> {
-    let path = state.base_path.join("session.json");
+    let path = state.dirs.session_file();
     if !path.exists() {
         return Ok(SessionDto {
             view: "layouts".to_string(),
@@ -1014,7 +1054,7 @@ fn get_session(state: tauri::State<'_, AppState>) -> Result<SessionDto, String> 
 
 #[tauri::command]
 fn set_session(session: SessionDto, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let path = state.base_path.join("session.json");
+    let path = state.dirs.session_file();
     let json = serde_json::to_string_pretty(&session).map_err(|e| e.to_string())?;
     std::fs::write(&path, &json).map_err(|e| e.to_string())
 }
@@ -1049,11 +1089,36 @@ fn config_dto_to_toml(dto: &ConfigDto) -> String {
         dto.corpus_configs,
         dto.trigram_precision,
         dto.max_cores,
-        w.lateral_penalty, w.sfbs, w.sfs, w.stretches, w.pinky_ring_bigrams,
-        w.inrolls, w.outrolls, w.onehands, w.alternates, w.alternates_sfs,
-        w.redirects, w.redirects_sfs, w.bad_redirects, w.bad_redirects_sfs,
-        fw.lp, fw.lr, fw.lm, fw.li, fw.lt, fw.rt, fw.ri, fw.rm, fw.rr, fw.rp,
-        mfu.penalty, mfu.pinky, mfu.ring, mfu.middle, mfu.index, mfu.thumb,
+        w.lateral_penalty,
+        w.sfbs,
+        w.sfs,
+        w.stretches,
+        w.pinky_ring_bigrams,
+        w.inrolls,
+        w.outrolls,
+        w.onehands,
+        w.alternates,
+        w.alternates_sfs,
+        w.redirects,
+        w.redirects_sfs,
+        w.bad_redirects,
+        w.bad_redirects_sfs,
+        fw.lp,
+        fw.lr,
+        fw.lm,
+        fw.li,
+        fw.lt,
+        fw.rt,
+        fw.ri,
+        fw.rm,
+        fw.rr,
+        fw.rp,
+        mfu.penalty,
+        mfu.pinky,
+        mfu.ring,
+        mfu.middle,
+        mfu.index,
+        mfu.thumb,
     )
 }
 
@@ -1061,7 +1126,11 @@ fn config_to_dto(config: &Config) -> ConfigDto {
     let w = &config.weights;
     ConfigDto {
         corpus: config.corpus.to_string_lossy().into_owned(),
-        layouts: config.layouts.iter().map(|p| p.to_string_lossy().into_owned()).collect(),
+        layouts: config
+            .layouts
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect(),
         corpus_configs: config.corpus_configs.to_string_lossy().into_owned(),
         trigram_precision: config.trigram_precision,
         max_cores: config.max_cores,
@@ -1140,16 +1209,15 @@ fn set_config(config_dto: ConfigDto, state: tauri::State<'_, AppState>) -> Resul
     };
 
     // Write config.toml as hand-built TOML string.
-    let config_path = state.base_path.join("config.toml");
+    let config_path = state.dirs.config_file();
     std::fs::write(&config_path, config_dto_to_toml(&config_dto))
         .map_err(|e| format!("Write failed: {e}"))?;
 
     // Rebuild engine with new config
-    let corpus_path = state.base_path.join(&new_config.corpus);
-    let data = Data::load(&corpus_path)
-        .map_err(|e| format!("Failed to load corpus: {e}"))?;
+    let corpus_path = state.dirs.data_dir().join(&new_config.corpus);
+    let data = Data::load(&corpus_path).map_err(|e| format!("Failed to load corpus: {e}"))?;
     let new_engine = Arc::new(Oxeylyzer::new(data, new_config.clone()));
-    let new_layouts = load_all_layouts(&new_config, &state.base_path);
+    let new_layouts = load_all_layouts(&new_config, state.dirs.data_dir());
 
     *state.config.lock().unwrap() = new_config;
     *state.engine.lock().unwrap() = new_engine;
@@ -1164,8 +1232,8 @@ fn get_defaults() -> Result<ConfigDto, String> {
 
 // ─── Weight Presets ───────────────────────────────────────────────────────────
 
-fn preset_dir(base_path: &Path) -> PathBuf {
-    base_path.join("static/weight-presets")
+fn preset_dir(dirs: &OxeylyzerDirs) -> PathBuf {
+    dirs.weight_presets_dir()
 }
 
 fn weights_dto_to_toml(w: &WeightsDto) -> String {
@@ -1181,17 +1249,42 @@ fn weights_dto_to_toml(w: &WeightsDto) -> String {
          rt = {}\nri = {}\nrm = {}\nrr = {}\nrp = {}\n\n\
          [max_finger_use]\n\
          penalty = {}\npinky = {}\nring = {}\nmiddle = {}\nindex = {}\nthumb = {}\n",
-        w.lateral_penalty, w.sfbs, w.sfs, w.stretches, w.pinky_ring_bigrams,
-        w.inrolls, w.outrolls, w.onehands, w.alternates, w.alternates_sfs,
-        w.redirects, w.redirects_sfs, w.bad_redirects, w.bad_redirects_sfs,
-        fw.lp, fw.lr, fw.lm, fw.li, fw.lt, fw.rt, fw.ri, fw.rm, fw.rr, fw.rp,
-        mfu.penalty, mfu.pinky, mfu.ring, mfu.middle, mfu.index, mfu.thumb,
+        w.lateral_penalty,
+        w.sfbs,
+        w.sfs,
+        w.stretches,
+        w.pinky_ring_bigrams,
+        w.inrolls,
+        w.outrolls,
+        w.onehands,
+        w.alternates,
+        w.alternates_sfs,
+        w.redirects,
+        w.redirects_sfs,
+        w.bad_redirects,
+        w.bad_redirects_sfs,
+        fw.lp,
+        fw.lr,
+        fw.lm,
+        fw.li,
+        fw.lt,
+        fw.rt,
+        fw.ri,
+        fw.rm,
+        fw.rr,
+        fw.rp,
+        mfu.penalty,
+        mfu.pinky,
+        mfu.ring,
+        mfu.middle,
+        mfu.index,
+        mfu.thumb,
     )
 }
 
 #[tauri::command]
 fn list_weight_presets(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
-    let dir = preset_dir(&state.base_path);
+    let dir = preset_dir(&state.dirs);
     if !dir.exists() {
         return Ok(vec![]);
     }
@@ -1200,7 +1293,8 @@ fn list_weight_presets(state: tauri::State<'_, AppState>) -> Result<Vec<String>,
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().into_owned();
-            name.ends_with(".toml").then(|| name.trim_end_matches(".toml").to_string())
+            name.ends_with(".toml")
+                .then(|| name.trim_end_matches(".toml").to_string())
         })
         .collect();
     names.sort();
@@ -1213,7 +1307,7 @@ fn save_weight_preset(
     weights: WeightsDto,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let dir = preset_dir(&state.base_path);
+    let dir = preset_dir(&state.dirs);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(&name).with_extension("toml");
     std::fs::write(&path, weights_dto_to_toml(&weights)).map_err(|e| e.to_string())
@@ -1224,7 +1318,7 @@ fn load_weight_preset(
     name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<WeightsDto, String> {
-    let path = preset_dir(&state.base_path).join(&name).with_extension("toml");
+    let path = preset_dir(&state.dirs).join(&name).with_extension("toml");
     let s = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     toml::from_str::<WeightsDto>(&s).map_err(|e| format!("Failed to parse preset '{name}': {e}"))
 }
@@ -1232,13 +1326,12 @@ fn load_weight_preset(
 // ─── Reload Helper ────────────────────────────────────────────────────────────
 
 fn reload_state(state: &AppState) -> Result<(), String> {
-    let config = Config::with_loaded_weights(state.base_path.join("config.toml"))
+    let config = Config::with_loaded_weights(state.dirs.config_file())
         .map_err(|e| format!("Failed to reload config: {e}"))?;
-    let corpus_path = state.base_path.join(&config.corpus);
-    let data = Data::load(&corpus_path)
-        .map_err(|e| format!("Failed to load corpus: {e}"))?;
+    let corpus_path = state.dirs.data_dir().join(&config.corpus);
+    let data = Data::load(&corpus_path).map_err(|e| format!("Failed to load corpus: {e}"))?;
     let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-    let new_layouts = load_all_layouts(&config, &state.base_path);
+    let new_layouts = load_all_layouts(&config, state.dirs.data_dir());
     *state.config.lock().unwrap() = config;
     *state.engine.lock().unwrap() = new_engine;
     *state.layouts.lock().unwrap() = new_layouts;
@@ -1253,26 +1346,61 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let base_path = if cfg!(debug_assertions) {
-                PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            let dirs = if let Ok(p) = std::env::var("OXEYLYZER_DATA_DIR") {
+                OxeylyzerDirs::with_override(PathBuf::from(p))
             } else {
-                app.path().resource_dir().expect("failed to resolve resource dir")
+                OxeylyzerDirs::resolve().expect("failed to resolve data directory")
             };
 
-            let config = Config::with_loaded_weights(base_path.join("config.toml"))
+            // On first run, download data files synchronously before initialising the
+            // engine — corpus and layout files must exist before we try to load them.
+            // Progress events are emitted so a frontend loading screen can react.
+            if dirs.is_first_run() {
+                use oxeylyzer_resources::DownloadProgress;
+                let app_handle = app.handle().clone();
+                dirs.ensure_data(move |p| {
+                    let payload = match &p {
+                        DownloadProgress::Connecting => {
+                            serde_json::json!({"status": "connecting"})
+                        }
+                        DownloadProgress::Downloading { bytes_done, bytes_total } => {
+                            serde_json::json!({
+                                "status": "downloading",
+                                "bytesDone": bytes_done,
+                                "bytesTotal": bytes_total,
+                            })
+                        }
+                        DownloadProgress::Extracting => {
+                            serde_json::json!({"status": "extracting"})
+                        }
+                        DownloadProgress::Done => serde_json::json!({"status": "done"}),
+                    };
+                    let _ = app_handle.emit("download-progress", payload);
+                })
+                .expect("failed to download resources");
+            }
+
+            // ensure_config is idempotent; ensure_data already calls it on first run,
+            // but call it here too so a missing config is always recovered.
+            dirs.ensure_config().expect("failed to write default config");
+
+            let config = Config::with_loaded_weights(dirs.config_file())
                 .expect("failed to load config.toml");
 
-            let corpus_path = base_path.join(&config.corpus);
+            let corpus_path = dirs.data_dir().join(&config.corpus);
             let data = Data::load(&corpus_path).expect("failed to load corpus");
 
             let engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-            let layouts = load_all_layouts(&config, &base_path);
+            let layouts = load_all_layouts(&config, dirs.data_dir());
+
+            let watch_config = dirs.config_file();
+            let watch_layouts = dirs.layouts_dir();
 
             app.manage(AppState {
                 engine: Mutex::new(engine),
                 layouts: Mutex::new(layouts),
                 generated: Mutex::new(Vec::new()),
-                base_path: base_path.clone(),
+                dirs,
                 config: Mutex::new(config),
                 cancel_flag: Arc::new(AtomicBool::new(false)),
             });
@@ -1281,13 +1409,14 @@ pub fn run() {
             {
                 use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
                 let app_handle = app.handle().clone();
-                let watch_config = base_path.join("config.toml");
-                let watch_layouts = base_path.join("static/layouts");
                 std::thread::spawn(move || {
                     let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
                     let mut watcher = match recommended_watcher(tx) {
                         Ok(w) => w,
-                        Err(e) => { eprintln!("File watcher init failed: {e}"); return; }
+                        Err(e) => {
+                            eprintln!("File watcher init failed: {e}");
+                            return;
+                        }
                     };
                     let _ = watcher.watch(&watch_config, RecursiveMode::NonRecursive);
                     let _ = watcher.watch(&watch_layouts, RecursiveMode::Recursive);

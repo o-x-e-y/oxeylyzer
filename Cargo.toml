@@ -8,11 +8,13 @@ edition = "2024"
 members = [
     "oxeylyzer-core",
     "oxeylyzer-repl",
+    "oxeylyzer-resources",
     "oxeylyzer-tauri/src-tauri"
 ]
 
 [workspace.dependencies]
 anyhow = "1.0"
+directories = "5"
 indexmap = { version = "2.13" }
 itertools = "0.14"
 libdof = "0.25"

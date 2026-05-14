@@ -21,6 +21,7 @@ tauri-plugin-opener = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 oxeylyzer-core = { path = "../../oxeylyzer-core" }
+oxeylyzer-resources = { path = "../../oxeylyzer-resources" }
 glob = "0.3"
 notify = "6"
 toml = { version = "0.8", default-features = false, features = ["parse", "display"] }
