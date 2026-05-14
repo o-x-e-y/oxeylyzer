@@ -3,6 +3,8 @@
   "scripts": {
     "dev": "cd oxeylyzer-tauri && bun tauri dev",
     "build-tauri": "cd oxeylyzer-tauri && bun tauri build",
-    "install": "cd oxeylyzer-tauri && bun install"
+    "install": "cd oxeylyzer-tauri && bun install",
+    "fmt": "cd oxeylyzer-tauri && bun prettier ./src -w",
+    "check": "cd oxeylyzer-tauri && bun eslint"
   }
 }

@@ -6,6 +6,7 @@ static/stats
 static/corpus_configs/custom/*.toml
 static/language_data/test.json
 static/history.txt
+session.json
 .direnv
 result
 tarpaulin-report.*
