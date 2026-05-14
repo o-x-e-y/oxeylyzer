@@ -1,0 +1,10 @@
+[package]
+name = "oxeylyzer-resources"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+directories = { workspace = true }
+ureq = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+thiserror = { workspace = true }

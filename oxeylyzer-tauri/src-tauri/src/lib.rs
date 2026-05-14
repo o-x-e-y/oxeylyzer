@@ -15,6 +15,7 @@ use oxeylyzer_core::{
     rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     weights::{Config, FingerWeights, MaxFingerUse, Weights},
 };
+use oxeylyzer_resources::OxeylyzerDirs;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 use toml;
@@ -155,8 +156,8 @@ pub struct AppState {
     pub layouts: Mutex<HashMap<String, Layout>>,
     /// Results from the most recent generation run. Cleared on language switch.
     pub generated: Mutex<Vec<FastLayout>>,
-    /// Absolute path to the workspace root (where config.toml lives).
-    pub base_path: PathBuf,
+    /// Managed resource paths (XDG/AppData config dir in release, override in dev).
+    pub dirs: OxeylyzerDirs,
     /// Cached config for reload and language switching.
     pub config: Mutex<Config>,
     /// Set to true to request cancellation of an in-progress generation.
@@ -258,9 +259,8 @@ fn bigram_str(engine: &Oxeylyzer, fl: &FastLayout, pair: &BigramPair) -> Option<
     Some(engine.mapping.map_us(&[u1, u2]).collect())
 }
 
-fn list_languages_from_dir(base_path: &Path) -> Vec<String> {
-    let dir = base_path.join("static/language_data");
-    std::fs::read_dir(&dir)
+fn list_languages_from_dir(dir: &Path) -> Vec<String> {
+    std::fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
@@ -275,14 +275,8 @@ fn list_languages_from_dir(base_path: &Path) -> Vec<String> {
         .collect()
 }
 
-fn corpus_path_for(base_path: &Path, config: &Config, language: &str) -> PathBuf {
-    // Corpus path from config, swapping the filename to the requested language.
-    // e.g. ./static/language_data/shai.json → ./static/language_data/{language}.json
-    let parent = config
-        .corpus
-        .parent()
-        .unwrap_or_else(|| Path::new("./static/language_data"));
-    base_path.join(parent).join(language).with_extension("json")
+fn corpus_path_for(language_data_dir: &Path, language: &str) -> PathBuf {
+    language_data_dir.join(language).with_extension("json")
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -298,7 +292,7 @@ fn list_layouts(state: tauri::State<'_, AppState>) -> Result<Vec<LayoutDto>, Str
 
 #[tauri::command]
 fn list_languages(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
-    Ok(list_languages_from_dir(&state.base_path))
+    Ok(list_languages_from_dir(&state.dirs.language_data_dir()))
 }
 
 #[tauri::command]
@@ -599,11 +593,11 @@ fn set_language(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     let config = state.config.lock().unwrap().clone();
-    let corpus_path = corpus_path_for(&state.base_path, &config, &language);
+    let corpus_path = corpus_path_for(&state.dirs.language_data_dir(), &language);
     let data = Data::load(&corpus_path)
         .map_err(|e| format!("Failed to load corpus for '{language}': {e}"))?;
     let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-    let new_layouts = load_all_layouts(&config, &state.base_path);
+    let new_layouts = load_all_layouts(&config, state.dirs.data_dir());
 
     *state.engine.lock().unwrap() = new_engine;
     *state.layouts.lock().unwrap() = new_layouts;
@@ -692,8 +686,7 @@ fn load_corpus(
 ) -> Result<String, String> {
     use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 
-    let base = &state.base_path;
-    let source_dir = base.join("static/text").join(&language);
+    let source_dir = state.dirs.text_dir().join(&language);
     if !source_dir.is_dir() {
         return Err(format!(
             "Source directory '{}' not found.",
@@ -717,8 +710,7 @@ fn load_corpus(
     let data = Data::from_paths(&paths, &language, &cleaner)
         .map_err(|e| format!("Failed to process corpus: {e}"))?;
 
-    let save_dir = base.join("static/language_data");
-    data.save(save_dir).map_err(|e| format!("Failed to save corpus: {e}"))?;
+    data.save(state.dirs.language_data_dir()).map_err(|e| format!("Failed to save corpus: {e}"))?;
 
     Ok(format!("Corpus '{language}' processed and saved successfully."))
 }
@@ -885,9 +877,7 @@ fn save_generated(
     // Write to the layouts directory for the current language.
     let lang = engine.language.clone();
     let file_name = save_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .base_path
-        .join("static/layouts")
+    let path = state.dirs.layouts_dir()
         .join(&lang)
         .join(&file_name)
         .with_extension("dof");
@@ -939,9 +929,7 @@ fn save_layout_edit(
     // Find the original file path.
     let lang = state.engine.lock().unwrap().language.clone();
     let file_name = original_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .base_path
-        .join("static/layouts")
+    let path = state.dirs.layouts_dir()
         .join(&lang)
         .join(&file_name)
         .with_extension("dof");
@@ -976,9 +964,7 @@ fn fork_layout(
     forked.name = new_name.clone();
 
     let file_name = new_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .base_path
-        .join("static/layouts")
+    let path = state.dirs.layouts_dir()
         .join(&lang)
         .join(&file_name)
         .with_extension("dof");
@@ -1000,7 +986,7 @@ fn fork_layout(
 
 #[tauri::command]
 fn get_session(state: tauri::State<'_, AppState>) -> Result<SessionDto, String> {
-    let path = state.base_path.join("session.json");
+    let path = state.dirs.session_file();
     if !path.exists() {
         return Ok(SessionDto {
             view: "layouts".to_string(),
@@ -1014,7 +1000,7 @@ fn get_session(state: tauri::State<'_, AppState>) -> Result<SessionDto, String> 
 
 #[tauri::command]
 fn set_session(session: SessionDto, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let path = state.base_path.join("session.json");
+    let path = state.dirs.session_file();
     let json = serde_json::to_string_pretty(&session).map_err(|e| e.to_string())?;
     std::fs::write(&path, &json).map_err(|e| e.to_string())
 }
@@ -1140,16 +1126,16 @@ fn set_config(config_dto: ConfigDto, state: tauri::State<'_, AppState>) -> Resul
     };
 
     // Write config.toml as hand-built TOML string.
-    let config_path = state.base_path.join("config.toml");
+    let config_path = state.dirs.config_file();
     std::fs::write(&config_path, config_dto_to_toml(&config_dto))
         .map_err(|e| format!("Write failed: {e}"))?;
 
     // Rebuild engine with new config
-    let corpus_path = state.base_path.join(&new_config.corpus);
+    let corpus_path = state.dirs.data_dir().join(&new_config.corpus);
     let data = Data::load(&corpus_path)
         .map_err(|e| format!("Failed to load corpus: {e}"))?;
     let new_engine = Arc::new(Oxeylyzer::new(data, new_config.clone()));
-    let new_layouts = load_all_layouts(&new_config, &state.base_path);
+    let new_layouts = load_all_layouts(&new_config, state.dirs.data_dir());
 
     *state.config.lock().unwrap() = new_config;
     *state.engine.lock().unwrap() = new_engine;
@@ -1164,8 +1150,8 @@ fn get_defaults() -> Result<ConfigDto, String> {
 
 // ─── Weight Presets ───────────────────────────────────────────────────────────
 
-fn preset_dir(base_path: &Path) -> PathBuf {
-    base_path.join("static/weight-presets")
+fn preset_dir(dirs: &OxeylyzerDirs) -> PathBuf {
+    dirs.weight_presets_dir()
 }
 
 fn weights_dto_to_toml(w: &WeightsDto) -> String {
@@ -1191,7 +1177,7 @@ fn weights_dto_to_toml(w: &WeightsDto) -> String {
 
 #[tauri::command]
 fn list_weight_presets(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
-    let dir = preset_dir(&state.base_path);
+    let dir = preset_dir(&state.dirs);
     if !dir.exists() {
         return Ok(vec![]);
     }
@@ -1213,7 +1199,7 @@ fn save_weight_preset(
     weights: WeightsDto,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let dir = preset_dir(&state.base_path);
+    let dir = preset_dir(&state.dirs);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(&name).with_extension("toml");
     std::fs::write(&path, weights_dto_to_toml(&weights)).map_err(|e| e.to_string())
@@ -1224,7 +1210,7 @@ fn load_weight_preset(
     name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<WeightsDto, String> {
-    let path = preset_dir(&state.base_path).join(&name).with_extension("toml");
+    let path = preset_dir(&state.dirs).join(&name).with_extension("toml");
     let s = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     toml::from_str::<WeightsDto>(&s).map_err(|e| format!("Failed to parse preset '{name}': {e}"))
 }
@@ -1232,13 +1218,13 @@ fn load_weight_preset(
 // ─── Reload Helper ────────────────────────────────────────────────────────────
 
 fn reload_state(state: &AppState) -> Result<(), String> {
-    let config = Config::with_loaded_weights(state.base_path.join("config.toml"))
+    let config = Config::with_loaded_weights(state.dirs.config_file())
         .map_err(|e| format!("Failed to reload config: {e}"))?;
-    let corpus_path = state.base_path.join(&config.corpus);
+    let corpus_path = state.dirs.data_dir().join(&config.corpus);
     let data = Data::load(&corpus_path)
         .map_err(|e| format!("Failed to load corpus: {e}"))?;
     let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-    let new_layouts = load_all_layouts(&config, &state.base_path);
+    let new_layouts = load_all_layouts(&config, state.dirs.data_dir());
     *state.config.lock().unwrap() = config;
     *state.engine.lock().unwrap() = new_engine;
     *state.layouts.lock().unwrap() = new_layouts;
@@ -1253,26 +1239,53 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let base_path = if cfg!(debug_assertions) {
-                PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            let dirs = if let Ok(p) = std::env::var("OXEYLYZER_DATA_DIR") {
+                OxeylyzerDirs::with_override(PathBuf::from(p))
             } else {
-                app.path().resource_dir().expect("failed to resolve resource dir")
+                OxeylyzerDirs::resolve().expect("failed to resolve data directory")
             };
 
-            let config = Config::with_loaded_weights(base_path.join("config.toml"))
+            // On first run, download resources in the background and emit progress events.
+            if dirs.is_first_run() {
+                let app_handle = app.handle().clone();
+                let dirs_clone = dirs.clone();
+                std::thread::spawn(move || {
+                    if let Err(e) = dirs_clone.ensure_data(move |p| {
+                        use oxeylyzer_resources::DownloadProgress;
+                        let payload = match &p {
+                            DownloadProgress::Connecting => serde_json::json!({"status": "connecting"}),
+                            DownloadProgress::Downloading { bytes_done, bytes_total } => serde_json::json!({
+                                "status": "downloading",
+                                "bytesDone": bytes_done,
+                                "bytesTotal": bytes_total,
+                            }),
+                            DownloadProgress::Extracting => serde_json::json!({"status": "extracting"}),
+                            DownloadProgress::Done => serde_json::json!({"status": "done"}),
+                        };
+                        let _ = app_handle.emit("download-progress", payload);
+                    }) {
+                        eprintln!("Resource download failed: {e}");
+                    }
+                });
+            }
+
+            let config = Config::with_loaded_weights(dirs.config_file())
                 .expect("failed to load config.toml");
 
-            let corpus_path = base_path.join(&config.corpus);
+            let corpus_path = dirs.data_dir().join(&config.corpus);
             let data = Data::load(&corpus_path).expect("failed to load corpus");
 
             let engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-            let layouts = load_all_layouts(&config, &base_path);
+            let layouts = load_all_layouts(&config, dirs.data_dir());
+
+            let watch_config = dirs.config_file();
+            let watch_layouts = dirs.layouts_dir();
 
             app.manage(AppState {
                 engine: Mutex::new(engine),
                 layouts: Mutex::new(layouts),
                 generated: Mutex::new(Vec::new()),
-                base_path: base_path.clone(),
+                dirs,
                 config: Mutex::new(config),
                 cancel_flag: Arc::new(AtomicBool::new(false)),
             });
@@ -1281,8 +1294,6 @@ pub fn run() {
             {
                 use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
                 let app_handle = app.handle().clone();
-                let watch_config = base_path.join("config.toml");
-                let watch_layouts = base_path.join("static/layouts");
                 std::thread::spawn(move || {
                     let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
                     let mut watcher = match recommended_watcher(tx) {
