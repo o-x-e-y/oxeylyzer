@@ -51,7 +51,7 @@ export default function AnalyzeView(props: Props) {
     const name = initialName();
     if (!name) return;
     const s = nextSeq();
-    setDisabledChars(new Set());
+    setDisabledChars(new Set<string>());
     analyzeLayout(name).then((l) => {
       applyIfCurrent(s, () => {
         setLayout(l);
@@ -73,7 +73,7 @@ export default function AnalyzeView(props: Props) {
   async function handleSelect(name: string) {
     const s = nextSeq();
     setLoading(true);
-    setDisabledChars(new Set());
+    setDisabledChars(new Set<string>());
     try {
       const l = await analyzeLayout(name);
       applyIfCurrent(s, () => {
@@ -159,7 +159,7 @@ export default function AnalyzeView(props: Props) {
     if (!bl) return;
     const baseName = bl.name.replace(/\*+$/, "");
     const s = nextSeq();
-    setDisabledChars(new Set());
+    setDisabledChars(new Set<string>());
     analyzeLayout(baseName).then((fresh) =>
       applyIfCurrent(s, () => {
         setLayout(fresh);

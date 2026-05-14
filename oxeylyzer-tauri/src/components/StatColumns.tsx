@@ -99,8 +99,8 @@ type StatEntry =
   | {
       kind: "stat";
       label: string;
-      getValue: (s: LayoutStats) => string;
-      getNum?: (s: LayoutStats) => number;
+      getValue: (_s: LayoutStats) => string;
+      getNum?: (_s: LayoutStats) => number;
       higherIsBetter?: boolean;
       dim?: boolean;
     };

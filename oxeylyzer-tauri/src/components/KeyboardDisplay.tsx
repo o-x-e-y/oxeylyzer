@@ -5,6 +5,7 @@ import {
   createDraggable,
   createDroppable,
   useDragDropContext,
+  type DragEvent,
 } from "@thisbeyond/solid-dnd";
 import type { PhysKey } from "../types";
 import { heatScheme } from "../store";
@@ -82,9 +83,7 @@ interface KeyTileProps {
 }
 
 const KeyTile = (props: KeyTileProps) => {
-  // eslint-disable-next-line no-unused-vars
   const draggable = createDraggable(props.flatIdx);
-  // eslint-disable-next-line no-unused-vars
   const droppable = createDroppable(props.flatIdx);
 
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -106,8 +105,8 @@ const KeyTile = (props: KeyTileProps) => {
 
   return (
     <div
-      use:draggable
-      use:droppable
+      use:draggable={draggable}
+      use:droppable={droppable}
       class={baseClass}
       classList={{
         "border-white bg-neutral-600": props.isHighlighted,
@@ -216,15 +215,9 @@ export default function KeyboardDisplay(props: Props) {
     }
   };
 
-  const handleDragEnd = ({
-    draggable,
-    droppable,
-  }: {
-    draggable: { id: number };
-    droppable: { id: number } | null;
-  }) => {
+  const handleDragEnd = ({ draggable, droppable }: DragEvent) => {
     if (!droppable || draggable.id === droppable.id) return;
-    props.onSwap?.(draggable.id, droppable.id);
+    props.onSwap?.(draggable.id as number, droppable.id as number);
   };
 
   const inner = () => {
