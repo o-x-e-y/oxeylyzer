@@ -218,9 +218,7 @@ middle=${mfu.middle} index=${mfu.index} thumb=${mfu.thumb}`;
                 </Index>
                 <button
                   class="self-start border border-neutral-700 font-mono text-xs px-2 py-1 hover:bg-neutral-700 text-neutral-400 mt-0.5"
-                  onClick={() =>
-                    setConfigState({ ...cfg(), layouts: [...cfg().layouts, ""] })
-                  }
+                  onClick={() => setConfigState({ ...cfg(), layouts: [...cfg().layouts, ""] })}
                 >
                   + add path
                 </button>

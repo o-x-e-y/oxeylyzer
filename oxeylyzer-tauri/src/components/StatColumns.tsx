@@ -210,8 +210,7 @@ const RIGHT: StatEntry[] = [
   {
     kind: "stat",
     label: "Total Redir.",
-    getValue: (s) =>
-      sum(s.redirects, s.redirects_sfs, s.bad_redirects, s.bad_redirects_sfs),
+    getValue: (s) => sum(s.redirects, s.redirects_sfs, s.bad_redirects, s.bad_redirects_sfs),
     dim: true,
   },
   { kind: "sep" },

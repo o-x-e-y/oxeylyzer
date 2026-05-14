@@ -232,10 +232,7 @@ export default function AnalyzeView(props: Props) {
             </div>
 
             {/* ── Stat columns ─────────────────────────────────── */}
-            <AnalyzeStatColumns
-              stats={l().stats}
-              baseline={previous()?.stats}
-            />
+            <AnalyzeStatColumns stats={l().stats} baseline={previous()?.stats} />
 
             {/* ── Bigram tabs ───────────────────────────────────── */}
             <div class="flex flex-col border border-neutral-700">

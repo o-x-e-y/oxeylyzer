@@ -79,12 +79,7 @@ export default function CompareView() {
             </div>
 
             {/* Stats */}
-            <CompareStatColumns
-              s1={l1.stats}
-              s2={l2.stats}
-              name1={l1.name}
-              name2={l2.name}
-            />
+            <CompareStatColumns s1={l1.stats} s2={l2.stats} name1={l1.name} name2={l2.name} />
           </div>
         )}
       </Show>
