@@ -1,0 +1,12 @@
+{
+    "name": "rstn-oxey",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "z f d l q  j g o u ,",
+            "r s t n k  y c a e i",
+            "x v b h m  p w ' ; ."
+        ]
+    },
+    "fingering": "traditional"
+}

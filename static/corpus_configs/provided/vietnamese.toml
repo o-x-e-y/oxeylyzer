@@ -1,0 +1,3 @@
+sources = [ "../../text/vietnamese" ]
+
+inherits = [ "./default.toml" ]

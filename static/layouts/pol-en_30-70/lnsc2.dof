@@ -1,0 +1,12 @@
+{
+    "name": "lnsc2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "v d l b g  . h u o y",
+            "n s t c m  , r e a i",
+            "p f z k w  j * ' ę ł"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,5 @@
+sources = [ "../../text/finnish" ]
+
+inherits = [ "./default.toml", "./finnish.toml" ]
+
+repeat_key = true

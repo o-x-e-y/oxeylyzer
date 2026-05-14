@@ -1,0 +1,12 @@
+{
+    "name": "Stand",
+    "board": "ansi",
+    "layers": {
+        "main": [
+            "f m p w q  z j o u .",
+            "s t n d y  x r a e i",
+            " k b c g v  l h ' / ,"
+        ]
+    },
+    "fingering": "angle"
+}

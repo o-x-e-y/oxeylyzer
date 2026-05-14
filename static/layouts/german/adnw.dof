@@ -1,0 +1,12 @@
+{
+    "name": "adnw",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "k u ü . ä  v g c l f",
+            "h i e a o  d t r n s",
+            "x y ö , q  b p w m z"
+        ]
+    },
+    "fingering": "traditional"
+}

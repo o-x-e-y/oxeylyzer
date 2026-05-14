@@ -1,0 +1,5 @@
+sources = [ "../../text/dutch_en" ]
+
+inherits = [ "./default.toml", "./dutch.toml" ]
+
+keep = "&"

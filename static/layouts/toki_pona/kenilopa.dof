@@ -1,0 +1,12 @@
+{
+    "name": "kenilopa",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "q r u y b  / . m t c",
+            "e i o a v  , k n l p",
+            "' h z g x  j s w d f"
+        ]
+    },
+    "fingering": "traditional"
+}

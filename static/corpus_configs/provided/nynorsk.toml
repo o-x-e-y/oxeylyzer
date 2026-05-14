@@ -1,0 +1,3 @@
+sources = [ "../../text/nynorsk" ]
+
+inherits = [ "./default.toml", "./bokmal.toml" ]

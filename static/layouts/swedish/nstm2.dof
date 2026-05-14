@@ -1,0 +1,12 @@
+{
+    "name": "nstm2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "x . d f b  z c o u ö",
+            "n s t m g  , r a e i",
+            "j h p k v  ' l ä å y"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "qwerty",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "ŝ ĝ e r t  ŭ u i o p",
+            "a s d f g  h j k l ;",
+            "z ĉ c v b  n m , . /"
+        ]
+    },
+    "fingering": "traditional"
+}

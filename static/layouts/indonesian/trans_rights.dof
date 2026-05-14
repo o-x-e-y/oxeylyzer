@@ -1,0 +1,12 @@
+{
+    "name": "trans_rights",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "d l p g j ' o h u z",
+            "t r n s m q a k i e",
+            "c w b v y . , f ; x"
+        ]
+    },
+    "fingering": "traditional"
+}

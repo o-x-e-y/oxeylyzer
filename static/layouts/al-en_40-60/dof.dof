@@ -1,0 +1,12 @@
+{
+    "name": "dof",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "q d h g v  w c u o y",
+            "n t r s m  , p e a i",
+            "b z l k f  . j ë ' x"
+        ]
+    },
+    "fingering": "traditional"
+}

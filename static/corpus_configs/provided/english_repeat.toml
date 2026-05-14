@@ -1,0 +1,5 @@
+sources = [ "../../text/english" ]
+
+inherits = [ "./default.toml" ]
+
+repeat_key = true

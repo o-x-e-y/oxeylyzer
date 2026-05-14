@@ -1,0 +1,12 @@
+{
+    "name": "celestial",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "w m d f b  j l u o y",
+            "c s t n p  q r e a i",
+            "z g k h v  x ; ' , ."
+        ]
+    },
+    "fingering": "traditional"
+}

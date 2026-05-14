@@ -1,0 +1,12 @@
+{
+    "name": "hands_repeat",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "x j u o ,  k g l c b",
+            "h i e a z  v t r s n",
+            "@ y ' . q  d m w f p"
+        ]
+    },
+    "fingering": "traditional"
+}

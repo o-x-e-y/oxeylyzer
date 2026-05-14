@@ -1,0 +1,12 @@
+{
+    "name": "goofy",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "/ , . p j f g ĝ r l",
+            "a o e u i d h t n s",
+            "; ĉ c k ŝ b m ŭ v z"
+        ]
+    },
+    "fingering": "traditional"
+}

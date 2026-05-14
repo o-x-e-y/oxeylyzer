@@ -1,0 +1,12 @@
+{
+    "name": "flame_it",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "' p d g v  . f o u q",
+            "r n t s y  , l a e i",
+            "z b k c w  m h x * j"
+        ]
+    },
+    "fingering": "traditional"
+}

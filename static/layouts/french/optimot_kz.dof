@@ -1,0 +1,12 @@
+{
+    "name": "optimot_kz",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            ", j o é b f d l ' q",
+            "a i e u . p t s r n",
+            "k y z * w g c m h v"
+        ]
+    },
+    "fingering": "traditional"
+}

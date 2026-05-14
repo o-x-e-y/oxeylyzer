@@ -1,0 +1,12 @@
+{
+    "name": "test2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "ㅑ . ㅡ ㅕ ㅛ  ㅌ ㅍ ㄹ ㅋ ㄱ",
+            "ㅗ ㅁ ㅏ ㅣ ㅐ  ' ㄷ ㄴ ㅇ ㅅ",
+            "ㅠ ㅂ ㅜ ㅓ ㅔ  ㅈ ㅎ ; , ㅊ"
+        ]
+    },
+    "fingering": "traditional"
+}

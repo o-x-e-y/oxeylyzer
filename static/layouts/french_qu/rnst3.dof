@@ -1,0 +1,12 @@
+{
+    "name": "rnst3",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "' l c p b  q , o é j",
+            "r n s t d  h u e a i",
+            "- x g f v  . m à * y"
+        ]
+    },
+    "fingering": "traditional"
+}

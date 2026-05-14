@@ -1,0 +1,12 @@
+{
+    "name": "worst_possible",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "ë q . h i  a o c b g",
+            "d y ' m t  r p ç x z",
+            "n v , s e  k u f l j"
+        ]
+    },
+    "fingering": "traditional"
+}

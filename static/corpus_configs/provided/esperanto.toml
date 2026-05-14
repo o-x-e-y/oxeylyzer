@@ -1,0 +1,14 @@
+sources = [ "../../text/esperanto" ]
+
+inherits = [ "./default.toml" ]
+
+letters_to_lowercase = "ĝĉ"
+
+[multiple]
+uppercase_versions = true
+list = [
+    ["ŝ", "*s"],
+    ["ŭ", "*u"],
+    ["ĵ", "*j"],
+    ["ĥ", "*h"],
+]

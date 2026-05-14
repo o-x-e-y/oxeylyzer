@@ -1,0 +1,12 @@
+{
+    "name": "ilea3",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            ", * y o x  f g c p j",
+            "i l e a '  q t s n r",
+            ". h w u k  m d v b z"
+        ]
+    },
+    "fingering": "traditional"
+}

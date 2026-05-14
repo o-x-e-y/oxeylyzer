@@ -1,0 +1,12 @@
+{
+    "name": "isea2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "y f u o .  w p l m j",
+            "i s e a ø  b d r n t",
+            ", h ; å æ  k g ' v c"
+        ]
+    },
+    "fingering": "traditional"
+}

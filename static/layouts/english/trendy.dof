@@ -1,0 +1,12 @@
+{
+    "name": "trendy",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "k l h w p z f o u ,",
+            "t r n d c y s a e i",
+            "q j m g b v x . ' ;"
+        ]
+    },
+    "fingering": "traditional"
+}

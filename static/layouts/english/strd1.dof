@@ -1,0 +1,12 @@
+{
+    "name": "strd1",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "v m l c p  q z u o ,",
+            "s t r d y  f n e a i",
+            "x k j g w  b h ; ' ."
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,5 @@
+sources = [ "../../text/german" ]
+
+inherits = [ "./default.toml" ]
+
+letters_to_lowercase = "äöüß"

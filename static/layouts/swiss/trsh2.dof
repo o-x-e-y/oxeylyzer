@@ -1,0 +1,12 @@
+{
+    "name": "trsh2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "j l f k z  v , o u ü",
+            "t r s h g  . n e i a",
+            "w ' m d b  p c ä y ö"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,7 @@
+sources = [ "../../text/pinyin_an" ]
+
+inherits = [ "./pinyin.toml" ]
+
+[one_to_one]
+from = "АÑ"
+to = "AN"

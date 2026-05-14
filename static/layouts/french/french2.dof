@@ -1,0 +1,12 @@
+{
+    "name": "french2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            ", é o ' y q m l c b",
+            "u a e i j f t r s n",
+            "* . k p z v d h g x"
+        ]
+    },
+    "fingering": "traditional"
+}

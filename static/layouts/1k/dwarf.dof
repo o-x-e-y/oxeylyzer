@@ -1,0 +1,12 @@
+{
+    "name": "dwarf",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "f l h d v  z g o u .",
+            "s r n t m  p y e i a",
+            "x j b k q  c w ' , ;"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "doerak",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "j u o ' q z v r s h",
+            "g a i e x b t n d l",
+            "c . , y ; p m f k w"
+        ]
+    },
+    "fingering": "traditional"
+}

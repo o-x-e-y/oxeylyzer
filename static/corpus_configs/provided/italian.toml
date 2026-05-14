@@ -1,0 +1,13 @@
+sources = [ "../../text/italian" ]
+
+inherits = [ "./default.toml" ]
+
+[multiple]
+uppercase_versions = true
+list = [
+    ["à", "*a"],
+    ["è", "*e"],
+    ["ì", "*i"],
+    ["ò", "*o"],
+    ["ù", "*u"]
+]

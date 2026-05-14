@@ -1,0 +1,5 @@
+sources = [ "../../text/bokmal" ]
+
+inherits = [ "./default.toml" ]
+
+letters_to_lowercase = "åøæ"

@@ -1,0 +1,12 @@
+{
+    "name": "noctum2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "b g d l z j f o u ,",
+            "n s t r k y c a e i",
+            "q v m h x p w ' ; ."
+        ]
+    },
+    "fingering": "traditional"
+}

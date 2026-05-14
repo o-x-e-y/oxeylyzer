@@ -1,0 +1,12 @@
+{
+    "name": "rnst5_mirror",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "j é o . h  q l c p '",
+            "i a e u f  m t s n r",
+            "y * à , z  v d g b x"
+        ]
+    },
+    "fingering": "traditional"
+}

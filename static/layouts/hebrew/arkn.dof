@@ -1,0 +1,12 @@
+{
+    "name": "arkn",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "ץ ן ק ר א  ט ו ת ם פ",
+            "ש ד ג כ ע  י ח ל ך ף",
+            "ז ס ב ה נ  מ צ , . '"
+        ]
+    },
+    "fingering": "traditional"
+}

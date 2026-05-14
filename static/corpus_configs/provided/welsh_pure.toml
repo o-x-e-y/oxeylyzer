@@ -1,0 +1,15 @@
+sources = [ "../../text/welsh_pure" ]
+
+inherits = [ "./default.toml" ]
+
+[multiple]
+uppercase_versions = true
+list = [
+    ['â', "*a"],
+    ['ê', "*e"],
+    ['î', "*i"],
+    ['ô', "*o"],
+    ['û', "*u"],
+    ['ŵ', "*w"],
+    ['ŷ', "*y"]
+]

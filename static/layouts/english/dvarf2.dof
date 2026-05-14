@@ -1,0 +1,12 @@
+{
+    "name": "dvarf2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            ", u o g j  k f l r v",
+            "i e a c y  m h t n s",
+            ". ; ' w p  b d q x z"
+        ]
+    },
+    "fingering": "traditional"
+}

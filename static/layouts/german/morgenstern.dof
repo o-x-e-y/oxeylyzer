@@ -1,0 +1,12 @@
+{
+    "name": "morgenstern",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "j c a ö y  ß k l f p",
+            "t n e i o  g h r s w",
+            "q m ä u ü  v d x z ,"
+        ]
+    },
+    "fingering": "traditional"
+}

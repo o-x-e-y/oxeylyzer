@@ -1,0 +1,12 @@
+{
+    "name": "colemak_dn",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "q l c d w  z p u . j",
+            "a r s t k  b n e o i",
+            "' x g m v  f h ; , y"
+        ]
+    },
+    "fingering": "traditional"
+}

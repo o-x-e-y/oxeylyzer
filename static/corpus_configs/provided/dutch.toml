@@ -1,0 +1,5 @@
+sources = [ "../../text/dutch" ]
+
+inherits = [ "./default.toml" ]
+
+letters_to_lowercase = "áèéçëíîó"

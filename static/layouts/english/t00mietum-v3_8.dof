@@ -1,0 +1,12 @@
+{
+    "name": "t00mietum-v3",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "k f r d g y i o u w",
+            "v n t s c b a e h -",
+            "j p l m x ' . , z q"
+        ]
+    },
+    "fingering": "traditional"
+}

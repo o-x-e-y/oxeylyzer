@@ -1,0 +1,5 @@
+sources = [ "../../text/albanian" ]
+
+inherits = [ "./default.toml" ]
+
+letters_to_lowercase = "çë"

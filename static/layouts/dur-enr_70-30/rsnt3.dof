@@ -1,0 +1,12 @@
+{
+    "name": "rsnt3",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "j g h k z  , w u o y",
+            "r s n t m  p @ e a i",
+            "x f l d v  c b ' . q"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "ft_sus",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "x p d g v  q f o u j",
+            "r n t s w  . l a e i",
+            "z b k c y  m h ' ; ,"
+        ]
+    },
+    "fingering": "traditional"
+}

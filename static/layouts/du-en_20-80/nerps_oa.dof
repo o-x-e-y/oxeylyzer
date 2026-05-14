@@ -1,0 +1,12 @@
+{
+    "name": "nerps_oa",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "x l d p v z f u o ,",
+            "n r t s g y h e a i",
+            "q j m c w b k ; ' ."
+        ]
+    },
+    "fingering": "traditional"
+}

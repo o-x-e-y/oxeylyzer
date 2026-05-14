@@ -1,0 +1,12 @@
+{
+    "name": "rollmak",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "q w f p b z l u o ;",
+            "c r s t g m n e a i",
+            "v x y d k j h / , ."
+        ]
+    },
+    "fingering": "traditional"
+}

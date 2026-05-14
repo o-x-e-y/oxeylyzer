@@ -1,0 +1,7 @@
+sources = [ "../../text/pinyin" ]
+
+inherits = [ "./default.toml" ]
+
+[one_to_one]
+from = "；　，。—、）﹔﹐（﹕’‘．﹖"
+to = "; ,.-,);,(;''.?"

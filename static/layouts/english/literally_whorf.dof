@@ -1,0 +1,12 @@
+{
+    "name": "literally_whorf",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "z l h d k  j w o u .",
+            "s r n t b  y c a e i",
+            "v x m p q  g f ' ; ,"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,12 @@
+{
+    "name": "senpai",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "ó u á y *  f z k d h",
+            "i o e a ő  b l t s n",
+            "c . , é ö  v r m g j"
+        ]
+    },
+    "fingering": "traditional"
+}

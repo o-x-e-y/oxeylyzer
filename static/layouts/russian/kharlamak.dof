@@ -1,0 +1,12 @@
+{
+    "name": "kharlamak",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "э ь у к ю  ш п р д г",
+            "и а о е я  м т н с в",
+            "ъ й ы х ё  з б л ч ж"
+        ]
+    },
+    "fingering": "traditional"
+}

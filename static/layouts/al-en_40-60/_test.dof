@@ -1,0 +1,12 @@
+{
+    "name": "_test",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "b g h k z  w c u o .",
+            "n s r t m  y p e a i",
+            "x v l d q  f j ë ' ,"
+        ]
+    },
+    "fingering": "traditional"
+}

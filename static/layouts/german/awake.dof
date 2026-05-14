@@ -1,0 +1,12 @@
+{
+    "name": "awake",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "k . o u ä q g c l f",
+            "h a e i z ß t r n s",
+            "y x , ü ' p d w m v"
+        ]
+    },
+    "fingering": "traditional"
+}

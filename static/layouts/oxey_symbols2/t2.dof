@@ -1,0 +1,12 @@
+{
+    "name": "t2",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "% + [ ` ~  . \" < > !",
+            "= ( ) _ -  ' ] { } /",
+            "# ^ \\ ; ,  * ? | & :"
+        ]
+    },
+    "fingering": "traditional"
+}

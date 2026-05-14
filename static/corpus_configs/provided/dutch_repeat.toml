@@ -1,0 +1,5 @@
+sources = [ "../../text/dutch" ]
+
+inherits = [ "./default.toml", "./dutch.toml" ]
+
+repeat_key = true

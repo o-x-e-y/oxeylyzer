@@ -1,0 +1,12 @@
+{
+    "name": "recurva_oxeylyzer",
+    "board": "ortho",
+    "layers": {
+        "main": [
+            "v r d p b  q m o u y",
+            "s n t c g  , h a e i",
+            "z x k f w  ' l . ; j"
+        ]
+    },
+    "fingering": "traditional"
+}

@@ -1,0 +1,12 @@
+sources = [ "../../text/german" ]
+
+inherits = [ "./default.toml" ]
+
+[multiple]
+uppercase_versions = true
+list = [
+    ["ü", "*u"],
+    ["ä", "*a"],
+    ["ö", "*o"],
+    ["ß", "*s"]
+]
