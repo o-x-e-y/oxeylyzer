@@ -1,5 +1,0 @@
-sources = [ "../../text/swiss" ]
-
-inherits = [ "./default.toml" ]
-
-letters_to_lowercase = "äöü"

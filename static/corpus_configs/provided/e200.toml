@@ -1,3 +1,0 @@
-sources = [ "../../text/e200" ]
-
-inherits = [ "./default.toml" ]
