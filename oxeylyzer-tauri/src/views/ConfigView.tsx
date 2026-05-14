@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, Index, onMount, Show } from "solid-js";
 import Dropdown from "../components/Dropdown";
 import {
   getConfig,
@@ -187,6 +187,43 @@ middle=${mfu.middle} index=${mfu.index} thumb=${mfu.thumb}`;
                   value={cfg().corpus}
                   onInput={(e) => setConfigState({ ...cfg(), corpus: e.currentTarget.value })}
                 />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-neutral-500 font-mono">Layout paths</label>
+                <Index each={cfg().layouts}>
+                  {(path, i) => (
+                    <div class="flex gap-1">
+                      <input
+                        class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-xs px-2 py-1 flex-1"
+                        value={path()}
+                        onInput={(e) => {
+                          const next = [...cfg().layouts];
+                          next[i] = e.currentTarget.value;
+                          setConfigState({ ...cfg(), layouts: next });
+                        }}
+                      />
+                      <button
+                        class="border border-neutral-700 font-mono text-xs px-2 py-1 hover:bg-neutral-700 text-neutral-400"
+                        onClick={() =>
+                          setConfigState({
+                            ...cfg(),
+                            layouts: cfg().layouts.filter((_, j) => j !== i),
+                          })
+                        }
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </Index>
+                <button
+                  class="self-start border border-neutral-700 font-mono text-xs px-2 py-1 hover:bg-neutral-700 text-neutral-400 mt-0.5"
+                  onClick={() =>
+                    setConfigState({ ...cfg(), layouts: [...cfg().layouts, ""] })
+                  }
+                >
+                  + add path
+                </button>
               </div>
               <div class="grid grid-cols-2 gap-3">
                 <NumInput
