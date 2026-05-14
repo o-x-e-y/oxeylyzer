@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store";
 export type HeatScheme = "original" | "playground" | "v2";
 export const [heatScheme, setHeatScheme] = createSignal<HeatScheme>("playground");
 import { listLayouts, listLanguages, currentLanguage, getCharFrequencies } from "./api";
-import type { Layout } from "./mock";
+import type { Layout } from "./types";
 
 type AppStore = {
   layouts: Layout[];

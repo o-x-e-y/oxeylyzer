@@ -11,7 +11,7 @@ use oxeylyzer_core::{
     data::Data,
     fast_layout::{BigramPair, FastLayout},
     generate::{LayoutStats, Oxeylyzer},
-    layout::Layout,
+    layout::{Layout, LayoutMetadata},
     rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     weights::{Config, FingerWeights, MaxFingerUse, Weights},
 };
@@ -51,6 +51,7 @@ pub struct LayoutDto {
     pub name: String,
     pub keys: String,
     pub board: String,
+    pub fingering_name: Option<String>,
     pub stats: LayoutStatsDto,
     /// Physical key geometry: [x, y, width, height] per key (flat, same order as keys)
     pub keyboard: Vec<[f64; 4]>,
@@ -206,6 +207,7 @@ fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
         name: layout.name.clone(),
         keys: fast.layout_str(),
         board: get_board_str(layout),
+        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
         stats: stats_dto,
         keyboard: fast.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
         shape: fast.shape.inner().to_vec(),
@@ -458,6 +460,7 @@ fn swap_keys(
         name: format!("{name}*"),
         keys: fl.layout_str(),
         board: get_board_str(layout),
+        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
         stats: stats_dto,
         keyboard: fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
         shape: fl.shape.inner().to_vec(),
@@ -518,8 +521,9 @@ fn analyze_custom(
     let stats_dto = stats_to_dto(&stats, engine.data.char_total);
     Ok(LayoutDto {
         name: format!("{name}*"),
-        keys, // return the clean arrangement, not the disabled-substituted one
+        keys,
         board: get_board_str(layout),
+        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
         stats: stats_dto,
         keyboard,
         shape,
@@ -555,6 +559,7 @@ fn analyze_with_disabled(
         name: format!("{name}*"),
         keys: original_keys,
         board: get_board_str(layout),
+        fingering_name: layout.metadata.fingering_name.as_ref().map(|n| n.to_string()),
         stats: stats_dto,
         keyboard,
         shape,
@@ -802,7 +807,7 @@ async fn start_generate(
             .into_iter()
             .map(|fl| (engine.score(&fl), fl))
             .collect();
-        scored.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+        scored.sort_unstable_by(|(s1, _), (s2, _)| s2.cmp(s1));
 
         // Build DTOs for the top 50 in parallel — get_layout_stats is expensive
         // but read-only, so rayon can safely run it across threads.
@@ -820,6 +825,7 @@ async fn start_generate(
                         .unwrap_or_else(|| format!("gen-{}", i + 1)),
                     keys: fl.layout_str(),
                     board: "generated".to_string(),
+                    fingering_name: fl.metadata.fingering_name.as_ref().map(|n| n.to_string()),
                     stats: stats_dto,
                     keyboard: fl.keyboard.iter().map(|k| [k.x(), k.y(), k.width(), k.height()]).collect(),
                     shape: fl.shape.inner().to_vec(),
@@ -862,8 +868,17 @@ fn save_generated(
     });
     fl.name = Some(save_name.clone());
 
-    // Serialize to .dof JSON.
+    // Serialize to .dof JSON, clearing provenance fields from the base layout.
     let layout: Layout = fl.clone().into();
+    let layout = Layout {
+        metadata: Arc::new(LayoutMetadata {
+            authors: vec![],
+            year: None,
+            link: None,
+            ..(*layout.metadata).clone()
+        }),
+        ..layout
+    };
     let json = serde_json::to_string_pretty(&layout)
         .map_err(|e| format!("Serialization failed: {e}"))?;
 

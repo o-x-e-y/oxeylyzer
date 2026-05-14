@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import type { BigramEntry } from "../mock";
+import type { BigramEntry } from "../types";
 
 type Props = {
   entries: BigramEntry[];

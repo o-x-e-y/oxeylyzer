@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import type { LayoutStats } from "../mock";
+import type { LayoutStats } from "../types";
 
 type Props = { stats: LayoutStats; baseline?: LayoutStats };
 

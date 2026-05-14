@@ -10,7 +10,7 @@ type DofJson = {
   name: string;
   board: string;
   layers: Record<string, DofLayer>;
-  fingering: string;
+  fingering?: string | string[][];
 };
 
 type Props = {
@@ -39,7 +39,7 @@ export default function EditView(props: Props) {
         setDof(d);
         setEditedName(d.name);
         setEditedBoard(d.board);
-        setEditedFingering(d.fingering);
+        setEditedFingering(typeof d.fingering === "string" ? d.fingering : "");
         setEditingIdx(null);
       })
       .catch((e) => setMsg({ text: String(e), ok: false }));

@@ -4,7 +4,7 @@ import KeyboardDisplay from "../components/KeyboardDisplay";
 import { CompareStatColumns } from "../components/StatColumns";
 import { appStore } from "../store";
 import { analyzeLayout } from "../api";
-import type { Layout } from "../mock";
+import type { Layout } from "../types";
 
 export default function CompareView() {
   const [name1, setName1] = createSignal(appStore.layouts[0]?.name ?? "");

@@ -3,7 +3,7 @@ import KeyboardDisplay from "../components/KeyboardDisplay";
 import LayoutSearch from "../components/LayoutSearch";
 import { appStore } from "../store";
 import { startGenerate, saveGenerated, cancelGenerate } from "../api";
-import type { Layout } from "../mock";
+import type { Layout } from "../types";
 import { listen } from "@tauri-apps/api/event";
 
 type SaveState = { name: string; saved: boolean };

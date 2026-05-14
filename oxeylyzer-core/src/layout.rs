@@ -189,11 +189,12 @@ impl From<Layout> for Dof {
     fn from(layout: Layout) -> Self {
         let LayoutMetadata {
             authors,
+            year,
+            link,
             languages,
             anchor,
             fingering_name,
             parsed_board,
-            ..
         } = layout.metadata.as_ref().clone();
 
         let mut key_iter = layout.keys.iter();
@@ -235,8 +236,8 @@ impl From<Layout> for Dof {
         let internal = DofInternal {
             name: layout.name,
             description: None,
-            year: None,
-            link: None,
+            year,
+            link,
             authors,
             languages,
             parsed_board,

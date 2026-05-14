@@ -1,5 +1,5 @@
 import { For, createMemo } from "solid-js";
-import type { LayoutStats } from "../mock";
+import type { LayoutStats } from "../types";
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 

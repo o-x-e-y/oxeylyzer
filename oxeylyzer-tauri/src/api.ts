@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Layout, BigramEntry, NgramResult } from "./mock";
+import type { Layout, BigramEntry, NgramResult } from "./types";
 
 export async function listLayouts(): Promise<Layout[]> {
   return invoke("list_layouts");

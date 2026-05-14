@@ -29,6 +29,7 @@ export type Layout = {
   /** 30 characters, row-major: 3 rows × 10 columns, left-to-right */
   keys: string;
   board: string;
+  fingering_name?: string;
   stats: LayoutStats;
   /** Physical key positions — flat array, same order as `keys` */
   keyboard: PhysKey[];

@@ -6,7 +6,7 @@ import {
   createDroppable,
   useDragDropContext,
 } from "@thisbeyond/solid-dnd";
-import type { PhysKey } from "../mock";
+import type { PhysKey } from "../types";
 import { heatScheme } from "../store";
 
 /* eslint-disable no-unused-vars */

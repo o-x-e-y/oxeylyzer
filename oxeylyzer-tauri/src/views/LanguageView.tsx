@@ -2,7 +2,7 @@ import { createSignal, For, Show } from "solid-js";
 import { appStore, initStore } from "../store";
 import Dropdown from "../components/Dropdown";
 import { setLanguage, loadCorpus, lookupNgram } from "../api";
-import type { NgramResult } from "../mock";
+import type { NgramResult } from "../types";
 
 export default function LanguageView() {
   const [pendingLanguage, setPendingLanguage] = createSignal(appStore.currentLanguage || "english");

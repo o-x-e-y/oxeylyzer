@@ -3,7 +3,7 @@ import KeyboardDisplay from "../components/KeyboardDisplay";
 import BigramList from "../components/BigramList";
 import LayoutSearch from "../components/LayoutSearch";
 import { AnalyzeStatColumns } from "../components/StatColumns";
-import { BIGRAM_TABS, type BigramTab, type Layout, type BigramEntry } from "../mock";
+import { BIGRAM_TABS, type BigramTab, type Layout, type BigramEntry } from "../types";
 import { appStore, heatScheme, setHeatScheme, type HeatScheme } from "../store";
 import Dropdown from "../components/Dropdown";
 import { analyzeLayout, getBigrams, analyzeCustom } from "../api";

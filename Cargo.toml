@@ -30,6 +30,9 @@ oxeylyzer-repl = { path = "./oxeylyzer-repl" }
 [dev-dependencies]
 diol = { version = "0.13.1" }
 
+[patch.crates-io]
+libdof = { path = "../libdof" }
+
 [profile.release]
 lto = "fat"
 
