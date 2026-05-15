@@ -29,10 +29,16 @@ xflags::xflags! {
             /// Sets pinned characters on the layout to optimize, `-p abc` pins `abc`.
             optional -p, --pins pins: String
         }
-        /// Saves the nth layout that was generated. Optionally, you can provide a name as `-n <name>`.
+        /// Saves a layout by index or name. Optionally, you can provide a save name as a second argument.
         cmd save s {
-            required n: usize
+            required name_or_nr: String
             optional name: String
+        }
+        /// Removes a saved layout by name, deleting it from disk.
+        cmd remove rm {
+            required name: String
+            /// Skip the confirmation prompt.
+            optional -y, --yes
         }
         /// Shows the top n sfbs on a layout. 10 by default.
         cmd sfbs {

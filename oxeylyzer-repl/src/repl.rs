@@ -416,8 +416,11 @@ impl Repl {
         Err(ReplError::FailedToFindPlaceholderName)
     }
 
-    pub fn save(&mut self, n: usize, name: Option<String>) -> Result<ReplResponse> {
-        let mut layout = self.nth_layout(n)?.clone();
+    pub fn save(&mut self, name_or_nr: &str, name: Option<String>) -> Result<ReplResponse> {
+        let mut layout = match name_or_nr.parse::<usize>() {
+            Ok(nr) => self.nth_layout(nr)?.clone(),
+            Err(_) => self.layout(name_or_nr)?.clone(),
+        };
         let new_name = match name {
             Some(name) => name,
             None => self.placeholder_name(&layout)?,
@@ -453,6 +456,34 @@ impl Repl {
         self.saved.insert(new_name, layout.clone().into());
 
         Ok(ReplResponse::single_layout(layout, String::new()))
+    }
+
+    pub fn remove(&mut self, name: &str, yes: bool) -> Result<ReplResponse> {
+        let key = name.to_lowercase();
+        if !self.saved.contains_key(&key) {
+            return Err(ReplError::UnknownLayout(name.into()));
+        }
+        if !yes {
+            print!("Remove '{name}'? [y/N] ");
+            std::io::stdout().flush()?;
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            if !matches!(input.trim(), "y" | "Y") {
+                return Ok(ReplResponse::no_layout("Cancelled.".into()));
+            }
+        }
+        self.saved.remove(&key);
+        let name_path = key.replace(' ', "_");
+        let path = self
+            .dirs
+            .layouts_dir()
+            .join(&self.language)
+            .join(&name_path)
+            .with_extension("dof");
+        if path.exists() {
+            std::fs::remove_file(&path)?;
+        }
+        Ok(ReplResponse::no_layout(format!("Removed '{name}'.")))
     }
 
     pub fn analyze_layout(&self, layout: &FastLayout) -> Result<String> {
