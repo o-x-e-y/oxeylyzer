@@ -18,7 +18,6 @@ use oxeylyzer_core::{
 use oxeylyzer_resources::OxeylyzerDirs;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
-use toml;
 
 // ─── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -458,11 +457,8 @@ fn swap_keys(
             let (c1, c2) = (window[0], window[1]);
             let p1 = fl.keys.iter().position(|&k| k == engine.mapping.get_u(c1));
             let p2 = fl.keys.iter().position(|&k| k == engine.mapping.get_u(c2));
-            match (p1, p2) {
-                (Some(p1), Some(p2)) => {
-                    fl.swap(p1 as u8, p2 as u8);
-                }
-                _ => {}
+            if let (Some(p1), Some(p2)) = (p1, p2) {
+                fl.swap(p1 as u8, p2 as u8);
             }
         }
     }

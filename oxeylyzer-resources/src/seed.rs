@@ -34,10 +34,12 @@ pub fn ensure_config(dirs: &OxeylyzerDirs) -> Result<(), ResourceError> {
 /// Builds a default `config.toml` string from `Config::default()` with paths
 /// pointing into the data root for this installation.
 fn default_config_toml(dirs: &OxeylyzerDirs) -> Result<String, ResourceError> {
-    let mut config = Config::default();
-    config.corpus = dirs.language_data_dir().join("english.json");
-    config.layouts = vec![dirs.layouts_dir().join("english").join("*.dof")];
-    config.corpus_configs = dirs.corpus_configs_dir().join("**").join("*.toml");
+    let config = Config {
+        corpus: dirs.language_data_dir().join("english.json"),
+        layouts: vec![dirs.layouts_dir().join("english").join("*.dof")],
+        corpus_configs: dirs.corpus_configs_dir().join("**").join("*.toml"),
+        ..Default::default()
+    };
 
     toml::to_string_pretty(&config).map_err(|e| ResourceError::Config(e.to_string()))
 }
