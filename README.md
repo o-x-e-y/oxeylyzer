@@ -1,20 +1,71 @@
-# Oxeylyzer repl
+# Oxeylyzer
 
-## Building with cargo
-To use the analyzer, clone the repo and make sure you have rust nightly installed. If you have, skip the next step.
+Oxeylyzer is a keyboard layout analyzer and generator. It comes in two forms: a command-line REPL and a graphical desktop app built with Tauri.
+
+## Downloads
+
+Pre-built binaries for the desktop app are available on the [Releases page](https://github.com/o-x-e-y/oxeylyzer/releases). Grab the appropriate installer for your platform and run it — no build step required.
+
+---
+
+## Desktop App (Tauri GUI)
+
+The GUI provides a visual interface for all the core analyzer features:
+
+- **Analyze** — Select any loaded layout to see a full stats breakdown. The keyboard is displayed with a color-coded heatmap. You can dig into bigram lists (SFBs, dSFBs, skipgrams, etc.) and click any entry to highlight the involved keys. Individual keys can be disabled on the fly to explore how a layout would score without a given key contributing.
+- **Compare** — Pick two layouts side by side and see their stats rendered in a diff-style view so differences jump out immediately.
+- **Generate** — Run the generator from the GUI with a configurable iteration count. Keys can be pinned to lock them in place during generation, which dramatically speeds up the search if you already know your vowel block or other anchors. Results stream in as they're found and can be saved directly.
+- **Edit** — Inspect and edit the raw DOF JSON for any layout. You can rename layouts, swap keys interactively, or fork a layout under a new name.
+- **Layouts** — Browse all currently loaded layouts at a glance.
+- **Language** — Switch the active language corpus and load new ones.
+- **Config** — Edit all analyzer weights in a form UI. Presets can be saved and loaded so you can quickly switch between different scoring profiles without touching config files.
+
+### Building the GUI from source
+
+You'll need the standard Tauri v2 prerequisites — see [tauri.app/start/prerequisites](https://tauri.app/start/prerequisites/) for the full list (Rust, system webview libraries, Node.js).
+
+Once prerequisites are in place:
+
+```bash
+cd oxeylyzer-tauri
+npm install          # or: bun install
+npm run tauri dev    # dev mode with hot reload
+npm run tauri build  # production build
+```
+
+---
+
+## REPL
+
+### Building with cargo
+
+To use the REPL, clone the repo and make sure you have rust nightly installed. If you have, skip the next step.
 
 To install rust, visit [the official installation page](https://www.rust-lang.org/learn/get-started) and follow the instructions there. When installing, make sure you add rust to PATH. Once you have installed, you may need to restart in order for the command to be recognised. After restarting, you can try running `rustup install nightly` and `rustup default nightly` to make sure the compiler can use all unstable features.
 
 Once you have done this, you can open a terminal in the folder you cloned into, and run `cargo run --release`. This will build and run the project. For future uses you can use this command again, or `cargo install --path ./` from within the root folder of the project, which makes it runnable from anywhere as `oxeylyzer`!
 
-## Using the repl
+### Using the repl
+
 Type `help` to get all commands with their explanation, and `<command> help` to get a more detailed description about it. Should be pretty self-explanatory :thumbsup:
 
-As an aside for `generate` and `improve`, I run them with `1000` usually but you get pretty good results with 500 usually as well. You can run with more but it might start taking a while.
+The REPL supports the following main commands:
 
-As a piece of advice however, if you for example have a vowel block in mind you want to use, pinning it and running `improve` can speed up your generation process by a _lot_. For example, if you know you want `eu ao i` (for English) you can pin these positions and run `improve semimak <amount>` (or any other layout with this vowel setup) to get about a 250% speed increase or something similar, just by pinning 5 keys.
+- **analyze** — Show a full stat breakdown for a layout by name.
+- **compare** — Compare two layouts and see how their stats differ.
+- **rank** — Rank all loaded layouts by a specific metric.
+- **generate** — Generate new layouts from scratch for the current language. Run with `1000` iterations usually, though `500` gives pretty good results too.
+- **improve** — Attempt to improve an existing layout. Especially powerful when combined with pins — if you know your vowel block you can pin it and get roughly a 250% speed increase by not having to search those positions.
+- **load** — Load a language corpus. Use `--raw` to load without any corpus rules applied.
+- **config** — Edit analyzer weights from within the REPL.
+- **save** / **remove** — Save or remove a layout.
+
+As a piece of advice, if you for example have a vowel block in mind you want to use, pinning it and running `improve` can speed up your generation process by a _lot_. For example, if you know you want `eu ao i` (for English) you can pin these positions and run `improve semimak <amount>` (or any other layout with this vowel setup) to get about a 250% speed increase or something similar, just by pinning 5 keys.
+
+---
 
 ## Configuration
+
 There are a lot of metrics that can be configured, which all happens in the `config.toml`. Keys used in generation can be configured as well in `languages_default.cfg`, though I would probably not recommend changing these unless you want to do some custom stuff like pretending `e` is on a thumb key and replacing it with `/`. Dedicated thumb keys will be added some time in the future. 
 
 ### Pins
@@ -44,37 +95,50 @@ Punishes certain positions slightly more and others slightly less due to stagger
 Punishes some top row positions a bit more than ortho, others a bit less. Useful if you have board with column stagger.
 
 ### Weights
+
 This is where the magic happens.
 
 #### Heatmap
+
 A metric that uses a preset heatmap to make sure high freq keys don't go into very faraway locations, even if it works out everywhere else. If you wouldn't use this, you might get similar indexes to whorf where something that's high freq is placed somewhere off to the side with everything else clustered around it to minimize distance.
 
 #### Fspeed
+
 Short for finger speed, and is basically a weighted sum of sfbs, dsfbs, and some weaker versions of those (up to skipgrams with 3 chars inbetween) _accounting for distance and finger strength_. This is extremely useful because it allows you to more accurately assess how bad certain high speed movement is.
 
 #### Lateral Penalty
+
 A penalty multiplied directly by lateral distance in fspeed. Did not give the results I hoped for so it's 1.0 by default, which is no extra penalty.
 
 #### Dsfb ratio
+
 A ratio which is used to weigh dsfbs and their variants _compared to sfbs_. Because dsfbs are usually around 6% frequency on normal keyboards and sfbs around 1%, the default is 0.11 which comes down to dsfbs being 66% as important as sfbs.
 
 #### Scissors
+
 Scissors are kind of a loosey goosey pattern that refers in essence to adjacent keys jumping up or down 2 rows, e.g. qwerty `u,`, `ex`, `qx` etc. Qwerty `im`, `in` and `ec` (assuming you use angle mod) are excluded from this, while 2 others are added, being qwerty `qs` and `pl`. It's not super precise, but it's very useful for checking your layout doesn't have a lot of very wonky patterns on it.
 
 #### Inrolls and Outrolls
+
 These are defined as trigrams, being 2 keys on one hand into one in the other, or vice versa. The two keys on the same hand cannot be sfbs. Inrolls mean the flow is inward, e.g. `pinky -> middle`, `ring -> index`, whereas outrolls are the opposite. These are generally considered the fastest pattern on a layout.
 
 #### Onehands
+
 Onehands are trigrams on the same hand that all flow in a particular direction, e.g. `pinky -> ring -> middle` or `ring -> middle -> index`. Inconsistent but you generally don't want to punish those.
 
 #### Alternates and Alternates Sfs
+
 Alternation is a trigram where the first and third keys are on the same hand, but not the middle one, e.g. qwerty `ake` or `pen`. Sfs stands for Same Finger Skipgram, and is a special (worse) case of Alternation where you press the 1st and 3rd key with the same finger, which tends to be quite a lot slower.
 
 #### Redirects and Bad Redirects
+
 Redirects are trigrams where you press all three keys with the same hand, but they change direction. Examples include qwerty `ads`, `pul`, `era`. Bad redirects are a special case of these, where none of the keys include index, which makes them worse. Normal redirects are considered okay-ish in some cases, but generally you want to punish redirects at least a little bit, and bad redirects even more.
 
 #### Max Finger Use
+
 This basically exists to be a soft cap on how much %usage you can put on a finger before it's 'too much'. It is useful in columns that do well on paper but have very high total frequency, like `pnb` pinky.
+
+---
 
 ## Importing raw text
 
