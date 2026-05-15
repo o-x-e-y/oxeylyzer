@@ -88,6 +88,7 @@ impl Repl {
             Generate(i) => self.generate(&i.name, i.count, i.pins),
             Save(s) => self.save(&s.name_or_nr, s.name),
             Sfbs(s) => self.sfbs(&s.name, s.count),
+            Remove(r) => self.remove(&r.name, r.yes),
             Fspeed(s) => self.fspeed(&s.name, s.count),
             Stretches(s) => self.stretches(&s.name, s.count),
             Scissors(s) => self.scissors(&s.name, s.count),

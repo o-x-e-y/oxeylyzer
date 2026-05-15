@@ -34,6 +34,12 @@ xflags::xflags! {
             required name_or_nr: String
             optional name: String
         }
+        /// Removes a saved layout by name, deleting it from disk.
+        cmd remove rm {
+            required name: String
+            /// Skip the confirmation prompt.
+            optional -y, --yes
+        }
         /// Shows the top n sfbs on a layout. 10 by default.
         cmd sfbs {
             required name: String

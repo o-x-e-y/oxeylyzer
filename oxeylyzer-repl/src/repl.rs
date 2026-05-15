@@ -458,6 +458,34 @@ impl Repl {
         Ok(ReplResponse::single_layout(layout, String::new()))
     }
 
+    pub fn remove(&mut self, name: &str, yes: bool) -> Result<ReplResponse> {
+        let key = name.to_lowercase();
+        if !self.saved.contains_key(&key) {
+            return Err(ReplError::UnknownLayout(name.into()));
+        }
+        if !yes {
+            print!("Remove '{name}'? [y/N] ");
+            std::io::stdout().flush()?;
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            if !matches!(input.trim(), "y" | "Y") {
+                return Ok(ReplResponse::no_layout("Cancelled.".into()));
+            }
+        }
+        self.saved.remove(&key);
+        let name_path = key.replace(' ', "_");
+        let path = self
+            .dirs
+            .layouts_dir()
+            .join(&self.language)
+            .join(&name_path)
+            .with_extension("dof");
+        if path.exists() {
+            std::fs::remove_file(&path)?;
+        }
+        Ok(ReplResponse::no_layout(format!("Removed '{name}'.")))
+    }
+
     pub fn analyze_layout(&self, layout: &FastLayout) -> Result<String> {
         let mut buf = String::new();
         let stats = self.layout_gen.get_layout_stats(layout);
