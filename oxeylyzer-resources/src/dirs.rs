@@ -136,5 +136,4 @@ impl OxeylyzerDirs {
     {
         seed::ensure_data(self, progress)
     }
-
 }

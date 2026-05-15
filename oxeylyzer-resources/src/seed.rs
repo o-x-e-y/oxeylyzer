@@ -1,6 +1,9 @@
 use oxeylyzer_core::weights::Config;
 
-use crate::{OxeylyzerDirs, ResourceError, download::{DownloadProgress, download_and_extract}};
+use crate::{
+    OxeylyzerDirs, ResourceError,
+    download::{DownloadProgress, download_and_extract},
+};
 
 pub fn ensure_data<F>(dirs: &OxeylyzerDirs, progress: F) -> Result<(), ResourceError>
 where
@@ -36,6 +39,5 @@ fn default_config_toml(dirs: &OxeylyzerDirs) -> Result<String, ResourceError> {
     config.layouts = vec![dirs.layouts_dir().join("english").join("*.dof")];
     config.corpus_configs = dirs.corpus_configs_dir().join("**").join("*.toml");
 
-    toml::to_string_pretty(&config)
-        .map_err(|e| ResourceError::Config(e.to_string()))
+    toml::to_string_pretty(&config).map_err(|e| ResourceError::Config(e.to_string()))
 }

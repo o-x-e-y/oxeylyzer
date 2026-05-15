@@ -1363,7 +1363,10 @@ pub fn run() {
                         DownloadProgress::Connecting => {
                             serde_json::json!({"status": "connecting"})
                         }
-                        DownloadProgress::Downloading { bytes_done, bytes_total } => {
+                        DownloadProgress::Downloading {
+                            bytes_done,
+                            bytes_total,
+                        } => {
                             serde_json::json!({
                                 "status": "downloading",
                                 "bytesDone": bytes_done,
@@ -1382,7 +1385,8 @@ pub fn run() {
 
             // ensure_config is idempotent; ensure_data already calls it on first run,
             // but call it here too so a missing config is always recovered.
-            dirs.ensure_config().expect("failed to write default config");
+            dirs.ensure_config()
+                .expect("failed to write default config");
 
             let config = Config::with_loaded_weights(dirs.config_file())
                 .expect("failed to load config.toml");
