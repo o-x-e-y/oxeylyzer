@@ -110,7 +110,7 @@ const KeyTile = (props: KeyTileProps) => {
 
   const effectiveStyle = () => {
     if (props.isHighlighted) return "";
-    if (props.fingerColor) return `background-color:${props.fingerColor};color:#111`;
+    if (props.fingerColor) return props.fingerColor;
     return props.heatStyle;
   };
 

@@ -15,17 +15,28 @@ const FINGER_NAME_TO_IDX: Record<string, number> = Object.fromEntries(
 );
 
 const FINGER_COLORS: Record<FingerName, string> = {
-  LP: "#c41555",
-  LR: "#d53e4f",
-  LM: "#f46d43",
-  LI: "#fdae61",
-  LT: "#fee08b",
-  RT: "#e6f598",
-  RI: "#abdda4",
-  RM: "#66c2a5",
-  RR: "#3288bd",
-  RP: "#7a6bc8",
+  LP: "#ffcdd2",
+  LR: "#f87680",
+  LM: "#e92832",
+  LI: "#9a191c",
+  LT: "#531313",
+  RT: "#09243d",
+  RI: "#125490",
+  RM: "#1786e7",
+  RR: "#67b3f3",
+  RP: "#BBDEFB",
 };
+
+function fingerStyle(name: string): string {
+  const bg = FINGER_COLORS[name as FingerName] ?? "#666";
+  // Perceived luminance — pick text color for best contrast
+  const r = parseInt(bg.slice(1, 3), 16);
+  const g = parseInt(bg.slice(3, 5), 16);
+  const b = parseInt(bg.slice(5, 7), 16);
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  const text = lum > 128 ? "#111" : "#eee";
+  return `background-color:${bg};color:${text}`;
+}
 
 type DofLayer = string[];
 type DofJson = {
@@ -131,7 +142,7 @@ export default function EditView(props: Props) {
   const fingerColors = createMemo((): string[] | undefined => {
     const flat = fingerFlat();
     if (!flat) return undefined;
-    return flat.map((f) => FINGER_COLORS[f as FingerName] ?? "#666");
+    return flat.map(fingerStyle);
   });
 
   function updateKeyAt(pos: number, newChar: string) {
@@ -437,11 +448,7 @@ export default function EditView(props: Props) {
                         {(name, i) => (
                           <button
                             class="flex-1 h-6 text-[10px] font-mono border leading-none"
-                            style={{
-                              "background-color": FINGER_COLORS[name],
-                              color: "#111",
-                              "border-color": selectedFinger() === i() ? "#fff" : "transparent",
-                            }}
+                            style={`${fingerStyle(name)};border-color:${selectedFinger() === i() ? "#fff" : "transparent"}`}
                             onClick={() => setSelectedFinger(i())}
                           >
                             {name}
