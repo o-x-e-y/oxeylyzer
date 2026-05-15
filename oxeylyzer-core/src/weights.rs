@@ -194,7 +194,10 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             corpus: PathBuf::from("./static/language_data/english.json"),
-            layouts: vec![PathBuf::from("./static/layouts/english")],
+            layouts: vec![
+                PathBuf::from("./static/layouts/english"),
+                PathBuf::from("./static/layouts/shai"),
+            ],
             corpus_configs: PathBuf::from("./static/corpus_configs/**/"),
             trigram_precision: 1000,
             max_cores: 32,
