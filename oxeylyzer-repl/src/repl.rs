@@ -102,6 +102,10 @@ pub enum ReplError {
     ReadlineError(#[from] rustyline::error::ReadlineError),
     #[error(transparent)]
     ResourceError(#[from] ResourceError),
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+    #[error(transparent)]
+    TomlSerError(#[from] toml::ser::Error),
 }
 
 pub type Result<T> = std::result::Result<T, ReplError>;
@@ -994,6 +998,120 @@ impl Repl {
         });
 
         Ok(())
+    }
+
+    pub fn config(&mut self, cmd: crate::flags::Config) -> Result<ReplResponse> {
+        if cmd.edit {
+            let path = self.dirs.config_file();
+            let editor = std::env::var("EDITOR")
+                .or_else(|_| std::env::var("VISUAL"))
+                .unwrap_or_else(|_| {
+                    if cfg!(windows) {
+                        "notepad".into()
+                    } else {
+                        "vi".into()
+                    }
+                });
+            std::process::Command::new(&editor).arg(&path).status()?;
+            return self.reload();
+        }
+
+        let any_set = cmd.sfbs.is_some()
+            || cmd.sfs.is_some()
+            || cmd.inrolls.is_some()
+            || cmd.outrolls.is_some()
+            || cmd.onehands.is_some()
+            || cmd.alternates.is_some()
+            || cmd.alternates_sfs.is_some()
+            || cmd.redirects.is_some()
+            || cmd.redirects_sfs.is_some()
+            || cmd.bad_redirects.is_some()
+            || cmd.bad_redirects_sfs.is_some()
+            || cmd.stretches.is_some()
+            || cmd.pinky_ring.is_some()
+            || cmd.lateral_penalty.is_some()
+            || cmd.trigram_precision.is_some()
+            || cmd.max_cores.is_some();
+
+        if any_set {
+            let path = self.dirs.config_file();
+            let mut config = Config::with_loaded_weights(&path)?;
+            let w = &mut config.weights;
+            if let Some(v) = cmd.sfbs {
+                w.sfbs = v;
+            }
+            if let Some(v) = cmd.sfs {
+                w.sfs = v;
+            }
+            if let Some(v) = cmd.inrolls {
+                w.inrolls = v;
+            }
+            if let Some(v) = cmd.outrolls {
+                w.outrolls = v;
+            }
+            if let Some(v) = cmd.onehands {
+                w.onehands = v;
+            }
+            if let Some(v) = cmd.alternates {
+                w.alternates = v;
+            }
+            if let Some(v) = cmd.alternates_sfs {
+                w.alternates_sfs = v;
+            }
+            if let Some(v) = cmd.redirects {
+                w.redirects = v;
+            }
+            if let Some(v) = cmd.redirects_sfs {
+                w.redirects_sfs = v;
+            }
+            if let Some(v) = cmd.bad_redirects {
+                w.bad_redirects = v;
+            }
+            if let Some(v) = cmd.bad_redirects_sfs {
+                w.bad_redirects_sfs = v;
+            }
+            if let Some(v) = cmd.stretches {
+                w.stretches = v;
+            }
+            if let Some(v) = cmd.pinky_ring {
+                w.pinky_ring_bigrams = v;
+            }
+            if let Some(v) = cmd.lateral_penalty {
+                w.lateral_penalty = v;
+            }
+            if let Some(v) = cmd.trigram_precision {
+                config.trigram_precision = v;
+            }
+            if let Some(v) = cmd.max_cores {
+                config.max_cores = v;
+            }
+
+            std::fs::write(&path, toml::to_string_pretty(&config)?)?;
+
+            self.reload()?;
+
+            return Ok(ReplResponse::no_layout("Config saved and reloaded.".into()));
+        }
+
+        // No args: show current weights from disk so they reflect the saved state.
+        let config = Config::with_loaded_weights(self.dirs.config_file())?;
+        let w = &config.weights;
+        let mut buf = String::new();
+        writeln!(buf, "sfbs:              {}", w.sfbs)?;
+        writeln!(buf, "sfs:               {}", w.sfs)?;
+        writeln!(buf, "inrolls:           {}", w.inrolls)?;
+        writeln!(buf, "outrolls:          {}", w.outrolls)?;
+        writeln!(buf, "onehands:          {}", w.onehands)?;
+        writeln!(buf, "alternates:        {}", w.alternates)?;
+        writeln!(buf, "alternates_sfs:    {}", w.alternates_sfs)?;
+        writeln!(buf, "redirects:         {}", w.redirects)?;
+        writeln!(buf, "redirects_sfs:     {}", w.redirects_sfs)?;
+        writeln!(buf, "bad_redirects:     {}", w.bad_redirects)?;
+        writeln!(buf, "bad_redirects_sfs: {}", w.bad_redirects_sfs)?;
+        writeln!(buf, "stretches:         {}", w.stretches)?;
+        writeln!(buf, "pinky_ring_bigrams:{}", w.pinky_ring_bigrams)?;
+        write!(buf, "lateral_penalty:   {}", w.lateral_penalty)?;
+        Ok(ReplResponse::no_layout(buf))
     }
 
     pub fn reload(&mut self) -> Result<ReplResponse> {

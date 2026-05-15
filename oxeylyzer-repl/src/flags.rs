@@ -89,6 +89,28 @@ xflags::xflags! {
         cmd ngram n occ freq {
             required ngram: String
         }
+        /// Show current weights, or modify them. Pass weight flags to update values (e.g. `config
+        /// --sfbs 1.0`). Pass `--edit` to open the config file in $EDITOR.
+        cmd config cfg weights {
+            /// Open the config file in $EDITOR (or $VISUAL, vi, notepad as fallbacks).
+            optional --edit
+            optional --sfbs sfbs: f64
+            optional --sfs sfs: f64
+            optional --inrolls inrolls: f64
+            optional --outrolls outrolls: f64
+            optional --onehands onehands: f64
+            optional --alternates alternates: f64
+            optional --alternates-sfs alternates_sfs: f64
+            optional --redirects redirects: f64
+            optional --redirects-sfs redirects_sfs: f64
+            optional --bad-redirects bad_redirects: f64
+            optional --bad-redirects-sfs bad_redirects_sfs: f64
+            optional --stretches stretches: f64
+            optional --pinky-ring pinky_ring_bigrams: f64
+            optional --lateral-penalty lateral_penalty: f64
+            optional --trigram-precision trigram_precision: usize
+            optional --max-cores max_cores: usize
+        }
         /// Refreshes the config, default characters for the analyzer. Will retain previously generated layouts.
         cmd reload r {}
         /// Quits the analyzer.
