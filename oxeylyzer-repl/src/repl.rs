@@ -416,8 +416,11 @@ impl Repl {
         Err(ReplError::FailedToFindPlaceholderName)
     }
 
-    pub fn save(&mut self, n: usize, name: Option<String>) -> Result<ReplResponse> {
-        let mut layout = self.nth_layout(n)?.clone();
+    pub fn save(&mut self, name_or_nr: &str, name: Option<String>) -> Result<ReplResponse> {
+        let mut layout = match name_or_nr.parse::<usize>() {
+            Ok(nr) => self.nth_layout(nr)?.clone(),
+            Err(_) => self.layout(name_or_nr)?.clone(),
+        };
         let new_name = match name {
             Some(name) => name,
             None => self.placeholder_name(&layout)?,
