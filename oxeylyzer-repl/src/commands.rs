@@ -98,6 +98,7 @@ impl Repl {
             Languages(_) => self.languages(),
             Load(l) => self.load(l.language, l.all, l.raw),
             Ngram(n) => self.ngram(&n.ngram),
+            Config(c) => self.config(c),
             Reload(_) => self.reload(),
             Quit(_) => return Ok(ReplStatus::Quit),
         };
