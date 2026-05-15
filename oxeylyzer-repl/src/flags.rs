@@ -14,7 +14,7 @@ xflags::xflags! {
         /// Swaps a number of keys on a certain layout. Cycles between one key and the next:
         /// swap sturdy ab -> swaps ab
         /// swap sturdy abc -> swaps a -> b -> c
-        /// swap sturdy ab abc swap -> swaps a -> b and then a -> b -> c
+        /// swap sturdy ab abc -> swaps a -> b and then a -> b -> c
         cmd swap {
             required name: String
             repeated swaps: String
