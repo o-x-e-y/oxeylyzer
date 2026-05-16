@@ -127,9 +127,7 @@ export default function EditView(props: Props) {
     // Build with the currently-edited board and fingering so named fingerings always resolve
     const tryNamed = (fingering: string): string[] | null => {
       try {
-        const parsed = new LibDof(
-          JSON.stringify({ ...d, board: editedBoard(), fingering }),
-        );
+        const parsed = new LibDof(JSON.stringify({ ...d, board: editedBoard(), fingering }));
         return (parsed.fingering() as string[][]).flat();
       } catch {
         return null;
@@ -141,7 +139,7 @@ export default function EditView(props: Props) {
     }
     // Layout has explicit row-string fingering stored in d.fingering (string[])
     if (Array.isArray(d.fingering)) {
-      return (d.fingering as string[]).flatMap(row => row.trim().split(/\s+/));
+      return (d.fingering as string[]).flatMap((row) => row.trim().split(/\s+/));
     }
     return tryNamed("traditional");
   });
@@ -192,7 +190,9 @@ export default function EditView(props: Props) {
     setEditingIdx(null);
     // Suppress the click that fires on the drag-source element after drop
     dragJustHappened = true;
-    setTimeout(() => { dragJustHappened = false; }, 150);
+    setTimeout(() => {
+      dragJustHappened = false;
+    }, 150);
   }
 
   function handleEditCommit(idx: number, char: string) {
@@ -240,15 +240,22 @@ export default function EditView(props: Props) {
         // Initialise from the current named fingermap so existing assignments are preserved
         try {
           const parsed = new LibDof(
-            JSON.stringify({ ...d, board: editedBoard(), fingering: editedFingering() || "traditional" }),
+            JSON.stringify({
+              ...d,
+              board: editedBoard(),
+              fingering: editedFingering() || "traditional",
+            }),
           );
           const strFingers = parsed.fingering() as string[][];
           base = strFingers.map((r) => r.map((f) => FINGER_NAME_TO_IDX[f] ?? 0));
         } catch {
           // Fallback: parse from raw explicit fingering (string[] of space-separated rows)
           if (Array.isArray(d.fingering)) {
-            base = (d.fingering as string[]).map(row =>
-              row.trim().split(/\s+/).map(f => FINGER_NAME_TO_IDX[f] ?? 0)
+            base = (d.fingering as string[]).map((row) =>
+              row
+                .trim()
+                .split(/\s+/)
+                .map((f) => FINGER_NAME_TO_IDX[f] ?? 0),
             );
           } else {
             base = shape.map((len) => Array(len).fill(0));
@@ -269,9 +276,7 @@ export default function EditView(props: Props) {
     const cfStrings = cf.map((row) => row.map((f) => FINGER_NAMES[f] as string));
     for (const named of ["angle", "traditional"]) {
       try {
-        const test = new LibDof(
-          JSON.stringify({ ...d, board: editedBoard(), fingering: named }),
-        );
+        const test = new LibDof(JSON.stringify({ ...d, board: editedBoard(), fingering: named }));
         const testFingering = test.fingering() as string[][];
         if (
           cfStrings.length === testFingering.length &&
@@ -284,7 +289,7 @@ export default function EditView(props: Props) {
           return named;
       } catch {}
     }
-    return cfStrings.map(row => row.join(" "));
+    return cfStrings.map((row) => row.join(" "));
   }
 
   async function handleSave() {
@@ -420,10 +425,7 @@ export default function EditView(props: Props) {
           <div class="border border-neutral-700 p-4 flex flex-col gap-3">
             <div class="flex items-center justify-between">
               <div class="text-xs text-neutral-500 uppercase tracking-widest">
-                <Show
-                  when={viewMode() === "keys"}
-                  fallback={<span>Finger Map</span>}
-                >
+                <Show when={viewMode() === "keys"} fallback={<span>Finger Map</span>}>
                   Key Layout{" "}
                   <span class="text-neutral-600 normal-case">
                     (click to edit · Tab/Enter advances · Esc cancels)
