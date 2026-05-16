@@ -43,7 +43,7 @@ type DofJson = {
   name: string;
   board: string;
   layers: Record<string, DofLayer>;
-  fingering?: string | string[][];
+  fingering?: string | string[];
 };
 
 type Props = {
@@ -136,7 +136,14 @@ export default function EditView(props: Props) {
       }
     };
     const primary = editedFingering();
-    return (primary && primary !== "custom" ? tryNamed(primary) : null) ?? tryNamed("traditional");
+    if (primary && primary !== "custom") {
+      return tryNamed(primary) ?? tryNamed("traditional");
+    }
+    // Layout has explicit row-string fingering stored in d.fingering (string[])
+    if (Array.isArray(d.fingering)) {
+      return (d.fingering as string[]).flatMap(row => row.trim().split(/\s+/));
+    }
+    return tryNamed("traditional");
   });
 
   const fingerColors = createMemo((): string[] | undefined => {
@@ -238,7 +245,14 @@ export default function EditView(props: Props) {
           const strFingers = parsed.fingering() as string[][];
           base = strFingers.map((r) => r.map((f) => FINGER_NAME_TO_IDX[f] ?? 0));
         } catch {
-          base = shape.map((len) => Array(len).fill(0));
+          // Fallback: parse from raw explicit fingering (string[] of space-separated rows)
+          if (Array.isArray(d.fingering)) {
+            base = (d.fingering as string[]).map(row =>
+              row.trim().split(/\s+/).map(f => FINGER_NAME_TO_IDX[f] ?? 0)
+            );
+          } else {
+            base = shape.map((len) => Array(len).fill(0));
+          }
         }
       }
       if (base[row]) base[row][col] = sf;
@@ -246,7 +260,7 @@ export default function EditView(props: Props) {
     });
   }
 
-  function resolveFingeringForSave(): string | string[][] {
+  function resolveFingeringForSave(): string | string[] {
     const cf = customFingers();
     if (!cf) return editedFingering();
     const d = dof();
@@ -270,7 +284,7 @@ export default function EditView(props: Props) {
           return named;
       } catch {}
     }
-    return cfStrings;
+    return cfStrings.map(row => row.join(" "));
   }
 
   async function handleSave() {
