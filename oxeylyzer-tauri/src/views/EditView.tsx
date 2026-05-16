@@ -145,26 +145,47 @@ export default function EditView(props: Props) {
     return flat.map(fingerStyle);
   });
 
-  function updateKeyAt(pos: number, newChar: string) {
-    const d = dof();
-    if (!d || !newChar) return;
-    const c = newChar[0];
-    const rows = [...(d.layers["main"] ?? [])];
+  // Set after a drag completes to suppress the post-drag click event
+  let dragJustHappened = false;
+
+  function applyCharAt(rows: string[], pos: number, char: string) {
     let offset = 0;
     for (let r = 0; r < rows.length; r++) {
       const rowChars = rows[r].replace(/\s+/g, " ").trim().split(/\s+/);
-      const rowLen = rowChars.length;
-      if (pos < offset + rowLen) {
-        const inRow = pos - offset;
-        rowChars[inRow] = c;
+      if (pos < offset + rowChars.length) {
+        rowChars[pos - offset] = char;
         const left = rowChars.slice(0, 5).join(" ");
         const right = rowChars.slice(5).join(" ");
         rows[r] = rowChars.length <= 5 ? left : `${left}  ${right}`;
-        break;
+        return;
       }
-      offset += rowLen;
+      offset += rowChars.length;
     }
+  }
+
+  function updateKeyAt(pos: number, newChar: string) {
+    const d = dof();
+    if (!d || !newChar) return;
+    const rows = [...(d.layers["main"] ?? [])];
+    applyCharAt(rows, pos, newChar[0]);
     setDof({ ...d, layers: { ...d.layers, main: rows } });
+  }
+
+  function handleSwap(fromIdx: number, toIdx: number) {
+    const k = keys();
+    const fromChar = k[fromIdx];
+    const toChar = k[toIdx];
+    if (!fromChar || !toChar || fromIdx === toIdx) return;
+    const d = dof();
+    if (!d) return;
+    const rows = [...(d.layers["main"] ?? [])];
+    applyCharAt(rows, fromIdx, toChar);
+    applyCharAt(rows, toIdx, fromChar);
+    setDof({ ...d, layers: { ...d.layers, main: rows } });
+    setEditingIdx(null);
+    // Suppress the click that fires on the drag-source element after drop
+    dragJustHappened = true;
+    setTimeout(() => { dragJustHappened = false; }, 150);
   }
 
   function handleEditCommit(idx: number, char: string) {
@@ -431,8 +452,11 @@ export default function EditView(props: Props) {
                     heatmap={viewMode() === "keys" ? appStore.charFrequencies : undefined}
                     fingerColors={fingerColors()}
                     interactive={true}
+                    draggable={true}
+                    onSwap={handleSwap}
                     editingIdx={viewMode() === "keys" ? editingIdx() : null}
                     onKeyClick={(_ch, idx) => {
+                      if (dragJustHappened) return;
                       if (viewMode() === "keys") setEditingIdx(idx);
                       else handleFingerClick(idx);
                     }}
