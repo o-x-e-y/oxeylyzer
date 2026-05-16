@@ -287,7 +287,9 @@ export default function EditView(props: Props) {
           )
         )
           return named;
-      } catch {}
+      } catch (e) {
+        console.error(e);
+      }
     }
     return cfStrings.map((row) => row.join(" "));
   }
