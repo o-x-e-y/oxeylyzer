@@ -46,6 +46,9 @@ type Props = {
   onEditCommit?: (_idx: number, _char: string) => void;
   onEditNext?: (_idx: number) => void;
   onEditCancel?: () => void;
+  onEditBackspace?: (_idx: number) => void;
+  /** Per-key finger colors (flat array, same order as keys). Overrides heatmap. */
+  fingerColors?: string[];
 };
 
 function heatColorOriginal(pct: number): string {
@@ -72,6 +75,7 @@ interface KeyTileProps {
   isPinned: boolean;
   isDisabled: boolean;
   heatStyle: string;
+  fingerColor?: string;
   interactive: boolean;
   draggableEnabled: boolean;
   editingIdx: number | null | undefined;
@@ -80,6 +84,7 @@ interface KeyTileProps {
   onEditCommit: (_idx: number, _char: string) => void;
   onEditNext: (_idx: number) => void;
   onEditCancel: () => void;
+  onEditBackspace: () => void;
 }
 
 const KeyTile = (props: KeyTileProps) => {
@@ -103,6 +108,12 @@ const KeyTile = (props: KeyTileProps) => {
   const baseClass =
     "w-full h-full rounded-[12%] flex items-center justify-center select-none touch-none relative";
 
+  const effectiveStyle = () => {
+    if (props.isHighlighted) return "";
+    if (props.fingerColor) return props.fingerColor;
+    return props.heatStyle;
+  };
+
   return (
     <div
       use:draggable={draggable}
@@ -113,9 +124,10 @@ const KeyTile = (props: KeyTileProps) => {
         "border-neutral-400 ring-1 ring-yellow-400/50": props.isPinned,
         "border-neutral-500 opacity-30": props.isDisabled,
         "border-neutral-500": !props.isHighlighted && !props.isPinned && !props.isDisabled,
-        "cursor-pointer hover:border-neutral-300": props.interactive || props.draggableEnabled,
+        "cursor-pointer hover:border-neutral-300":
+          (props.interactive || props.draggableEnabled) && !isEditing(),
       }}
-      style={props.isHighlighted ? "" : props.heatStyle}
+      style={effectiveStyle()}
       onContextMenu={(e) => {
         e.preventDefault();
         props.onContextMenu(props.flatIdx);
@@ -139,26 +151,24 @@ const KeyTile = (props: KeyTileProps) => {
         }
       }}
     >
-      <Show
-        when={isEditing()}
-        fallback={
-          <>
-            {props.char}
-            {props.isPinned && (
-              <span class="absolute top-0 right-0 text-[9px] text-yellow-300 leading-none p-px">
-                ⚑
-              </span>
-            )}
-          </>
-        }
-      >
+      {props.char}
+      {props.isPinned && (
+        <span class="absolute top-0 right-0 text-[9px] text-yellow-300 leading-none p-px">⚑</span>
+      )}
+      <Show when={isEditing()}>
+        {/* Pulsating ring indicates edit mode */}
+        <div class="absolute inset-0 rounded-[12%] ring-2 ring-white/60 animate-pulse pointer-events-none" />
+        {/* Invisible input captures keystrokes; char text shows beneath */}
         <input
-          class="w-full h-full text-center bg-transparent outline-none font-mono text-[1em] caret-neutral-300"
-          maxLength={1}
+          class="absolute inset-0 w-full h-full bg-transparent outline-none text-transparent cursor-default"
+          style={{ "caret-color": "transparent" }}
           ref={(el) => setTimeout(() => el?.focus(), 0)}
           onInput={(e) => {
             const val = e.currentTarget.value;
-            if (val) props.onEditCommit(props.flatIdx, val);
+            if (val) {
+              props.onEditCommit(props.flatIdx, val[val.length - 1]);
+              e.currentTarget.value = "";
+            }
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === "Tab") {
@@ -168,6 +178,7 @@ const KeyTile = (props: KeyTileProps) => {
               props.onEditCancel();
             } else if (e.key === "Backspace" || e.key === "Delete") {
               e.preventDefault();
+              props.onEditBackspace();
             }
           }}
         />
@@ -263,6 +274,7 @@ export default function KeyboardDisplay(props: Props) {
                   isPinned={isPinned(char)}
                   isDisabled={props.disabledIndices?.has(flatIdx) ?? false}
                   heatStyle={heatStyle(char)}
+                  fingerColor={props.fingerColors?.[flatIdx]}
                   interactive={props.interactive ?? false}
                   draggableEnabled={props.draggable ?? false}
                   editingIdx={props.editingIdx}
@@ -271,6 +283,7 @@ export default function KeyboardDisplay(props: Props) {
                   onEditCommit={(idx, ch) => props.onEditCommit?.(idx, ch)}
                   onEditNext={(idx) => props.onEditNext?.(idx)}
                   onEditCancel={() => props.onEditCancel?.()}
+                  onEditBackspace={() => props.onEditBackspace?.(flatIdx)}
                 />
               </div>
             );

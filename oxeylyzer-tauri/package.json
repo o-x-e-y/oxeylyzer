@@ -15,6 +15,7 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "@thisbeyond/solid-dnd": "^0.7.5",
+    "libdof": "^0.25.0",
     "solid-js": "^1.9.3"
   },
   "devDependencies": {
@@ -29,7 +30,8 @@
     "tailwindcss": "^4.2.2",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
-    "vite-plugin-solid": "^2.11.0"
+    "vite-plugin-solid": "^2.11.0",
+    "vite-plugin-wasm": "^3.6.0"
   },
   "prettier": {
     "singleQuote": false,
