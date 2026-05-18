@@ -14,7 +14,7 @@
       flake-utils,
       ...
     }:
-    flake-utils.lib.eachDefaultSystem (
+    (flake-utils.lib.eachDefaultSystem (
       system:
       let
         overlays = [ (import rust-overlay) ];
@@ -24,6 +24,8 @@
         rust = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
       in
       {
+        packages.default = pkgs.callPackage ./nix/package.nix { };
+
         devShells.default =
           with pkgs;
           mkShell {
@@ -47,5 +49,10 @@
             '';
           };
       }
-    );
+    ))
+    // {
+      overlays.default = final: _prev: {
+        oxeylyzer = final.callPackage ./nix/package.nix { };
+      };
+    };
 }
