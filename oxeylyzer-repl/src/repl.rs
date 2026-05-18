@@ -16,6 +16,7 @@ use oxeylyzer_core::{
     rayon,
     weights::Config,
 };
+use oxeylyzer_resources::{DownloadProgress, OxeylyzerDirs, ResourceError};
 use rustyline::DefaultEditor;
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
@@ -28,7 +29,6 @@ use crate::corpus_transposition::CorpusConfig;
 use crate::display::*;
 
 pub const EXIT_MESSAGE: &str = "Exiting analyzer...";
-pub const BASE_PATH: &str = concat!(std::env!("CARGO_MANIFEST_DIR"), "/..");
 pub const MD5_HASH_LEN: usize = 16;
 
 fn get_subcommand(cmd: &str) -> String {
@@ -100,6 +100,12 @@ pub enum ReplError {
     OxeylyzerError(#[from] OxeylyzerError),
     #[error(transparent)]
     ReadlineError(#[from] rustyline::error::ReadlineError),
+    #[error(transparent)]
+    ResourceError(#[from] ResourceError),
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+    #[error(transparent)]
+    TomlSerError(#[from] toml::ser::Error),
 }
 
 pub type Result<T> = std::result::Result<T, ReplError>;
@@ -156,17 +162,14 @@ pub struct Repl {
     thread_pool: rayon::ThreadPool,
     corpus_configs: PathBuf,
     language_data: PathBuf,
+    pub dirs: OxeylyzerDirs,
 }
 
 impl Repl {
-    pub fn new<P>(config_name: P) -> Result<Self>
-    where
-        P: AsRef<Path>,
-    {
-        let base = PathBuf::from(BASE_PATH);
-
-        let config = Config::with_loaded_weights(base.join(config_name))?;
-        let data = Data::load(base.join(&config.corpus)).unwrap();
+    pub fn new(dirs: OxeylyzerDirs) -> Result<Self> {
+        dirs.ensure_config()?;
+        let config = Config::with_loaded_weights(dirs.config_file())?;
+        let data = Data::load(dirs.data_dir().join(&config.corpus)).unwrap();
         let language = data.name.clone();
 
         let corpus_configs = config.corpus_configs.clone();
@@ -185,7 +188,8 @@ impl Repl {
             .layouts
             .iter()
             .flat_map(|p| {
-                load_layouts(p)
+                let full = dirs.data_dir().join(p);
+                load_layouts(full)
                     .inspect_err(|e| println!("Error loading layout at '{}': {e}", p.display()))
             })
             .flat_map(|h| h.into_iter())
@@ -202,17 +206,40 @@ impl Repl {
             thread_pool,
             corpus_configs,
             language_data,
+            dirs,
         })
     }
 
     pub fn run() -> Result<()> {
-        let mut env = Self::new("config.toml")?;
+        let dirs = if let Ok(p) = std::env::var("OXEYLYZER_DATA_DIR") {
+            OxeylyzerDirs::with_override(PathBuf::from(p))
+        } else {
+            OxeylyzerDirs::resolve()?
+        };
+
+        dirs.ensure_data(|p| match p {
+            DownloadProgress::Connecting => print!("Connecting to download resources..."),
+            DownloadProgress::Downloading {
+                bytes_done,
+                bytes_total,
+            } => {
+                if let Some(total) = bytes_total {
+                    eprint!("\rDownloading: {bytes_done}/{total} bytes");
+                } else {
+                    eprint!("\rDownloading: {bytes_done} bytes");
+                }
+            }
+            DownloadProgress::Extracting => eprintln!("\nExtracting..."),
+            DownloadProgress::Done => eprintln!("Done!"),
+        })?;
+
+        let mut env = Self::new(dirs)?;
 
         let mut rl = DefaultEditor::new()?;
 
         rl.set_history_ignore_space(true);
 
-        let history_path = PathBuf::from(BASE_PATH).join("static/history.txt");
+        let history_path = env.dirs.history_file();
         if rl.load_history(&history_path).is_err() {
             println!("Welcome to Oxeylyzer!");
         }
@@ -389,8 +416,11 @@ impl Repl {
         Err(ReplError::FailedToFindPlaceholderName)
     }
 
-    pub fn save(&mut self, n: usize, name: Option<String>) -> Result<ReplResponse> {
-        let mut layout = self.nth_layout(n)?.clone();
+    pub fn save(&mut self, name_or_nr: &str, name: Option<String>) -> Result<ReplResponse> {
+        let mut layout = match name_or_nr.parse::<usize>() {
+            Ok(nr) => self.nth_layout(nr)?.clone(),
+            Err(_) => self.layout(name_or_nr)?.clone(),
+        };
         let new_name = match name {
             Some(name) => name,
             None => self.placeholder_name(&layout)?,
@@ -398,8 +428,9 @@ impl Repl {
 
         layout.name = Some(new_name.clone());
         let name_path = new_name.replace(' ', "_").to_lowercase();
-        let path = PathBuf::from(BASE_PATH)
-            .join("static/layouts")
+        let path = self
+            .dirs
+            .layouts_dir()
             .join(&self.language)
             .join(name_path)
             .with_extension("dof");
@@ -425,6 +456,34 @@ impl Repl {
         self.saved.insert(new_name, layout.clone().into());
 
         Ok(ReplResponse::single_layout(layout, String::new()))
+    }
+
+    pub fn remove(&mut self, name: &str, yes: bool) -> Result<ReplResponse> {
+        let key = name.to_lowercase();
+        if !self.saved.contains_key(&key) {
+            return Err(ReplError::UnknownLayout(name.into()));
+        }
+        if !yes {
+            print!("Remove '{name}'? [y/N] ");
+            std::io::stdout().flush()?;
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            if !matches!(input.trim(), "y" | "Y") {
+                return Ok(ReplResponse::no_layout("Cancelled.".into()));
+            }
+        }
+        self.saved.remove(&key);
+        let name_path = key.replace(' ', "_");
+        let path = self
+            .dirs
+            .layouts_dir()
+            .join(&self.language)
+            .join(&name_path)
+            .with_extension("dof");
+        if path.exists() {
+            std::fs::remove_file(&path)?;
+        }
+        Ok(ReplResponse::no_layout(format!("Removed '{name}'.")))
     }
 
     pub fn analyze_layout(&self, layout: &FastLayout) -> Result<String> {
@@ -711,12 +770,10 @@ impl Repl {
     }
 
     pub fn include<P: AsRef<Path>>(&mut self, languages: &[P]) -> Result<ReplResponse> {
-        let layouts_base_path = PathBuf::from(BASE_PATH).join("static/layouts");
-
         let layouts = languages
             .iter()
             .flat_map(|language| {
-                let layouts = load_layouts(layouts_base_path.join(language))
+                let layouts = load_layouts(self.dirs.layouts_dir().join(language.as_ref()))
                     .inspect_err(|e| eprintln!("{e}"))?;
 
                 println!(
@@ -737,7 +794,7 @@ impl Repl {
     }
 
     pub fn languages(&self) -> Result<ReplResponse> {
-        let path = PathBuf::from(BASE_PATH).join("static/language_data");
+        let path = self.dirs.language_data_dir();
 
         let mut buf = String::new();
 
@@ -767,7 +824,7 @@ impl Repl {
         cleaner: CorpusCleaner,
         corpus_paths: &[P],
     ) -> Result<()> {
-        let language_data_path = PathBuf::from(BASE_PATH).join(&self.language_data);
+        let language_data_path = self.dirs.data_dir().join(&self.language_data);
 
         match Data::from_paths(corpus_paths, language, &cleaner) {
             Ok(data) => match data.save(language_data_path) {
@@ -781,7 +838,7 @@ impl Repl {
     }
 
     pub fn load(&mut self, language: String, all: bool, raw: bool) -> Result<ReplResponse> {
-        let corpus_configs = PathBuf::from(BASE_PATH).join(&self.corpus_configs);
+        let corpus_configs = self.dirs.data_dir().join(&self.corpus_configs);
 
         match (all, raw) {
             (true, true) => {
@@ -931,14 +988,16 @@ impl Repl {
     }
 
     fn reset_with_language(&mut self, language: &str) -> Result<()> {
-        let config = Config::with_loaded_weights(PathBuf::from(BASE_PATH).join("config.toml"))?;
+        let config = Config::with_loaded_weights(self.dirs.config_file())?;
         let corpus_configs = config.corpus_configs.clone();
         let language_data = config
             .corpus
             .parent()
             .ok_or_else(|| ReplError::FailedToGetCorpusPath(config.corpus.clone()))?
             .to_path_buf();
-        let corpus_path = PathBuf::from(BASE_PATH)
+        let corpus_path = self
+            .dirs
+            .data_dir()
             .join(&language_data)
             .join(language)
             .with_extension("json");
@@ -949,7 +1008,8 @@ impl Repl {
             .layouts
             .iter()
             .flat_map(|p| {
-                load_layouts(p)
+                let full = self.dirs.data_dir().join(p);
+                load_layouts(full)
                     .inspect_err(|e| println!("Error loading layout at '{}': {e}", p.display()))
             })
             .flat_map(|h| h.into_iter())
@@ -971,6 +1031,120 @@ impl Repl {
         Ok(())
     }
 
+    pub fn config(&mut self, cmd: crate::flags::Config) -> Result<ReplResponse> {
+        if cmd.edit {
+            let path = self.dirs.config_file();
+            let editor = std::env::var("EDITOR")
+                .or_else(|_| std::env::var("VISUAL"))
+                .unwrap_or_else(|_| {
+                    if cfg!(windows) {
+                        "notepad".into()
+                    } else {
+                        "vi".into()
+                    }
+                });
+            std::process::Command::new(&editor).arg(&path).status()?;
+            return self.reload();
+        }
+
+        let any_set = cmd.sfbs.is_some()
+            || cmd.sfs.is_some()
+            || cmd.inrolls.is_some()
+            || cmd.outrolls.is_some()
+            || cmd.onehands.is_some()
+            || cmd.alternates.is_some()
+            || cmd.alternates_sfs.is_some()
+            || cmd.redirects.is_some()
+            || cmd.redirects_sfs.is_some()
+            || cmd.bad_redirects.is_some()
+            || cmd.bad_redirects_sfs.is_some()
+            || cmd.stretches.is_some()
+            || cmd.pinky_ring.is_some()
+            || cmd.lateral_penalty.is_some()
+            || cmd.trigram_precision.is_some()
+            || cmd.max_cores.is_some();
+
+        if any_set {
+            let path = self.dirs.config_file();
+            let mut config = Config::with_loaded_weights(&path)?;
+            let w = &mut config.weights;
+            if let Some(v) = cmd.sfbs {
+                w.sfbs = v;
+            }
+            if let Some(v) = cmd.sfs {
+                w.sfs = v;
+            }
+            if let Some(v) = cmd.inrolls {
+                w.inrolls = v;
+            }
+            if let Some(v) = cmd.outrolls {
+                w.outrolls = v;
+            }
+            if let Some(v) = cmd.onehands {
+                w.onehands = v;
+            }
+            if let Some(v) = cmd.alternates {
+                w.alternates = v;
+            }
+            if let Some(v) = cmd.alternates_sfs {
+                w.alternates_sfs = v;
+            }
+            if let Some(v) = cmd.redirects {
+                w.redirects = v;
+            }
+            if let Some(v) = cmd.redirects_sfs {
+                w.redirects_sfs = v;
+            }
+            if let Some(v) = cmd.bad_redirects {
+                w.bad_redirects = v;
+            }
+            if let Some(v) = cmd.bad_redirects_sfs {
+                w.bad_redirects_sfs = v;
+            }
+            if let Some(v) = cmd.stretches {
+                w.stretches = v;
+            }
+            if let Some(v) = cmd.pinky_ring {
+                w.pinky_ring_bigrams = v;
+            }
+            if let Some(v) = cmd.lateral_penalty {
+                w.lateral_penalty = v;
+            }
+            if let Some(v) = cmd.trigram_precision {
+                config.trigram_precision = v;
+            }
+            if let Some(v) = cmd.max_cores {
+                config.max_cores = v;
+            }
+
+            std::fs::write(&path, toml::to_string_pretty(&config)?)?;
+
+            self.reload()?;
+
+            return Ok(ReplResponse::no_layout("Config saved and reloaded.".into()));
+        }
+
+        // No args: show current weights from disk so they reflect the saved state.
+        let config = Config::with_loaded_weights(self.dirs.config_file())?;
+        let w = &config.weights;
+        let mut buf = String::new();
+        writeln!(buf, "sfbs:              {}", w.sfbs)?;
+        writeln!(buf, "sfs:               {}", w.sfs)?;
+        writeln!(buf, "inrolls:           {}", w.inrolls)?;
+        writeln!(buf, "outrolls:          {}", w.outrolls)?;
+        writeln!(buf, "onehands:          {}", w.onehands)?;
+        writeln!(buf, "alternates:        {}", w.alternates)?;
+        writeln!(buf, "alternates_sfs:    {}", w.alternates_sfs)?;
+        writeln!(buf, "redirects:         {}", w.redirects)?;
+        writeln!(buf, "redirects_sfs:     {}", w.redirects_sfs)?;
+        writeln!(buf, "bad_redirects:     {}", w.bad_redirects)?;
+        writeln!(buf, "bad_redirects_sfs: {}", w.bad_redirects_sfs)?;
+        writeln!(buf, "stretches:         {}", w.stretches)?;
+        writeln!(buf, "pinky_ring_bigrams:{}", w.pinky_ring_bigrams)?;
+        write!(buf, "lateral_penalty:   {}", w.lateral_penalty)?;
+        Ok(ReplResponse::no_layout(buf))
+    }
+
     pub fn reload(&mut self) -> Result<ReplResponse> {
         self.reset_with_language(&self.language.clone())?;
 
@@ -980,7 +1154,7 @@ impl Repl {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_layouts<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Layout>> {
-    let base = PathBuf::from(BASE_PATH).join(&path);
+    let base = path.as_ref().to_path_buf();
     let pattern = match base.is_dir() {
         true => base.join("*.dof"),
         false => base,
@@ -1017,7 +1191,11 @@ mod tests {
 
     use super::*;
 
-    static REPL: Lazy<Repl> = Lazy::new(|| Repl::new("config.toml").unwrap());
+    static REPL: Lazy<Repl> = Lazy::new(|| {
+        let dirs =
+            OxeylyzerDirs::with_override(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."));
+        Repl::new(dirs).unwrap()
+    });
 
     static QWERTY: Lazy<FastLayout> = Lazy::new(|| {
         let dof_str = r#"

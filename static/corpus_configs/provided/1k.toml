@@ -1,3 +1,0 @@
-sources = [ "../../text/1k" ]
-
-inherits = [ "./default.toml" ]

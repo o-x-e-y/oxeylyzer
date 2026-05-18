@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::{OxeylyzerError, OxeylyzerResultExt, Result};
 
 /// Configuration for penalizing excessive finger usage.
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct MaxFingerUse {
     /// The penalty multiplier applied when a finger exceeds its usage limit.
     pub penalty: f64,
@@ -22,7 +22,7 @@ pub struct MaxFingerUse {
     pub thumb: f64,
 }
 
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 /// Holds weights used for calculating various layout penalties and rewards.
 ///
 /// # Examples:
@@ -166,7 +166,7 @@ impl From<Weights> for AnalyzerWeights {
 }
 
 #[serde_as]
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 /// Configuration for the layout generation.
 ///
 /// # Examples:
@@ -190,6 +190,57 @@ pub struct Config {
     pub weights: Weights,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            corpus: PathBuf::from("./static/language_data/english.json"),
+            layouts: vec![
+                PathBuf::from("./static/layouts/english"),
+                PathBuf::from("./static/layouts/shai"),
+            ],
+            corpus_configs: PathBuf::from("./static/corpus_configs/**/"),
+            trigram_precision: 1000,
+            max_cores: 32,
+            weights: Weights {
+                lateral_penalty: 1.3,
+                sfbs: -7.0,
+                sfs: -1.0,
+                stretches: -0.3,
+                pinky_ring_bigrams: -0.2,
+                inrolls: 2.5,
+                outrolls: 2.4,
+                onehands: 0.9,
+                alternates: 0.4,
+                alternates_sfs: 0.1,
+                redirects: -3.4,
+                redirects_sfs: -4.2,
+                bad_redirects: -4.9,
+                bad_redirects_sfs: -5.5,
+                finger_weights: FingerWeights {
+                    lp: 1.4,
+                    lr: 3.6,
+                    lm: 4.8,
+                    li: 5.5,
+                    lt: 3.3,
+                    rt: 3.3,
+                    ri: 5.5,
+                    rm: 4.8,
+                    rr: 3.6,
+                    rp: 1.4,
+                },
+                max_finger_use: MaxFingerUse {
+                    penalty: 0.0,
+                    pinky: 9.0,
+                    ring: 14.0,
+                    middle: 20.0,
+                    index: 20.0,
+                    thumb: 22.0,
+                },
+            },
+        }
+    }
+}
+
 impl Config {
     /// Loads a configuration from a file path.
     ///
@@ -204,57 +255,9 @@ impl Config {
         toml::from_str::<Self>(&content).path_context(path)
     }
 
-    /// Creates a configuration with default values.
-    ///
-    /// # Examples:
-    /// ```
-    /// # use oxeylyzer_core::weights::Config;
-    /// let config = Config::with_defaults();
-    /// ```
+    /// Creates a configuration with default values. Equivalent to `Config::default()`.
     pub fn with_defaults() -> Self {
-        Self {
-            corpus: PathBuf::from("./static/language_data/english.json"),
-            layouts: vec![PathBuf::from("./static/layouts/english")],
-            corpus_configs: PathBuf::from("./static/corpus_configs/**/"),
-            trigram_precision: 100000,
-            max_cores: 128,
-            weights: Weights {
-                lateral_penalty: 1.3,
-                sfbs: -8.0,
-                sfs: -1.0,
-                stretches: -0.3,
-                pinky_ring_bigrams: -0.0,
-                inrolls: 1.6,
-                outrolls: 1.3,
-                onehands: 0.8,
-                alternates: 0.7,
-                alternates_sfs: 0.35,
-                redirects: -1.5,
-                redirects_sfs: -2.75,
-                bad_redirects: -4.0,
-                bad_redirects_sfs: -6.0,
-                finger_weights: FingerWeights {
-                    lp: 1.4,
-                    lr: 3.6,
-                    lm: 4.8,
-                    li: 5.5,
-                    lt: 3.3,
-                    rt: 3.3,
-                    ri: 5.5,
-                    rm: 4.8,
-                    rr: 3.6,
-                    rp: 1.4,
-                },
-                max_finger_use: MaxFingerUse {
-                    penalty: 2.5,
-                    pinky: 9.0,
-                    ring: 16.0,
-                    middle: 19.5,
-                    index: 18.0,
-                    thumb: 22.0,
-                },
-            },
-        }
+        Self::default()
     }
 
     /// Gets the trigram precision.

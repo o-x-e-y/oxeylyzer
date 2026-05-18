@@ -31,16 +31,13 @@
               rust
               bun
               pkg-config
-              cargo-tarpaulin
               librsvg
               webkitgtk_4_1
-              (pkgs.writeShellScriptBin "cargoo" ''
-                subcommand="$1"
-                shift
-                exec cargo "$subcommand" --manifest-path src-tauri/Cargo.toml "$@"
+              (pkgs.writeShellScriptBin "" ''
+                
               '')
             ];
-            
+
             shellHook = ''
               # Needed on Wayland to report the correct display scale
               export XDG_DATA_DIRS="$GSETTINGS_SCHEMAS_PATH"

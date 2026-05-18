@@ -1,3 +1,0 @@
-sources = [ "../../text/french_qu" ]
-
-inherits = [ "./default.toml", "./french.toml" ]

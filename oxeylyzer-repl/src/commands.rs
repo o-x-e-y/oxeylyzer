@@ -86,8 +86,9 @@ impl Repl {
             Swap(s) => self.swap(&s.name, &s.swaps),
             Rank(_) => self.rank(),
             Generate(i) => self.generate(&i.name, i.count, i.pins),
-            Save(s) => self.save(s.n, s.name),
+            Save(s) => self.save(&s.name_or_nr, s.name),
             Sfbs(s) => self.sfbs(&s.name, s.count),
+            Remove(r) => self.remove(&r.name, r.yes),
             Fspeed(s) => self.fspeed(&s.name, s.count),
             Stretches(s) => self.stretches(&s.name, s.count),
             Scissors(s) => self.scissors(&s.name, s.count),
@@ -98,6 +99,7 @@ impl Repl {
             Languages(_) => self.languages(),
             Load(l) => self.load(l.language, l.all, l.raw),
             Ngram(n) => self.ngram(&n.ngram),
+            Config(c) => self.config(c),
             Reload(_) => self.reload(),
             Quit(_) => return Ok(ReplStatus::Quit),
         };

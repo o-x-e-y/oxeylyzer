@@ -29,10 +29,16 @@ xflags::xflags! {
             /// Sets pinned characters on the layout to optimize, `-p abc` pins `abc`.
             optional -p, --pins pins: String
         }
-        /// Saves the nth layout that was generated. Optionally, you can provide a name as `-n <name>`.
+        /// Saves a layout by index or name. Optionally, you can provide a save name as a second argument.
         cmd save s {
-            required n: usize
+            required name_or_nr: String
             optional name: String
+        }
+        /// Removes a saved layout by name, deleting it from disk.
+        cmd remove rm {
+            required name: String
+            /// Skip the confirmation prompt.
+            optional -y, --yes
         }
         /// Shows the top n sfbs on a layout. 10 by default.
         cmd sfbs {
@@ -88,6 +94,28 @@ xflags::xflags! {
         /// Gives information about a certain ngram. for 2 letter ones, skipgram info will be provided as well.
         cmd ngram n occ freq {
             required ngram: String
+        }
+        /// Show current weights, or modify them. Pass weight flags to update values (e.g. `config
+        /// --sfbs 1.0`). Pass `--edit` to open the config file in $EDITOR.
+        cmd config cfg weights {
+            /// Open the config file in $EDITOR (or $VISUAL, vi, notepad as fallbacks).
+            optional --edit
+            optional --sfbs sfbs: f64
+            optional --sfs sfs: f64
+            optional --inrolls inrolls: f64
+            optional --outrolls outrolls: f64
+            optional --onehands onehands: f64
+            optional --alternates alternates: f64
+            optional --alternates-sfs alternates_sfs: f64
+            optional --redirects redirects: f64
+            optional --redirects-sfs redirects_sfs: f64
+            optional --bad-redirects bad_redirects: f64
+            optional --bad-redirects-sfs bad_redirects_sfs: f64
+            optional --stretches stretches: f64
+            optional --pinky-ring pinky_ring_bigrams: f64
+            optional --lateral-penalty lateral_penalty: f64
+            optional --trigram-precision trigram_precision: usize
+            optional --max-cores max_cores: usize
         }
         /// Refreshes the config, default characters for the analyzer. Will retain previously generated layouts.
         cmd reload r {}

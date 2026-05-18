@@ -12,9 +12,9 @@ use ansi_rgb::{Colorable, rgb};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 
 pub fn heatmap_heat(c: char, data: &AnalyzerData) -> String {
-    let complement = 225.0 - (data.get_char(c) as f64 / data.char_total as f64) * 1720.0;
+    let complement = 215.0 - (data.get_char(c) as f64 / data.char_total as f64) * 1720.0;
     let complement = complement.max(0.0) as u8;
-    let heat = rgb(225, complement, complement);
+    let heat = rgb(215, complement, complement);
 
     format!("{}", c.to_string().fg(heat))
 }
