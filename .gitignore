@@ -10,5 +10,6 @@ static/stats
 static/history.txt
 session.json
 .direnv
+.vite
 result
 tarpaulin-report.*
