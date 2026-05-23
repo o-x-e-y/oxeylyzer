@@ -809,8 +809,8 @@ impl Repl {
                     .replace(".json", "");
 
                 match name.as_str() {
-                    "test" => writeln!(&mut buf, "{}", name),
-                    _ => Ok(()),
+                    "test" => Ok(()),
+                    _ => writeln!(&mut buf, "{}", name),
                 }
             })
             .try_for_each(|e| e)?;
