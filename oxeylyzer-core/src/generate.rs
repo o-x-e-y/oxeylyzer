@@ -1103,6 +1103,9 @@ pub mod annealing;
 /// Iterated local search algorithm.
 pub mod ils;
 
+/// Late acceptance hill climbing search algorithm.
+pub mod lahc;
+
 mod obsolete;
 
 #[cfg(test)]
