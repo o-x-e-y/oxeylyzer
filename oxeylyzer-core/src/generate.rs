@@ -1048,14 +1048,7 @@ where {
         let mut layout = based_on.clone();
 
         if !pins.is_empty() {
-            layout.possible_swaps = layout
-                .possible_swaps
-                .iter()
-                .copied()
-                .filter(|&PosPair(a, b)| {
-                    !pins.contains(&(a as usize)) && !pins.contains(&(b as usize))
-                })
-                .collect();
+            layout.possible_swaps = engine::filtered_swaps(&layout, pins).into();
         }
 
         self.optimize(layout.random_with_pins(pins))
@@ -1082,14 +1075,7 @@ where {
         let mut layout = based_on.clone();
 
         if !pins.is_empty() {
-            layout.possible_swaps = layout
-                .possible_swaps
-                .iter()
-                .copied()
-                .filter(|&PosPair(a, b)| {
-                    !pins.contains(&(a as usize)) && !pins.contains(&(b as usize))
-                })
-                .collect();
+            layout.possible_swaps = engine::filtered_swaps(&layout, pins).into();
         }
 
         (0..amount)

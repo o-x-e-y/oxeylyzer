@@ -7,13 +7,16 @@ use crate::generate::Oxeylyzer;
 use crate::layout::PosPair;
 
 /// A layout search algorithm. Implementors only need [`Engine::generate_with_pins`];
-/// the other methods have default implementations.
+/// the other methods have default implementations. `Sync` is required by the rayon-based
+/// default methods. The `impl ParallelIterator` return types make the trait not dyn-compatible;
+/// use an enum or generics for runtime algorithm selection.
 pub trait Engine: Sync {
-    /// Generates one optimized layout starting from a random shuffle of `based_on`,
-    /// keeping pinned positions fixed.
+    /// Generates one optimized layout derived from `based_on`'s key set, keeping pinned
+    /// positions fixed. Most implementations start from a random shuffle of the unpinned keys.
     fn generate_with_pins(&self, based_on: &FastLayout, pins: &[usize]) -> FastLayout;
 
-    /// Generates one optimized layout starting from a random shuffle of `basis`.
+    /// Generates one optimized layout derived from `basis`'s key set, without any pins.
+    /// Most implementations start from a random shuffle of the keys.
     fn generate(&self, basis: &FastLayout) -> FastLayout {
         self.generate_with_pins(basis, &[])
     }
@@ -47,14 +50,13 @@ impl Engine for Oxeylyzer {
 }
 
 /// Returns `based_on.possible_swaps` minus any swap touching a pinned position.
+/// Returns a `Vec` so callers can extend or convert (e.g. `.into()` for `Arc<[PosPair]>`).
 pub fn filtered_swaps(based_on: &FastLayout, pins: &[usize]) -> Vec<PosPair> {
     based_on
         .possible_swaps
         .iter()
         .copied()
-        .filter(|&PosPair(a, b)| {
-            !pins.contains(&(a as usize)) && !pins.contains(&(b as usize))
-        })
+        .filter(|&PosPair(a, b)| !pins.contains(&(a as usize)) && !pins.contains(&(b as usize)))
         .collect()
 }
 
@@ -88,6 +90,7 @@ mod tests {
 
         let swaps = filtered_swaps(qwerty, &pins);
 
+        assert!(swaps.len() < qwerty.possible_swaps.len());
         assert!(!swaps.is_empty());
         for crate::layout::PosPair(a, b) in &swaps {
             assert!(!pins.contains(&(*a as usize)));

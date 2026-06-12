@@ -58,5 +58,8 @@ pub(crate) fn assert_valid(basis: &FastLayout, generated: &FastLayout) {
     expected.sort_unstable();
     actual.sort_unstable();
 
-    assert_eq!(expected, actual, "generated layout is not a permutation of the basis");
+    assert_eq!(
+        expected, actual,
+        "generated layout is not a permutation of the basis"
+    );
 }
