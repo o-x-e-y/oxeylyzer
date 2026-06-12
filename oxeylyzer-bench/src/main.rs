@@ -2,6 +2,7 @@ mod flags;
 mod headless;
 mod metrics;
 mod runner;
+mod ui;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
@@ -75,8 +76,20 @@ fn main() -> anyhow::Result<()> {
         if headless {
             headless::run(rx, names);
         } else {
-            // TUI arrives in Task 14; headless is the only mode until then
-            headless::run(rx, names);
+            let target = match budget {
+                Budget::Count(n) => Some(n),
+                Budget::Time(_) => None,
+            };
+            let title = format!(
+                "language: {language} | algorithms: {} | budget: {}",
+                names.join(", "),
+                match budget {
+                    Budget::Count(n) => format!("{n} layouts"),
+                    Budget::Time(d) => format!("{}s each", d.as_secs()),
+                },
+            );
+            let app = ui::App::new(title, names, target);
+            ui::run(rx, app, &cancel)?;
         }
         Ok(())
     })
