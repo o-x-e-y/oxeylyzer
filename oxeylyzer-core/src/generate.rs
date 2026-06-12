@@ -1100,6 +1100,9 @@ pub mod hill_climber;
 /// Simulated annealing search algorithm.
 pub mod annealing;
 
+/// Iterated local search algorithm.
+pub mod ils;
+
 mod obsolete;
 
 #[cfg(test)]
