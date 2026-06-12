@@ -1106,6 +1106,9 @@ pub mod ils;
 /// Late acceptance hill climbing search algorithm.
 pub mod lahc;
 
+/// Depth-2 swap search algorithm.
+pub mod depth;
+
 mod obsolete;
 
 #[cfg(test)]
