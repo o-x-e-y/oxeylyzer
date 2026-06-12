@@ -2,6 +2,7 @@
 name = "oxeylyzer-bench"
 version = "0.1.0"
 edition = "2024"
+default-run = "oxeylyzer-bench"
 
 [dependencies]
 oxeylyzer-core = { path = "../oxeylyzer-core" }
