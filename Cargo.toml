@@ -9,6 +9,7 @@ members = [
     "oxeylyzer-core",
     "oxeylyzer-repl",
     "oxeylyzer-resources",
+    "oxeylyzer-bench",
     "oxeylyzer-tauri/src-tauri"
 ]
 
