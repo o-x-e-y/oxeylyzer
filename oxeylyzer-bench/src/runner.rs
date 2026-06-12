@@ -127,9 +127,11 @@ fn run_one(
             cancel,
         ),
         AlgorithmKind::Annealing => drive(
+            // tuned 2026-06-12 (english/sturdy, 10-60s budgets): 0.9997 found
+            // the optimum ~3.3x/min vs ~1x/min for the old 0.9995
             &SimulatedAnnealing {
                 analyzer,
-                cooling: 0.9995,
+                cooling: 0.9997,
                 iters: 50_000,
             },
             idx,
@@ -141,10 +143,12 @@ fn run_one(
             cancel,
         ),
         AlgorithmKind::Ils => drive(
+            // tuned 2026-06-12: (5, 25) found the optimum ~8x/min — the best
+            // of all tuned configs; (6, 25) and (5, 35) perform comparably
             &IteratedLocalSearch {
                 analyzer,
-                perturb_swaps: 4,
-                rounds: 10,
+                perturb_swaps: 5,
+                rounds: 25,
             },
             idx,
             analyzer,
@@ -155,6 +159,8 @@ fn run_one(
             cancel,
         ),
         AlgorithmKind::Lahc => drive(
+            // tuned 2026-06-12: history is a narrow basin — 100 and 5000 never
+            // find the optimum; 1000 confirmed best, iters 50k-200k equivalent
             &LateAcceptanceHillClimbing {
                 analyzer,
                 history: 1_000,
