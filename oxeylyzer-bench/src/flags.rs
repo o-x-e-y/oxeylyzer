@@ -3,6 +3,8 @@ xflags::xflags! {
     cmd bench {
         /// Language corpus to use (default: english)
         optional -l, --language language: String
+        /// Basis layout name; defines the key set and geometry (default: sturdy, or the first found)
+        optional -b, --basis basis: String
         /// Number of layouts to generate per algorithm (default: 100)
         optional -n, --count count: usize
         /// Wall-clock budget per algorithm in seconds (overrides --count)

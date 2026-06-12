@@ -26,10 +26,20 @@ fn main() -> anyhow::Result<()> {
 
     let saved = oxeylyzer_repl::repl::load_layouts(dirs.layouts_dir().join(&language))
         .map_err(|e| anyhow!("{e}"))?;
-    let basis_layout = saved
-        .get("sturdy")
-        .or_else(|| saved.values().next())
-        .with_context(|| format!("no layouts found for language '{language}'"))?;
+    let basis_layout = match &flags.basis {
+        Some(name) => saved.get(name).with_context(|| {
+            let mut known = saved.keys().cloned().collect::<Vec<_>>();
+            known.sort();
+            format!(
+                "layout '{name}' not found for language '{language}' (available: {})",
+                known.join(", ")
+            )
+        })?,
+        None => saved
+            .get("sturdy")
+            .or_else(|| saved.values().next())
+            .with_context(|| format!("no layouts found for language '{language}'"))?,
+    };
     let basis = analyzer.fast_layout(basis_layout, &[]);
 
     // pins are given as characters; translate to positions on the basis
