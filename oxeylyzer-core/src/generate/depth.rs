@@ -2,8 +2,8 @@
 //!
 //! [`DepthTwoHillClimber`] runs the full quadratic search every move (expected
 //! to lose on throughput-adjusted quality — it exists to be measured).
-//! A later task adds `VariableNeighborhoodDescent`, which only pays the
-//! quadratic cost at depth-1 local optima, as an escape mechanism.
+//! [`VariableNeighborhoodDescent`] only pays the quadratic cost at depth-1
+//! local optima, as an escape mechanism.
 
 use crate::fast_layout::FastLayout;
 use crate::generate::engine::{Engine, filtered_swaps};
@@ -89,6 +89,55 @@ impl Engine for DepthTwoHillClimber<'_> {
     }
 }
 
+/// Variable neighborhood descent: climb with single swaps until stalled, then
+/// search the depth-2 neighborhood once to escape; repeat until even depth-2
+/// finds nothing better.
+pub struct VariableNeighborhoodDescent<'a> {
+    /// The analyzer providing scoring and swap evaluation.
+    pub analyzer: &'a Oxeylyzer,
+    /// Maximum number of depth-2 escapes before giving up.
+    pub max_escapes: usize,
+}
+
+impl Engine for VariableNeighborhoodDescent<'_> {
+    fn generate_with_pins(&self, based_on: &FastLayout, pins: &[usize]) -> FastLayout {
+        let analyzer = self.analyzer;
+        let swaps = filtered_swaps(based_on, pins);
+        let mut layout = based_on.random_with_pins(pins);
+
+        if swaps.is_empty() {
+            return layout;
+        }
+
+        let mut cache = analyzer.initialize_cache(&layout);
+        let mut escapes = 0;
+
+        loop {
+            analyzer.climb(&mut layout, &mut cache, &swaps, 200);
+            let current = cache.total_score();
+
+            // after a full climb no single swap improves, so only a true
+            // double swap can escape
+            if escapes < self.max_escapes {
+                if let Some((a, Some(b), score)) =
+                    best_double_swap(analyzer, &mut layout, &cache, &swaps)
+                {
+                    if score > current {
+                        analyzer.accept_swap(&mut layout, &a, &mut cache);
+                        analyzer.accept_swap(&mut layout, &b, &mut cache);
+                        escapes += 1;
+                        continue;
+                    }
+                }
+            }
+
+            break;
+        }
+
+        layout
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,5 +182,27 @@ mod tests {
         let generated = engine.generate(qwerty);
 
         test_util::assert_valid(qwerty, &generated);
+    }
+
+    #[test]
+    fn vnd_ends_at_depth_two_local_optimum() {
+        let analyzer = test_util::analyzer();
+        let qwerty = test_util::qwerty();
+        let engine = VariableNeighborhoodDescent {
+            analyzer,
+            max_escapes: 3,
+        };
+
+        let mut generated = engine.generate(qwerty);
+
+        test_util::assert_valid(qwerty, &generated);
+        assert!(test_util::score(&generated) > test_util::score(qwerty));
+
+        // no single swap may improve the result (it ends with a climb)
+        let cache = analyzer.initialize_cache(&generated);
+        let swaps = generated.possible_swaps.clone();
+        let (swap, _) =
+            analyzer.best_swap_cached(&mut generated, &cache, &swaps, Some(cache.total_score()));
+        assert!(swap.is_none());
     }
 }
