@@ -1094,6 +1094,9 @@ where {
 /// The [`Engine`](engine::Engine) trait implemented by all search algorithms.
 pub mod engine;
 
+/// The baseline hill climbing search algorithm.
+pub mod hill_climber;
+
 mod obsolete;
 
 #[cfg(test)]
