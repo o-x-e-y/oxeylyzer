@@ -3,7 +3,6 @@ use std::time::Duration;
 
 /// Collected results for one algorithm during a bench run.
 pub struct AlgoMetrics {
-    #[allow(dead_code)]
     pub name: &'static str,
     pub scores: Vec<i64>,
     /// layout string → occurrence count, for duplicate detection
