@@ -38,9 +38,12 @@ export default function LayoutSearch(props: Props) {
   const [hovering, setHovering] = createSignal(false);
 
   const names = () => appStore.layouts.map((l) => l.name);
+  const allSorted = () => [...names()].sort((a, b) => a.localeCompare(b));
 
   const doSearch = (q: string) => {
-    const found = q ? searchLayouts(q, names()) : [];
+    // Empty query shows the full (alphabetical) list so the user can browse
+    // before typing; queries narrow it via trigram matching.
+    const found = q ? searchLayouts(q, names()) : allSorted();
     setResults(found);
     setSelectedIdx(0);
     // Auto-select on exact or unique match (not a pure integer), keep dropdown open
@@ -66,9 +69,10 @@ export default function LayoutSearch(props: Props) {
         placeholder={props.placeholder ?? (props.value || "search layout…")}
         value={query()}
         onFocus={() => {
-          // Clear on refocus so the user sees a blank box ready to type
+          // Clear on refocus and show the full list, ready to browse or type
           setQuery("");
-          setResults([]);
+          setResults(allSorted());
+          setSelectedIdx(0);
         }}
         onInput={(e) => {
           setQuery(e.currentTarget.value);
@@ -101,7 +105,7 @@ export default function LayoutSearch(props: Props) {
       />
       <Show when={results().length > 0}>
         <div
-          class="absolute left-0 top-full mt-0.5 w-full bg-neutral-800 border border-neutral-600 z-50 flex flex-col"
+          class="absolute left-0 top-full mt-0.5 w-full bg-neutral-800 border border-neutral-600 z-50 flex flex-col max-h-64 overflow-y-auto"
           onMouseEnter={() => setHovering(true)}
           onMouseLeave={() => setHovering(false)}
         >

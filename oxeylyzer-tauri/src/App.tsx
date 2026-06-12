@@ -1,4 +1,4 @@
-import { createSignal, Match, onMount, onCleanup, Show, Switch } from "solid-js";
+import { createEffect, createSignal, Match, onMount, onCleanup, Show, Switch } from "solid-js";
 import { listen } from "@tauri-apps/api/event";
 import TitleBar from "./components/TitleBar";
 import LayoutsView from "./views/LayoutsView";
@@ -8,7 +8,8 @@ import GenerateView from "./views/GenerateView";
 import LanguageView from "./views/LanguageView";
 import EditView from "./views/EditView";
 import ConfigView from "./views/ConfigView";
-import { initStore, appStore } from "./store";
+import { initStore, refreshStore, appStore, heatScheme, setHeatScheme } from "./store";
+import type { HeatScheme } from "./store";
 import { getSession, setSession } from "./api";
 
 type View = "layouts" | "analyze" | "compare" | "generate" | "language" | "edit" | "config";
@@ -28,12 +29,20 @@ function App() {
   const [analyzeTarget, setAnalyzeTarget] = createSignal<string | undefined>(undefined);
   const [editTarget, setEditTarget] = createSignal<string | undefined>(undefined);
 
+  let sessionRestored = false;
+
   onMount(async () => {
     await initStore();
 
-    // Auto-reload when config/layout files change on disk
-    const unlisten = await listen("config-reloaded", () => initStore());
-    onCleanup(unlisten);
+    // Refresh (without unmounting views) when files change on disk —
+    // config-reloaded means the engine was rebuilt, layouts-reloaded means
+    // only layout files changed (e.g. the app's own saves).
+    const unlistenConfig = await listen("config-reloaded", () => refreshStore());
+    const unlistenLayouts = await listen("layouts-reloaded", () => refreshStore());
+    onCleanup(() => {
+      unlistenConfig();
+      unlistenLayouts();
+    });
 
     try {
       const session = await getSession();
@@ -43,9 +52,19 @@ function App() {
       if (session.lastLayout) {
         setAnalyzeTarget(session.lastLayout);
       }
+      if (session.heatScheme && ["original", "playground", "v2"].includes(session.heatScheme)) {
+        setHeatScheme(session.heatScheme as HeatScheme);
+      }
     } catch {
       // session restore is best-effort
     }
+    sessionRestored = true;
+  });
+
+  // Persist the heat scheme whenever it changes (after initial restore).
+  createEffect(() => {
+    heatScheme();
+    if (sessionRestored) persistSession(view(), analyzeTarget() ?? null);
   });
 
   function goAnalyze(layoutName: string) {
@@ -69,6 +88,7 @@ function App() {
       view: v,
       language: appStore.currentLanguage,
       lastLayout,
+      heatScheme: heatScheme(),
     }).catch(() => {});
   }
 

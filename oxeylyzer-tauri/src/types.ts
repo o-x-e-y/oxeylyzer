@@ -3,6 +3,8 @@ export type LayoutStats = {
   dsfb: number;
   fspeed: number;
   finger_speed: number[];
+  /** per-finger usage as % of all keystrokes, LP..RP order */
+  finger_usage: number[];
   stretches: number;
   scissors: number;
   lsbs: number;
@@ -42,6 +44,11 @@ export type BigramEntry = {
   percent: number;
 };
 
+export type TrigramEntry = {
+  trigram: string;
+  percent: number;
+};
+
 export type NgramResult =
   | { kind: "unigram"; char: string; percent: number }
   | {
@@ -59,11 +66,21 @@ export type NgramResult =
 
 export type BigramTab = "sfbs" | "fspeed" | "scissors" | "lsbs" | "pinky-ring" | "stretches";
 
-export const BIGRAM_TABS: { id: BigramTab; label: string }[] = [
-  { id: "sfbs", label: "SFBs" },
-  { id: "fspeed", label: "Fspeed" },
-  { id: "scissors", label: "Scissors" },
-  { id: "lsbs", label: "LSBs" },
-  { id: "pinky-ring", label: "Pinky-Ring" },
-  { id: "stretches", label: "Stretches" },
+export type TrigramTab = "inrolls" | "outrolls" | "onehands" | "alternates" | "redirects" | "sfts";
+
+export type NgramTab = { id: BigramTab; kind: "bigram"; label: string } | { id: TrigramTab; kind: "trigram"; label: string };
+
+export const NGRAM_TABS: NgramTab[] = [
+  { id: "sfbs", kind: "bigram", label: "SFBs" },
+  { id: "fspeed", kind: "bigram", label: "Fspeed" },
+  { id: "scissors", kind: "bigram", label: "Scissors" },
+  { id: "lsbs", kind: "bigram", label: "LSBs" },
+  { id: "pinky-ring", kind: "bigram", label: "Pinky-Ring" },
+  { id: "stretches", kind: "bigram", label: "Stretches" },
+  { id: "inrolls", kind: "trigram", label: "Inrolls" },
+  { id: "outrolls", kind: "trigram", label: "Outrolls" },
+  { id: "onehands", kind: "trigram", label: "Onehands" },
+  { id: "alternates", kind: "trigram", label: "Alternates" },
+  { id: "redirects", kind: "trigram", label: "Redirects" },
+  { id: "sfts", kind: "trigram", label: "SFTs" },
 ];

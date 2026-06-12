@@ -107,10 +107,15 @@ pub enum NgramResultDto {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionDto {
     pub view: String,
     pub language: String,
+    // Option fields default to None when missing, which keeps old session
+    // files (snake_case last_layout) loadable — that key is simply ignored.
     pub last_layout: Option<String>,
+    #[serde(default)]
+    pub heat_scheme: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -1288,6 +1293,7 @@ fn get_session(state: tauri::State<'_, AppState>) -> Result<SessionDto, String> 
             view: "layouts".to_string(),
             language: state.engine.lock().unwrap().language.clone(),
             last_layout: None,
+            heat_scheme: None,
         });
     }
     let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;

@@ -1,12 +1,14 @@
-import { createEffect, createMemo, createSignal, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import KeyboardDisplay from "../components/KeyboardDisplay";
 import BigramList from "../components/BigramList";
 import LayoutSearch from "../components/LayoutSearch";
+import FingerStats from "../components/FingerStats";
 import { AnalyzeStatColumns } from "../components/StatColumns";
-import { BIGRAM_TABS, type BigramTab, type Layout, type BigramEntry } from "../types";
+import { NGRAM_TABS, type Layout, type BigramEntry } from "../types";
 import { appStore, heatScheme, setHeatScheme, type HeatScheme } from "../store";
+import { heatStyleFor } from "../heat";
 import Dropdown from "../components/Dropdown";
-import { analyzeLayout, getBigrams, analyzeCustom } from "../api";
+import { analyzeLayout, getBigrams, getTrigrams, analyzeCustom, saveCustomLayout } from "../api";
 
 type Props = {
   initialLayout?: string;
@@ -19,11 +21,14 @@ export default function AnalyzeView(props: Props) {
   const [layout, setLayout] = createSignal<Layout | null>(null);
   const [baseline, setBaseline] = createSignal<Layout | null>(null);
   const [previous, setPrevious] = createSignal<Layout | null>(null);
-  const [activeTab, setActiveTab] = createSignal<BigramTab>("sfbs");
+  const [activeTabId, setActiveTabId] = createSignal<string>("sfbs");
+  const activeTab = () => NGRAM_TABS.find((t) => t.id === activeTabId()) ?? NGRAM_TABS[0];
   const [count, setCount] = createSignal(10);
   const [bigramData, setBigramData] = createSignal<BigramEntry[]>([]);
   const [highlightedKeys, setHighlightedKeys] = createSignal<string[]>([]);
   const [loading, setLoading] = createSignal(false);
+  const [saveName, setSaveName] = createSignal("");
+  const [saveMsg, setSaveMsg] = createSignal<{ text: string; ok: boolean } | null>(null);
   // Disabled state tracks characters, not positions, so they follow keys through swaps.
   const [disabledChars, setDisabledChars] = createSignal<Set<string>>(new Set());
   // Derive the current disabled position indices from the current key arrangement.
@@ -61,13 +66,26 @@ export default function AnalyzeView(props: Props) {
     });
   });
 
-  // Refetch bigrams when layout name or tab changes.
+  // Refetch ngram lists when the arrangement, disabled keys, or tab changes.
+  // Modified arrangements pass their keys/disabled positions so the lists
+  // describe what's on screen, not the original saved layout.
   createEffect(() => {
-    const name = layout()?.name;
+    const l = layout();
     const tab = activeTab();
-    const base = name?.replace(/\*+$/, "");
-    if (!base) return;
-    getBigrams(base, tab, 50).then(setBigramData);
+    const base = l?.name.replace(/\*+$/, "");
+    if (!l || !base) return;
+
+    const modified = l.name.endsWith("*");
+    const keys = modified ? l.keys : undefined;
+    const disabled = disabledIndices().size > 0 ? [...disabledIndices()] : undefined;
+
+    if (tab.kind === "bigram") {
+      getBigrams(base, tab.id, 50, keys, disabled).then(setBigramData).catch(console.error);
+    } else {
+      getTrigrams(base, tab.id, 50, keys, disabled)
+        .then((entries) => setBigramData(entries.map((e) => ({ bigram: e.trigram, percent: e.percent }))))
+        .catch(console.error);
+    }
   });
 
   async function handleSelect(name: string) {
@@ -160,12 +178,28 @@ export default function AnalyzeView(props: Props) {
     const baseName = bl.name.replace(/\*+$/, "");
     const s = nextSeq();
     setDisabledChars(new Set<string>());
+    setSaveMsg(null);
     analyzeLayout(baseName).then((fresh) =>
       applyIfCurrent(s, () => {
         setLayout(fresh);
         setPrevious(null);
       }),
     );
+  }
+
+  async function handleSaveAs() {
+    const l = layout();
+    if (!l) return;
+    const baseName = l.name.replace(/\*+$/, "");
+    try {
+      await saveCustomLayout(baseName, l.keys, saveName());
+      setSaveMsg({ text: `Saved as "${saveName()}".`, ok: true });
+      const newName = saveName();
+      setSaveName("");
+      await handleSelect(newName);
+    } catch (e) {
+      setSaveMsg({ text: String(e), ok: false });
+    }
   }
 
   const displayBigrams = () => bigramData().slice(0, count());
@@ -190,6 +224,30 @@ export default function AnalyzeView(props: Props) {
           >
             ↩ Reset
           </button>
+          <input
+            class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-xs px-2 py-0.5 w-32"
+            placeholder="save as…"
+            value={saveName()}
+            onInput={(e) => setSaveName(e.currentTarget.value)}
+            onKeyDown={(e) => e.key === "Enter" && saveName().trim() && handleSaveAs()}
+          />
+          <button
+            class="border border-neutral-600 text-xs font-mono px-2 py-0.5 hover:bg-neutral-700 disabled:opacity-40"
+            disabled={!saveName().trim()}
+            onClick={handleSaveAs}
+          >
+            Save
+          </button>
+        </Show>
+        <Show when={saveMsg()}>
+          {(m) => (
+            <span
+              class="text-xs font-mono"
+              classList={{ "text-neutral-400": m().ok, "text-red-400": !m().ok }}
+            >
+              {m().text}
+            </span>
+          )}
         </Show>
         <Show when={layout() && !isModified()}>
           <button
@@ -229,22 +287,31 @@ export default function AnalyzeView(props: Props) {
               <div class="text-xs text-neutral-700 font-mono">
                 drag to swap · right-click to disable
               </div>
+              {/* heat legend for the active color scheme */}
+              <div class="flex items-center gap-0 font-mono text-[10px] text-neutral-500">
+                <span class="mr-1.5">0%</span>
+                <For each={[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]}>
+                  {(pct) => <div class="w-4 h-2.5" style={heatStyleFor(pct)} />}
+                </For>
+                <span class="ml-1.5">12%+</span>
+              </div>
             </div>
 
-            {/* ── Stat columns ─────────────────────────────────── */}
+            {/* ── Stat columns + finger load ───────────────────── */}
             <AnalyzeStatColumns stats={l().stats} baseline={previous()?.stats} />
+            <FingerStats stats={l().stats} />
 
-            {/* ── Bigram tabs ───────────────────────────────────── */}
+            {/* ── Ngram tabs (bigram + trigram categories) ─────── */}
             <div class="flex flex-col border border-neutral-700">
-              <div class="shrink-0 flex items-center border-b border-neutral-700">
-                {BIGRAM_TABS.map((tab) => (
+              <div class="shrink-0 flex items-center border-b border-neutral-700 flex-wrap">
+                {NGRAM_TABS.map((tab) => (
                   <button
-                    class="px-4 py-2 text-sm border-r border-neutral-700 hover:bg-neutral-800"
+                    class="px-3 py-2 text-sm border-r border-neutral-700 hover:bg-neutral-800"
                     classList={{
-                      "bg-neutral-700 text-white": activeTab() === tab.id,
-                      "text-neutral-400": activeTab() !== tab.id,
+                      "bg-neutral-700 text-white": activeTabId() === tab.id,
+                      "text-neutral-400": activeTabId() !== tab.id,
                     }}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => setActiveTabId(tab.id)}
                   >
                     {tab.label}
                   </button>
