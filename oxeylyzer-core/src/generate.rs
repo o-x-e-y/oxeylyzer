@@ -1098,7 +1098,13 @@ where {
     }
 }
 
+/// The [`Engine`](engine::Engine) trait implemented by all search algorithms.
+pub mod engine;
+
 mod obsolete;
+
+#[cfg(test)]
+pub(crate) mod test_util;
 
 #[cfg(test)]
 mod tests {
