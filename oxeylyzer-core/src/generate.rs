@@ -1097,6 +1097,9 @@ pub mod engine;
 /// The baseline hill climbing search algorithm.
 pub mod hill_climber;
 
+/// Simulated annealing search algorithm.
+pub mod annealing;
+
 mod obsolete;
 
 #[cfg(test)]
