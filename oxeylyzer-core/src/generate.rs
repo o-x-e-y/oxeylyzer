@@ -1010,6 +1010,8 @@ where {
 
     /// Greedily applies the best available swap until no swap improves the score,
     /// or `max_swaps` swaps have been applied. The layout and cache are updated in place.
+    /// `cache` must have been created from `layout` via [`Self::initialize_cache`] (or kept in sync through [`Self::accept_swap`]).
+    /// A `max_swaps` of 0 is treated as unlimited.
     pub fn climb(
         &self,
         layout: &mut FastLayout,
@@ -1017,6 +1019,10 @@ where {
         possible_swaps: &[PosPair],
         mut max_swaps: usize,
     ) {
+        if max_swaps == 0 {
+            max_swaps = usize::MAX;
+        }
+
         let mut current_best_score = SMALLEST_SCORE;
 
         while let (Some(best_swap), new_score) =

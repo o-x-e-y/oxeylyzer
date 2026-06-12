@@ -14,6 +14,8 @@ use crate::layout::PosPair;
 ///
 /// Returns `(first, Some(second), score)` for a double swap or
 /// `(first, None, score)` for a single swap. The layout is left unmodified.
+/// At a strict depth-2 local optimum this can return a degenerate pair (the second swap undoing the first)
+/// scoring exactly the current total — callers must guard applications with a strict `score > current` check.
 pub fn best_double_swap(
     analyzer: &Oxeylyzer,
     layout: &mut FastLayout,
@@ -118,17 +120,15 @@ impl Engine for VariableNeighborhoodDescent<'_> {
 
             // after a full climb no single swap improves, so only a true
             // double swap can escape
-            if escapes < self.max_escapes {
-                if let Some((a, Some(b), score)) =
+            if escapes < self.max_escapes
+                && let Some((a, Some(b), score)) =
                     best_double_swap(analyzer, &mut layout, &cache, &swaps)
-                {
-                    if score > current {
-                        analyzer.accept_swap(&mut layout, &a, &mut cache);
-                        analyzer.accept_swap(&mut layout, &b, &mut cache);
-                        escapes += 1;
-                        continue;
-                    }
-                }
+                && score > current
+            {
+                analyzer.accept_swap(&mut layout, &a, &mut cache);
+                analyzer.accept_swap(&mut layout, &b, &mut cache);
+                escapes += 1;
+                continue;
             }
 
             break;

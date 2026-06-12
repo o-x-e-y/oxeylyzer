@@ -34,11 +34,10 @@ impl Engine for SimulatedAnnealing<'_> {
         // schedule self-scales to the corpus/weight magnitudes.
         let mut t = {
             let current = cache.total_score();
-            let mut layout_for_temp = layout.clone();
             let (sum, count) = (0..128)
                 .filter_map(|_| {
                     let swap = swaps[rng.generate_range(0..swaps.len())];
-                    analyzer.score_swap_cached(&mut layout_for_temp, &swap, &cache)
+                    analyzer.score_swap_cached(&mut layout, &swap, &cache)
                 })
                 .fold((0.0f64, 0u32), |(s, c), cand| {
                     (s + (cand - current).abs() as f64, c + 1)
