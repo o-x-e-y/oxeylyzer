@@ -1,3 +1,5 @@
+[![CI](https://github.com/oxey/oxeylyzer/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/oxey/oxeylyzer/actions/workflows/ci.yml)
+
 # Oxeylyzer
 
 Oxeylyzer is a keyboard layout analyzer and generator. It comes in two forms: a command-line REPL and a graphical desktop app built with Tauri.
