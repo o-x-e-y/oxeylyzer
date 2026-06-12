@@ -33,6 +33,17 @@ patorjk KLA / KLAnext, keysolve, genkey, trialyzer, and oxeylyzer-2 (o2.oxey.dev
 Deferred (bigger or out of scope for this pass): paste-text quick analysis, n-way compare,
 magic/thumb keys (core limitation), from-scratch layout creation, URL-style sharing.
 
+## Status (2026-06-12)
+
+**Done** — all bugs B1–B4, B7, B9–B11 (B11 = session lastLayout never persisted due to
+snake_case/camelCase mismatch, found during implementation) and features F1–F8, plus
+refreshStore-based non-unmounting refreshes in Edit/Config views.
+
+**Deferred** — B5/B6 (Edit rename leaves old file — mitigated by the new delete button;
+applyCharAt assumes 5+5 row split), paste-text analysis, n-way compare, from-scratch
+layout creation. Verified via cargo check/clippy, tsc, eslint, and vite build; live app
+run needs a display and is left for the user.
+
 ## Implementation order
 
 1. **Backend bugs**: B1 (batched cancellable generation + emit partial results→F6), B2 (stop clearing `generated` on watcher reload; only clear on language/config change → B4; frontend: refresh store without unmount), B3 (new `get_bigrams_custom`), B7, B9 (async corpus load).

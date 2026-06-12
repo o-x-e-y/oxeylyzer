@@ -221,6 +221,12 @@ export default function GenerateView() {
         <div class="text-red-400 text-sm font-mono">{error()}</div>
       </Show>
 
+      <Show when={wasCancelled() && results().length === 0}>
+        <div class="text-yellow-500 text-sm font-mono">
+          Cancelled before any layouts were finished.
+        </div>
+      </Show>
+
       {/* ── Progress ───────────────────────────────────────── */}
       <Show when={running() && progress()}>
         {(p) => (
