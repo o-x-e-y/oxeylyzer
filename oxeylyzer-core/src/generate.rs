@@ -1008,31 +1008,38 @@ where {
         (best_swap, best_score)
     }
 
-    fn optimize(&self, mut layout: FastLayout) -> FastLayout {
-        let mut cache = self.initialize_cache(&layout);
-
-        let mut max_swaps = 200; // too high, but makes the system cut off after a while
+    /// Greedily applies the best available swap until no swap improves the score,
+    /// or `max_swaps` swaps have been applied. The layout and cache are updated in place.
+    pub fn climb(
+        &self,
+        layout: &mut FastLayout,
+        cache: &mut LayoutCache,
+        possible_swaps: &[PosPair],
+        mut max_swaps: usize,
+    ) {
         let mut current_best_score = SMALLEST_SCORE;
-        let possible_swaps = std::mem::take(&mut layout.possible_swaps);
 
-        while let (Some(best_swap), new_score) = self.best_swap_cached(
-            &mut layout,
-            &cache,
-            &possible_swaps,
-            Some(current_best_score),
-        ) {
+        while let (Some(best_swap), new_score) =
+            self.best_swap_cached(layout, cache, possible_swaps, Some(current_best_score))
+        {
             current_best_score = new_score;
-            let accepted_score = self.accept_swap(&mut layout, &best_swap, &mut cache);
+            let accepted_score = self.accept_swap(layout, &best_swap, cache);
             debug_assert_eq!(Some(current_best_score), accepted_score);
 
             max_swaps -= 1;
             if max_swaps == 0 {
-                layout.possible_swaps = possible_swaps;
-
-                return layout;
+                return;
             }
         }
+    }
 
+    fn optimize(&self, mut layout: FastLayout) -> FastLayout {
+        let mut cache = self.initialize_cache(&layout);
+        let possible_swaps = std::mem::take(&mut layout.possible_swaps);
+
+        self.climb(&mut layout, &mut cache, &possible_swaps, 200);
+
+        layout.possible_swaps = possible_swaps;
         layout
     }
 
@@ -1260,6 +1267,27 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn climb_reaches_local_optimum() {
+        let mut layout = QWERTY.random();
+        let mut cache = GEN.initialize_cache(&layout);
+        let possible_swaps = layout.possible_swaps.clone();
+
+        GEN.climb(&mut layout, &mut cache, &possible_swaps, 200);
+
+        // a full greedy climb must end where no single swap improves the score
+        let (swap, _) = GEN.best_swap_cached(
+            &mut layout,
+            &cache,
+            &possible_swaps,
+            Some(cache.total_score()),
+        );
+        assert!(swap.is_none());
+
+        // and the cache must still be consistent
+        assert_eq!(cache, GEN.initialize_cache(&layout));
     }
 
     #[test]
