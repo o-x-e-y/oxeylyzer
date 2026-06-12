@@ -31,6 +31,7 @@ oxeylyzer-repl = { path = "./oxeylyzer-repl" }
 
 [dev-dependencies]
 diol = { version = "0.13.1" }
+oxeylyzer-resources = { path = "./oxeylyzer-resources" }
 
 [profile.release]
 lto = "fat"
