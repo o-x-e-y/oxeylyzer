@@ -37,7 +37,7 @@ The toolchain is `stable` Rust (see `rust-toolchain.toml`). If a tool is missing
 
 ## Workspace Layout
 
-Four crates:
+Five crates:
 
 - **`oxeylyzer-core`** — the library. All analysis and generation logic lives here.
 - **`oxeylyzer-repl`** — the interactive REPL shell built on `xflags` + `sexp` parsing.
