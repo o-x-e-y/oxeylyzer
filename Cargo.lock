@@ -3035,7 +3035,7 @@ dependencies = [
 
 [[package]]
 name = "oxeylyzer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "diol",
  "oxeylyzer-core",
@@ -3045,7 +3045,7 @@ dependencies = [
 
 [[package]]
 name = "oxeylyzer-bench"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "crossterm",
@@ -3058,7 +3058,7 @@ dependencies = [
 
 [[package]]
 name = "oxeylyzer-core"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3084,7 +3084,7 @@ dependencies = [
 
 [[package]]
 name = "oxeylyzer-repl"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ansi_rgb",
  "anyhow",
@@ -3110,7 +3110,7 @@ dependencies = [
 
 [[package]]
 name = "oxeylyzer-resources"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "directories",
  "oxeylyzer-core",
@@ -3122,7 +3122,7 @@ dependencies = [
 
 [[package]]
 name = "oxeylyzer-tauri"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "glob",
  "notify",
