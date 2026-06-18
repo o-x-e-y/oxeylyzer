@@ -8,7 +8,7 @@ import {
   type DragEvent,
 } from "@thisbeyond/solid-dnd";
 import type { PhysKey } from "../types";
-import { heatScheme } from "../store";
+import { heatStyleFor } from "../heat";
 
 /* eslint-disable no-unused-vars */
 declare module "solid-js" {
@@ -50,23 +50,6 @@ type Props = {
   /** Per-key finger colors (flat array, same order as keys). Overrides heatmap. */
   fingerColors?: string[];
 };
-
-function heatColorOriginal(pct: number): string {
-  const c = Math.max(0, Math.min(215, 215 - (pct / 100) * 1720));
-  return `background-color:rgb(215,${Math.round(c)},${Math.round(c)});color:#111`;
-}
-
-function heatColorPlayground(pct: number): string {
-  const p = pct / 100;
-  const v = p * 30 + Math.log(p * 120 + 1);
-  const b = 95;
-  return `background-color:rgb(${Math.round(b * 0.9 + v * 18)},${Math.round(b * 1.3 - v * 10)},${Math.round(b * 1.325 - v * 10)})`;
-}
-
-function heatColorV2(pct: number): string {
-  const f = Math.min(pct, 14) / 14;
-  return `background-color:rgb(${Math.round(140 + f * 115)},${Math.round(140 - f * 140)},${Math.round(140 - f * 140)});color:#111`;
-}
 
 interface KeyTileProps {
   char: string;
@@ -215,15 +198,7 @@ export default function KeyboardDisplay(props: Props) {
 
   const heatStyle = (key: string): string => {
     if (!props.heatmap) return "";
-    const pct = props.heatmap[key] ?? 0;
-    switch (heatScheme()) {
-      case "original":
-        return heatColorOriginal(pct);
-      case "v2":
-        return heatColorV2(pct);
-      default:
-        return heatColorPlayground(pct);
-    }
+    return heatStyleFor(props.heatmap[key] ?? 0);
   };
 
   const handleDragEnd = ({ draggable, droppable }: DragEvent) => {
@@ -300,7 +275,11 @@ export default function KeyboardDisplay(props: Props) {
         style={{ "container-type": "inline-size" }}
       >
         <DragDropProvider onDragEnd={handleDragEnd}>
-          <DragDropSensors>{inner()}</DragDropSensors>
+          {/* Without sensors, drags can never start — read-only boards
+              (layout lists, results) shouldn't have pick-up-able keys. */}
+          <Show when={props.draggable} fallback={inner()}>
+            <DragDropSensors>{inner()}</DragDropSensors>
+          </Show>
         </DragDropProvider>
       </div>
     </Show>

@@ -10,7 +10,7 @@ import {
   type ConfigDto,
   type WeightsDto,
 } from "../api";
-import { initStore } from "../store";
+import { refreshStore } from "../store";
 
 function NumInput(props: {
   label: string;
@@ -92,7 +92,7 @@ export default function ConfigView() {
     setMsg(null);
     try {
       await setConfig(c);
-      await initStore();
+      await refreshStore();
       setMsg({ text: "Config saved and engine reloaded.", ok: true });
     } catch (e) {
       setMsg({ text: String(e), ok: false });

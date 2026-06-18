@@ -108,7 +108,13 @@ type StatEntry =
 const LEFT: StatEntry[] = [
   { kind: "stat", label: "Sfb", getValue: (s) => pct(s.sfb), getNum: (s) => s.sfb },
   { kind: "stat", label: "Dsfb", getValue: (s) => pct(s.dsfb), getNum: (s) => s.dsfb },
-  { kind: "stat", label: "Fspeed", getValue: (s) => num(s.fspeed), getNum: (s) => s.fspeed },
+  {
+    kind: "stat",
+    label: "Fspeed",
+    getValue: (s) => num(s.fspeed),
+    getNum: (s) => s.fspeed,
+    higherIsBetter: true,
+  },
   {
     kind: "stat",
     label: "Score",
@@ -122,6 +128,7 @@ const LEFT: StatEntry[] = [
     label: "Stretches",
     getValue: (s) => num(s.stretches),
     getNum: (s) => s.stretches,
+    higherIsBetter: true,
   },
   { kind: "stat", label: "Scissors", getValue: (s) => pct(s.scissors), getNum: (s) => s.scissors },
   { kind: "stat", label: "LSBs", getValue: (s) => pct(s.lsbs), getNum: (s) => s.lsbs },

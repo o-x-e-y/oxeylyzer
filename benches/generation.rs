@@ -12,8 +12,10 @@ use oxeylyzer_core::{corpus_cleaner::CorpusCleaner, data::Data, layout::PosPair}
 use crate::util::oxeylyzer;
 
 fn main() -> diol::Result<()> {
+    let dirs =
+        oxeylyzer_resources::OxeylyzerDirs::resolve().expect("Failed to resolve oxeylyzer dirs");
     let g = oxeylyzer("english");
-    let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
+    let saved = oxeylyzer_repl::repl::load_layouts(dirs.layouts_dir().join("english")).unwrap();
 
     let layout_names = saved.keys().take(5).cloned().collect::<Vec<_>>();
     let swaps = g
@@ -26,7 +28,7 @@ fn main() -> diol::Result<()> {
         .collect::<Vec<_>>();
 
     let languages = ["english", "bokmal"];
-    let corpora = ["bokmal", "hebrew", "shai"];
+    let corpora = ["bokmal", "finnish", "shai"];
 
     let bench = Bench::from_args()?;
 
@@ -35,7 +37,7 @@ fn main() -> diol::Result<()> {
     bench.register("generate", generate, languages);
     bench.register("best swap cached", best_swap_cached, layout_names.clone());
     bench.register("best swap", best_swap, layout_names);
-    bench.register("language data", language_data, corpora);
+    bench.register("create language data", create_data, corpora);
     bench.register("shuffle pins", shuffle_pins, (0..40).step_by(5));
     bench.register("load data", load_data, corpora);
 
@@ -45,8 +47,10 @@ fn main() -> diol::Result<()> {
 }
 
 fn score_swap(bencher: Bencher, swap: PosPair) {
+    let dirs =
+        oxeylyzer_resources::OxeylyzerDirs::resolve().expect("Failed to resolve oxeylyzer dirs");
     let g = oxeylyzer("english");
-    let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
+    let saved = oxeylyzer_repl::repl::load_layouts(dirs.layouts_dir().join("english")).unwrap();
 
     let (_name, mut layout) = saved
         .into_iter()
@@ -60,8 +64,10 @@ fn score_swap(bencher: Bencher, swap: PosPair) {
 }
 
 fn score_layout(bencher: Bencher, name: String) {
+    let dirs =
+        oxeylyzer_resources::OxeylyzerDirs::resolve().expect("Failed to resolve oxeylyzer dirs");
     let g = oxeylyzer("english");
-    let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
+    let saved = oxeylyzer_repl::repl::load_layouts(dirs.layouts_dir().join("english")).unwrap();
 
     let layout = black_box(g.fast_layout(saved.get(&name).unwrap(), &[]));
 
@@ -71,8 +77,10 @@ fn score_layout(bencher: Bencher, name: String) {
 }
 
 fn best_swap(bencher: Bencher, name: String) {
+    let dirs =
+        oxeylyzer_resources::OxeylyzerDirs::resolve().expect("Failed to resolve oxeylyzer dirs");
     let g = black_box(oxeylyzer("english"));
-    let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
+    let saved = oxeylyzer_repl::repl::load_layouts(dirs.layouts_dir().join("english")).unwrap();
     let mut layout = black_box(g.fast_layout(saved.get(&name).unwrap(), &[]));
     let possible_swaps = std::mem::take(&mut layout.possible_swaps);
 
@@ -82,8 +90,10 @@ fn best_swap(bencher: Bencher, name: String) {
 }
 
 fn best_swap_cached(bencher: Bencher, name: String) {
+    let dirs =
+        oxeylyzer_resources::OxeylyzerDirs::resolve().expect("Failed to resolve oxeylyzer dirs");
     let g = black_box(oxeylyzer("english"));
-    let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
+    let saved = oxeylyzer_repl::repl::load_layouts(dirs.layouts_dir().join("english")).unwrap();
     let mut layout = black_box(g.fast_layout(saved.get(&name).unwrap(), &[]));
 
     let cache = black_box(g.initialize_cache(&layout));
@@ -95,8 +105,10 @@ fn best_swap_cached(bencher: Bencher, name: String) {
 }
 
 fn generate(bencher: Bencher, language: &str) {
+    let dirs =
+        oxeylyzer_resources::OxeylyzerDirs::resolve().expect("Failed to resolve oxeylyzer dirs");
     let g = black_box(oxeylyzer(language));
-    let saved = oxeylyzer_repl::repl::load_layouts("./static/layouts/english").unwrap();
+    let saved = oxeylyzer_repl::repl::load_layouts(dirs.layouts_dir().join("english")).unwrap();
     let basis = black_box(g.fast_layout(saved.get("sturdy").unwrap(), &[]));
 
     bencher.bench(|| {
@@ -104,12 +116,14 @@ fn generate(bencher: Bencher, language: &str) {
     })
 }
 
-fn language_data(bencher: Bencher, language: &str) {
+fn create_data(bencher: Bencher, language: &str) {
+    let dirs =
+        oxeylyzer_resources::OxeylyzerDirs::resolve().expect("Failed to resolve oxeylyzer dirs");
     let cleaner = CorpusCleaner::raw();
+    let text_path = dirs.text_dir().join(language);
 
     bencher.bench(|| {
-        Data::from_paths(&[format!("./static/text/{language}")], language, &cleaner)
-            .expect("couldn't create data:");
+        Data::from_paths(&[&text_path], language, &cleaner).expect("couldn't create data:");
     })
 }
 
@@ -129,7 +143,9 @@ fn shuffle_pins(bencher: Bencher, pin_count: usize) {
 }
 
 fn load_data(bencher: Bencher, language: &str) {
-    let path = format!("./static/language_data/{language}.json");
+    let dirs =
+        oxeylyzer_resources::OxeylyzerDirs::resolve().expect("Failed to resolve oxeylyzer dirs");
+    let path = dirs.language_data_dir().join(format!("{language}.json"));
 
     bencher.bench(|| Data::load(&path).unwrap().name)
 }

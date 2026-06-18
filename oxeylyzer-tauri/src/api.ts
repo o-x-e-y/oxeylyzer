@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Layout, BigramEntry, NgramResult } from "./types";
+import type { Layout, BigramEntry, TrigramEntry, NgramResult } from "./types";
 
 export async function listLayouts(): Promise<Layout[]> {
   return invoke("list_layouts");
@@ -21,8 +21,20 @@ export async function getBigrams(
   name: string,
   category: string,
   count: number,
+  keys?: string,
+  disabledIndices?: number[],
 ): Promise<BigramEntry[]> {
-  return invoke("get_bigrams", { name, category, count });
+  return invoke("get_bigrams", { name, category, count, keys, disabledIndices });
+}
+
+export async function getTrigrams(
+  name: string,
+  category: string,
+  count: number,
+  keys?: string,
+  disabledIndices?: number[],
+): Promise<TrigramEntry[]> {
+  return invoke("get_trigrams", { name, category, count, keys, disabledIndices });
 }
 
 export async function swapKeys(name: string, swaps: string): Promise<Layout> {
@@ -53,8 +65,9 @@ export async function startGenerate(
   baseLayout: string,
   count: number,
   pins: string,
+  algorithm: string,
 ): Promise<void> {
-  return invoke("start_generate", { baseLayout, count, pins });
+  return invoke("start_generate", { baseLayout, count, pins, algorithm });
 }
 
 export async function saveGenerated(index: number, name?: string): Promise<Layout> {
@@ -75,6 +88,18 @@ export async function saveLayoutEdit(dofJson: unknown, originalName: string): Pr
 
 export async function forkLayout(name: string, newName: string): Promise<Layout> {
   return invoke("fork_layout", { name, newName });
+}
+
+export async function deleteLayout(name: string): Promise<void> {
+  return invoke("delete_layout", { name });
+}
+
+export async function saveCustomLayout(
+  baseName: string,
+  keys: string,
+  newName: string,
+): Promise<Layout> {
+  return invoke("save_custom_layout", { baseName, keys, newName });
 }
 
 export type WeightsDto = {
@@ -162,18 +187,17 @@ export async function loadWeightPreset(name: string): Promise<WeightsDto> {
   return invoke("load_weight_preset", { name });
 }
 
-export async function getSession(): Promise<{
+export type Session = {
   view: string;
   language: string;
   lastLayout: string | null;
-}> {
+  heatScheme?: string | null;
+};
+
+export async function getSession(): Promise<Session> {
   return invoke("get_session");
 }
 
-export async function setSession(session: {
-  view: string;
-  language: string;
-  lastLayout: string | null;
-}): Promise<void> {
+export async function setSession(session: Session): Promise<void> {
   return invoke("set_session", { session });
 }
