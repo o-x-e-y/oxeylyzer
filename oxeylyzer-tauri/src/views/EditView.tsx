@@ -3,7 +3,7 @@ import { Dof as LibDof } from "libdof";
 import KeyboardDisplay from "../components/KeyboardDisplay";
 import Dropdown from "../components/Dropdown";
 import LayoutSearch from "../components/LayoutSearch";
-import { appStore, initStore } from "../store";
+import { appStore, refreshStore } from "../store";
 import { forkLayout, getLayoutDetail, saveLayoutEdit } from "../api";
 import type { PhysKey } from "../types";
 
@@ -312,7 +312,7 @@ export default function EditView(props: Props) {
       setLoading(true);
       try {
         await saveLayoutEdit(updated, layoutName());
-        await initStore();
+        await refreshStore();
         setMsg({ text: `Saved "${editedName()}".`, ok: true });
         setConfirmOverwrite(false);
       } catch (e) {
@@ -325,7 +325,7 @@ export default function EditView(props: Props) {
       try {
         await forkLayout(layoutName(), editedName());
         await saveLayoutEdit(updated, editedName());
-        await initStore();
+        await refreshStore();
         setMsg({ text: `Saved as "${editedName()}".`, ok: true });
         setLayoutName(editedName());
       } catch (e) {

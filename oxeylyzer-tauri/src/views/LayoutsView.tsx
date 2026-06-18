@@ -1,8 +1,8 @@
 import { createSignal, For, Show } from "solid-js";
 import KeyboardDisplay from "../components/KeyboardDisplay";
 import Dropdown from "../components/Dropdown";
-import { appStore, initStore } from "../store";
-import { setLanguage } from "../api";
+import { appStore, initStore, refreshStore } from "../store";
+import { setLanguage, deleteLayout } from "../api";
 
 type Props = {
   onAnalyze?: (_layoutName: string) => void;
@@ -34,6 +34,24 @@ export default function LayoutsView(props: Props) {
   const [expandedLayout, setExpandedLayout] = createSignal<string | null>(null);
   const [changingLanguage, setChangingLanguage] = createSignal(false);
   const [pendingLang, setPendingLang] = createSignal(appStore.currentLanguage || "english");
+  const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null);
+  const [deleteError, setDeleteError] = createSignal("");
+
+  async function handleDelete(name: string) {
+    if (confirmDelete() !== name) {
+      setConfirmDelete(name);
+      return;
+    }
+    setConfirmDelete(null);
+    setDeleteError("");
+    try {
+      await deleteLayout(name);
+      if (expandedLayout() === name) setExpandedLayout(null);
+      await refreshStore();
+    } catch (e) {
+      setDeleteError(String(e));
+    }
+  }
 
   const filtered = () => {
     const bf = boardFilter();
@@ -162,6 +180,10 @@ export default function LayoutsView(props: Props) {
         </div>
       </div>
 
+      <Show when={deleteError()}>
+        <div class="text-red-400 text-xs font-mono">{deleteError()}</div>
+      </Show>
+
       {/* Layout list */}
       <div class="flex flex-col gap-2">
         <For each={sorted()}>
@@ -210,6 +232,19 @@ export default function LayoutsView(props: Props) {
                     onClick={() => props.onEdit?.(layout.name)}
                   >
                     Edit
+                  </button>
+                  <button
+                    class="border text-xs font-mono px-2 py-0.5"
+                    classList={{
+                      "border-red-700 text-red-400 hover:bg-red-900":
+                        confirmDelete() === layout.name,
+                      "border-neutral-700 text-neutral-500 hover:bg-neutral-700 hover:text-red-400":
+                        confirmDelete() !== layout.name,
+                    }}
+                    onClick={() => handleDelete(layout.name)}
+                    onMouseLeave={() => setConfirmDelete(null)}
+                  >
+                    {confirmDelete() === layout.name ? "really delete?" : "Delete"}
                   </button>
                 </div>
               </div>

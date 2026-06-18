@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, Ordering},
     },
 };
 
@@ -27,6 +27,8 @@ pub struct LayoutStatsDto {
     pub dsfb: f64,
     pub fspeed: f64,
     pub finger_speed: [f64; 10],
+    /// Per-finger usage as % of all keystrokes (LP..RP order, matching finger_speed).
+    pub finger_usage: [f64; 10],
     pub stretches: f64,
     pub scissors: f64,
     pub lsbs: f64,
@@ -66,6 +68,12 @@ pub struct BigramEntryDto {
 }
 
 #[derive(Serialize, Clone)]
+pub struct TrigramEntryDto {
+    pub trigram: String,
+    pub percent: f64,
+}
+
+#[derive(Serialize, Clone)]
 pub struct CharFreqDto {
     pub char: String,
     pub percent: f64,
@@ -99,10 +107,15 @@ pub enum NgramResultDto {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionDto {
     pub view: String,
     pub language: String,
+    // Option fields default to None when missing, which keeps old session
+    // files (snake_case last_layout) loadable — that key is simply ignored.
     pub last_layout: Option<String>,
+    #[serde(default)]
+    pub heat_scheme: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -153,7 +166,9 @@ pub struct AppState {
     pub engine: Mutex<Arc<Oxeylyzer>>,
     /// All loaded layouts, keyed by lowercase name.
     pub layouts: Mutex<HashMap<String, Layout>>,
-    /// Results from the most recent generation run. Cleared on language switch.
+    /// Results from the most recent generation run. Cleared when the engine
+    /// changes (language switch, config change) since the layouts are tied to
+    /// the engine's character mapping.
     pub generated: Mutex<Vec<FastLayout>>,
     /// Managed resource paths (XDG/AppData config dir in release, override in dev).
     pub dirs: OxeylyzerDirs,
@@ -161,6 +176,8 @@ pub struct AppState {
     pub config: Mutex<Config>,
     /// Set to true to request cancellation of an in-progress generation.
     pub cancel_flag: Arc<AtomicBool>,
+    /// True while a generation run is in progress; prevents overlapping runs.
+    pub generating: Arc<AtomicBool>,
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -172,13 +189,28 @@ fn normalize_score(raw: i64, char_total: i64) -> f64 {
     (raw as f64) / (char_total as f64) / 100.0
 }
 
-fn stats_to_dto(stats: &LayoutStats, char_total: i64) -> LayoutStatsDto {
+/// Per-finger usage as % of all keystrokes, in LP..RP order.
+fn finger_usage_pct(engine: &Oxeylyzer, fl: &FastLayout) -> [f64; 10] {
+    let total = engine.data.char_total as f64;
+    let mut usage = [0.0f64; 10];
+    if total == 0.0 {
+        return usage;
+    }
+    for (i, &u) in fl.keys.iter().enumerate() {
+        let finger = fl.fingers[i] as usize;
+        usage[finger] += engine.data.chars()[u as usize] as f64;
+    }
+    usage.map(|v| v / total * 100.0)
+}
+
+fn stats_to_dto(stats: &LayoutStats, char_total: i64, finger_usage: [f64; 10]) -> LayoutStatsDto {
     let t = &stats.trigram_stats;
     LayoutStatsDto {
         sfb: stats.sfb,
         dsfb: stats.dsfb,
         fspeed: stats.fspeed,
         finger_speed: stats.finger_speed,
+        finger_usage,
         stretches: stats.stretches,
         scissors: stats.scissors,
         lsbs: stats.lsbs,
@@ -201,7 +233,11 @@ fn stats_to_dto(stats: &LayoutStats, char_total: i64) -> LayoutStatsDto {
 fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
     let fast = engine.fast_layout(layout, &[]);
     let stats = engine.get_layout_stats(&fast);
-    let stats_dto = stats_to_dto(&stats, engine.data.char_total);
+    let stats_dto = stats_to_dto(
+        &stats,
+        engine.data.char_total,
+        finger_usage_pct(engine, &fast),
+    );
     LayoutDto {
         name: layout.name.clone(),
         keys: fast.layout_str(),
@@ -247,6 +283,47 @@ fn load_all_layouts(config: &Config, base_path: &Path) -> HashMap<String, Layout
                 .map(|l| (l.name.to_lowercase(), l))
         })
         .collect()
+}
+
+/// Builds a [`FastLayout`] from a base layout with an optional custom key
+/// arrangement and disabled positions applied, rebuilding `char_to_finger`
+/// so trigram classification matches the final arrangement.
+fn custom_fast_layout(
+    engine: &Oxeylyzer,
+    layout: &Layout,
+    keys: Option<&str>,
+    disabled_indices: &[usize],
+) -> Result<FastLayout, String> {
+    let mut fl = engine.fast_layout(layout, &[]);
+
+    if let Some(keys) = keys {
+        let chars: Vec<char> = keys.chars().collect();
+        if chars.len() != fl.keys.len() {
+            return Err(format!(
+                "Key count mismatch: layout has {} keys, got {}",
+                fl.keys.len(),
+                chars.len()
+            ));
+        }
+        for (i, &c) in chars.iter().enumerate() {
+            fl.keys[i] = engine.mapping.get_u(c);
+        }
+    }
+
+    for &idx in disabled_indices {
+        if idx < fl.keys.len() {
+            fl.keys[idx] = 0;
+        }
+    }
+
+    fl.char_to_finger.iter_mut().for_each(|f| *f = None);
+    fl.keys.iter().enumerate().for_each(|(i, &c)| {
+        if c != 0 {
+            fl.char_to_finger[c as usize] = Some(fl.fingers[i]);
+        }
+    });
+
+    Ok(fl)
 }
 
 fn pin_positions(fast: &FastLayout, engine: &Oxeylyzer, pins: &str) -> Vec<usize> {
@@ -324,6 +401,8 @@ fn get_bigrams(
     name: String,
     category: String,
     count: usize,
+    keys: Option<String>,
+    disabled_indices: Option<Vec<usize>>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<BigramEntryDto>, String> {
     let engine = state.engine.lock().unwrap().clone();
@@ -331,7 +410,12 @@ fn get_bigrams(
     let layout = layouts
         .get(&name.to_lowercase())
         .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    let fl = engine.fast_layout(layout, &[]);
+    let fl = custom_fast_layout(
+        &engine,
+        layout,
+        keys.as_deref(),
+        &disabled_indices.unwrap_or_default(),
+    )?;
     let bigram_total = engine.data.bigram_total as f64;
 
     let mut entries: Vec<BigramEntryDto> = match category.as_str() {
@@ -434,6 +518,62 @@ fn get_bigrams(
 }
 
 #[tauri::command]
+fn get_trigrams(
+    name: String,
+    category: String,
+    count: usize,
+    keys: Option<String>,
+    disabled_indices: Option<Vec<usize>>,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<TrigramEntryDto>, String> {
+    use oxeylyzer_core::trigram_patterns::TrigramPattern;
+
+    let engine = state.engine.lock().unwrap().clone();
+    let layouts = state.layouts.lock().unwrap();
+    let layout = layouts
+        .get(&name.to_lowercase())
+        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    let fl = custom_fast_layout(
+        &engine,
+        layout,
+        keys.as_deref(),
+        &disabled_indices.unwrap_or_default(),
+    )?;
+
+    let wanted: &[TrigramPattern] = match category.as_str() {
+        "inrolls" => &[TrigramPattern::Inroll],
+        "outrolls" => &[TrigramPattern::Outroll],
+        "onehands" => &[TrigramPattern::Onehand],
+        "alternates" => &[TrigramPattern::Alternate, TrigramPattern::AlternateSfs],
+        "redirects" => &[
+            TrigramPattern::Redirect,
+            TrigramPattern::RedirectSfs,
+            TrigramPattern::BadRedirect,
+            TrigramPattern::BadRedirectSfs,
+        ],
+        "sfts" => &[TrigramPattern::Sft],
+        other => return Err(format!("Unknown trigram category: '{other}'")),
+    };
+
+    let trigram_total = engine.data.trigram_total as f64;
+    // gen_trigrams is sorted by frequency descending, so the first `count`
+    // matches are already the most frequent ones.
+    let entries: Vec<TrigramEntryDto> = engine
+        .data
+        .gen_trigrams()
+        .iter()
+        .filter(|(t, _)| wanted.contains(&engine.get_trigram_pattern(&fl, t)))
+        .take(count)
+        .map(|&(t, freq)| TrigramEntryDto {
+            trigram: engine.mapping.map_us(&t).collect(),
+            percent: freq as f64 / trigram_total * 100.0,
+        })
+        .collect();
+
+    Ok(entries)
+}
+
+#[tauri::command]
 fn swap_keys(
     name: String,
     swaps: String,
@@ -464,7 +604,11 @@ fn swap_keys(
     }
 
     let stats = engine.get_layout_stats(&fl);
-    let stats_dto = stats_to_dto(&stats, engine.data.char_total);
+    let stats_dto = stats_to_dto(
+        &stats,
+        engine.data.char_total,
+        finger_usage_pct(&engine, &fl),
+    );
     Ok(LayoutDto {
         name: format!("{name}*"),
         keys: fl.layout_str(),
@@ -499,7 +643,7 @@ fn analyze_custom(
     let layout = layouts
         .get(&name.to_lowercase())
         .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    let mut fl = engine.fast_layout(layout, &[]);
+    let fl = custom_fast_layout(&engine, layout, Some(&keys), &disabled_indices)?;
 
     let keyboard = fl
         .keyboard
@@ -508,38 +652,12 @@ fn analyze_custom(
         .collect();
     let shape = fl.shape.inner().to_vec();
 
-    // Apply the custom key arrangement.
-    let chars: Vec<char> = keys.chars().collect();
-    if chars.len() != fl.keys.len() {
-        return Err(format!(
-            "Key count mismatch: layout has {} keys, got {}",
-            fl.keys.len(),
-            chars.len()
-        ));
-    }
-    for (i, &c) in chars.iter().enumerate() {
-        fl.keys[i] = engine.mapping.get_u(c);
-    }
-
-    // Apply disabled positions on top.
-    for &idx in &disabled_indices {
-        if idx < fl.keys.len() {
-            fl.keys[idx] = 0;
-        }
-    }
-
-    // Rebuild char_to_finger to match the new key arrangement.
-    // Trigram stats use char_to_finger for character→finger lookups, so without
-    // this rebuild they would use the original layout's finger assignments.
-    fl.char_to_finger.iter_mut().for_each(|f| *f = None);
-    fl.keys.iter().enumerate().for_each(|(i, &c)| {
-        if c != 0 {
-            fl.char_to_finger[c as usize] = Some(fl.fingers[i]);
-        }
-    });
-
     let stats = engine.get_layout_stats(&fl);
-    let stats_dto = stats_to_dto(&stats, engine.data.char_total);
+    let stats_dto = stats_to_dto(
+        &stats,
+        engine.data.char_total,
+        finger_usage_pct(&engine, &fl),
+    );
     Ok(LayoutDto {
         name: format!("{name}*"),
         keys,
@@ -566,24 +684,21 @@ fn analyze_with_disabled(
     let layout = layouts
         .get(&name.to_lowercase())
         .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    let mut fl = engine.fast_layout(layout, &[]);
+    let original_keys = engine.fast_layout(layout, &[]).layout_str();
+    let fl = custom_fast_layout(&engine, layout, None, &disabled_indices)?;
     let keyboard = fl
         .keyboard
         .iter()
         .map(|k| [k.x(), k.y(), k.width(), k.height()])
         .collect();
     let shape = fl.shape.inner().to_vec();
-    let original_keys = fl.layout_str();
-
-    // Replace disabled key positions with REPLACEMENT_CHAR (byte 0 in the mapping)
-    for &idx in &disabled_indices {
-        if idx < fl.keys.len() {
-            fl.keys[idx] = 0;
-        }
-    }
 
     let stats = engine.get_layout_stats(&fl);
-    let stats_dto = stats_to_dto(&stats, engine.data.char_total);
+    let stats_dto = stats_to_dto(
+        &stats,
+        engine.data.char_total,
+        finger_usage_pct(&engine, &fl),
+    );
     Ok(LayoutDto {
         name: format!("{name}*"),
         keys: original_keys,
@@ -654,6 +769,14 @@ fn lookup_ngram(
     let engine = state.engine.lock().unwrap().clone();
     let data = &engine.data;
 
+    // get_u maps unknown characters to byte 0 (the replacement character);
+    // report those instead of silently returning the replacement's stats.
+    for c in ngram.chars() {
+        if data.mapping.get_u(c) == 0 {
+            return Err(format!("'{c}' does not appear in the current corpus."));
+        }
+    }
+
     match ngram.chars().count() {
         1 => {
             let c = ngram.chars().next().unwrap();
@@ -714,7 +837,7 @@ fn lookup_ngram(
 }
 
 #[tauri::command]
-fn load_corpus(
+async fn load_corpus(
     language: String,
     raw: bool,
     state: tauri::State<'_, AppState>,
@@ -722,6 +845,7 @@ fn load_corpus(
     use oxeylyzer_core::corpus_cleaner::CorpusCleaner;
 
     let source_dir = state.dirs.text_dir().join(&language);
+    let out_dir = state.dirs.language_data_dir();
     if !source_dir.is_dir() {
         return Err(format!(
             "Source directory '{}' not found.",
@@ -729,28 +853,77 @@ fn load_corpus(
         ));
     }
 
-    let paths: Vec<PathBuf> = std::fs::read_dir(&source_dir)
-        .map_err(|e| e.to_string())?
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.is_file())
-        .collect();
+    // Corpus processing is CPU-heavy and can take a long time for large texts —
+    // run it on a blocking thread so the UI stays responsive.
+    tauri::async_runtime::spawn_blocking(move || {
+        let paths: Vec<PathBuf> = std::fs::read_dir(&source_dir)
+            .map_err(|e| e.to_string())?
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_file())
+            .collect();
 
-    let cleaner = if raw {
-        CorpusCleaner::raw()
-    } else {
-        CorpusCleaner::default()
+        let cleaner = if raw {
+            CorpusCleaner::raw()
+        } else {
+            CorpusCleaner::default()
+        };
+
+        let data = Data::from_paths(&paths, &language, &cleaner)
+            .map_err(|e| format!("Failed to process corpus: {e}"))?;
+
+        data.save(&out_dir)
+            .map_err(|e| format!("Failed to save corpus: {e}"))?;
+
+        Ok(format!(
+            "Corpus '{language}' processed and saved successfully."
+        ))
+    })
+    .await
+    .map_err(|e| format!("Corpus task failed: {e}"))?
+}
+
+/// Generates one batch of layouts with the selected search algorithm.
+/// Defaults follow the empirically tuned parameters from the bench suite
+/// (see oxeylyzer-bench): ils (5, 25), sa (0.9997, 50k), lahc (1000, 100k).
+fn generate_batch(
+    engine: &Oxeylyzer,
+    algorithm: &str,
+    n: usize,
+    basis: &FastLayout,
+    pins: &[usize],
+) -> Vec<FastLayout> {
+    use oxeylyzer_core::generate::{
+        annealing::SimulatedAnnealing, engine::Engine, hill_climber::CachedHillClimber,
+        ils::IteratedLocalSearch, lahc::LateAcceptanceHillClimbing,
     };
 
-    let data = Data::from_paths(&paths, &language, &cleaner)
-        .map_err(|e| format!("Failed to process corpus: {e}"))?;
-
-    data.save(state.dirs.language_data_dir())
-        .map_err(|e| format!("Failed to save corpus: {e}"))?;
-
-    Ok(format!(
-        "Corpus '{language}' processed and saved successfully."
-    ))
+    match algorithm {
+        "ils" => IteratedLocalSearch {
+            analyzer: engine,
+            perturb_swaps: 5,
+            rounds: 25,
+        }
+        .generate_n_with_pins_iter(n, basis, pins)
+        .collect(),
+        "sa" => SimulatedAnnealing {
+            analyzer: engine,
+            cooling: 0.9997,
+            iters: 50_000,
+        }
+        .generate_n_with_pins_iter(n, basis, pins)
+        .collect(),
+        "lahc" => LateAcceptanceHillClimbing {
+            analyzer: engine,
+            history: 1_000,
+            iters: 100_000,
+        }
+        .generate_n_with_pins_iter(n, basis, pins)
+        .collect(),
+        _ => CachedHillClimber { analyzer: engine }
+            .generate_n_with_pins_iter(n, basis, pins)
+            .collect(),
+    }
 }
 
 #[tauri::command]
@@ -758,20 +931,36 @@ async fn start_generate(
     base_layout: String,
     count: usize,
     pins: String,
+    algorithm: Option<String>,
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    // Reject overlapping runs — two concurrent runs would race for
+    // `state.generated` and double CPU usage.
+    if state
+        .generating
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Err("A generation run is already in progress.".to_string());
+    }
     state.cancel_flag.store(false, Ordering::Relaxed);
 
     // Clone what we need before spawning — avoids moving tauri::State into a thread.
     let engine = state.engine.lock().unwrap().clone();
     let cancel = state.cancel_flag.clone();
+    let generating = state.generating.clone();
+    let algorithm = algorithm.unwrap_or_else(|| "hill".to_string());
 
     let fast_base = {
         let layouts = state.layouts.lock().unwrap();
-        let base = layouts
-            .get(&base_layout.to_lowercase())
-            .ok_or_else(|| format!("Layout '{base_layout}' not found"))?;
+        let base = match layouts.get(&base_layout.to_lowercase()) {
+            Some(base) => base,
+            None => {
+                generating.store(false, Ordering::SeqCst);
+                return Err(format!("Layout '{base_layout}' not found"));
+            }
+        };
         engine.fast_layout(base, &[])
     };
 
@@ -779,58 +968,29 @@ async fn start_generate(
     let app = app_handle.clone();
 
     std::thread::spawn(move || {
-        if cancel.load(Ordering::Relaxed) {
-            return;
-        }
+        // Generate in parallel batches, checking the cancel flag between
+        // batches — this is what makes cancellation actually stop the work
+        // instead of merely discarding its results.
+        let batch = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4);
+        let mut results: Vec<FastLayout> = Vec::with_capacity(count);
+        let mut last_emit = std::time::Instant::now();
 
-        let done_count = Arc::new(AtomicUsize::new(0));
-        let done_clone = done_count.clone();
-        let app_progress = app.clone();
-        let cancel_progress = cancel.clone();
-        let progress_done = Arc::new(AtomicBool::new(false));
-        let progress_done_check = progress_done.clone();
+        while results.len() < count && !cancel.load(Ordering::Relaxed) {
+            let n = batch.min(count - results.len());
+            results.extend(generate_batch(&engine, &algorithm, n, &fast_base, &pin_pos));
 
-        // Emit progress updates every 200ms from a dedicated thread.
-        // Uses progress_done flag so we never have to join (no blocking wait).
-        std::thread::spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(200));
-                let d = done_clone.load(Ordering::Relaxed);
-                let _ = app_progress.emit(
+            if last_emit.elapsed() >= std::time::Duration::from_millis(200) {
+                last_emit = std::time::Instant::now();
+                let _ = app.emit(
                     "generate-progress",
-                    serde_json::json!({ "done": d, "total": count }),
+                    serde_json::json!({ "done": results.len(), "total": count }),
                 );
-                if progress_done_check.load(Ordering::Relaxed)
-                    || cancel_progress.load(Ordering::Relaxed)
-                {
-                    break;
-                }
             }
-        });
-
-        let done_for_iter = done_count.clone();
-        let results_arc: Arc<Mutex<Vec<FastLayout>>> = Arc::new(Mutex::new(Vec::new()));
-        let results_for_iter = results_arc.clone();
-        let cancel_for_iter = cancel.clone();
-
-        engine
-            .generate_n_with_pins_iter(count, &fast_base, &pin_pos)
-            .for_each(|fl| {
-                done_for_iter.fetch_add(1, Ordering::Relaxed);
-                if !cancel_for_iter.load(Ordering::Relaxed) {
-                    results_for_iter.lock().unwrap().push(fl);
-                }
-            });
-
-        // Signal the progress thread to exit — no join needed (thread holds only Arcs).
-        progress_done.store(true, Ordering::Relaxed);
-
-        if cancel.load(Ordering::Relaxed) {
-            let _ = app.emit("generate-cancelled", ());
-            return;
         }
 
-        let results = std::mem::take(&mut *results_arc.lock().unwrap());
+        let cancelled = cancel.load(Ordering::Relaxed);
 
         // Pre-compute scores once per layout, then sort by cached value.
         // Avoids calling engine.score() O(N log N) times inside the comparator.
@@ -849,7 +1009,7 @@ async fn start_generate(
             .enumerate()
             .map(|(i, (_, fl))| {
                 let stats = engine.get_layout_stats(fl);
-                let stats_dto = stats_to_dto(&stats, char_total);
+                let stats_dto = stats_to_dto(&stats, char_total, finger_usage_pct(&engine, fl));
                 LayoutDto {
                     name: fl.name.clone().unwrap_or_else(|| format!("gen-{}", i + 1)),
                     keys: fl.layout_str(),
@@ -866,14 +1026,17 @@ async fn start_generate(
             })
             .collect();
 
-        // Store all results (sorted) for save_generated.
+        // Store all results (sorted) for save_generated. Partial results from a
+        // cancelled run are kept on purpose — they're still valid layouts.
         let state = app.state::<AppState>();
         *state.generated.lock().unwrap() = scored.into_iter().map(|(_, fl)| fl).collect();
 
         let _ = app.emit(
             "generate-done",
-            serde_json::json!({ "results": layout_dtos }),
+            serde_json::json!({ "results": layout_dtos, "cancelled": cancelled }),
         );
+
+        generating.store(false, Ordering::SeqCst);
     });
 
     Ok(())
@@ -948,6 +1111,94 @@ fn save_generated(
 #[tauri::command]
 fn cancel_generate(state: tauri::State<'_, AppState>) {
     state.cancel_flag.store(true, Ordering::Relaxed);
+}
+
+#[tauri::command]
+fn delete_layout(name: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let lang = state.engine.lock().unwrap().language.clone();
+    let file_name = name.replace(' ', "_").to_lowercase();
+    let path = state
+        .dirs
+        .layouts_dir()
+        .join(&lang)
+        .join(&file_name)
+        .with_extension("dof");
+
+    if !path.exists() {
+        return Err(format!(
+            "Layout file '{}' not found — it may live outside the managed layouts directory.",
+            path.display()
+        ));
+    }
+    std::fs::remove_file(&path).map_err(|e| format!("Delete failed: {e}"))?;
+    state.layouts.lock().unwrap().remove(&name.to_lowercase());
+    Ok(())
+}
+
+/// Saves a modified key arrangement (e.g. from drag-swaps in the Analyze view)
+/// as a new layout derived from `base_name`.
+#[tauri::command]
+fn save_custom_layout(
+    base_name: String,
+    keys: String,
+    new_name: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<LayoutDto, String> {
+    let new_name = new_name.trim().to_string();
+    if new_name.is_empty() {
+        return Err("A name is required.".to_string());
+    }
+
+    let engine = state.engine.lock().unwrap().clone();
+    let mut fl = {
+        let layouts = state.layouts.lock().unwrap();
+        let base = layouts
+            .get(&base_name.to_lowercase())
+            .ok_or_else(|| format!("Layout '{base_name}' not found"))?;
+        custom_fast_layout(&engine, base, Some(&keys), &[])?
+    };
+    fl.name = Some(new_name.clone());
+
+    // Serialize to .dof JSON, clearing provenance fields from the base layout.
+    let layout: Layout = fl.into();
+    let layout = Layout {
+        metadata: Arc::new(LayoutMetadata {
+            authors: vec![],
+            year: None,
+            link: None,
+            ..(*layout.metadata).clone()
+        }),
+        ..layout
+    };
+    let json =
+        serde_json::to_string_pretty(&layout).map_err(|e| format!("Serialization failed: {e}"))?;
+
+    let lang = engine.language.clone();
+    let file_name = new_name.replace(' ', "_").to_lowercase();
+    let path = state
+        .dirs
+        .layouts_dir()
+        .join(&lang)
+        .join(&file_name)
+        .with_extension("dof");
+
+    if path.exists() {
+        return Err(format!("A layout named '{new_name}' already exists."));
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
+
+    let layout_loaded = Layout::load(&path).map_err(|e| e.to_string())?;
+    let dto = layout_to_dto(&engine, &layout_loaded);
+    state
+        .layouts
+        .lock()
+        .unwrap()
+        .insert(new_name.to_lowercase(), layout_loaded);
+
+    Ok(dto)
 }
 
 #[tauri::command]
@@ -1042,6 +1293,7 @@ fn get_session(state: tauri::State<'_, AppState>) -> Result<SessionDto, String> 
             view: "layouts".to_string(),
             language: state.engine.lock().unwrap().language.clone(),
             last_layout: None,
+            heat_scheme: None,
         });
     }
     let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
@@ -1218,6 +1470,8 @@ fn set_config(config_dto: ConfigDto, state: tauri::State<'_, AppState>) -> Resul
     *state.config.lock().unwrap() = new_config;
     *state.engine.lock().unwrap() = new_engine;
     *state.layouts.lock().unwrap() = new_layouts;
+    // Generated layouts are tied to the old engine's character mapping.
+    state.generated.lock().unwrap().clear();
     Ok(())
 }
 
@@ -1403,6 +1657,7 @@ pub fn run() {
                 dirs,
                 config: Mutex::new(config),
                 cancel_flag: Arc::new(AtomicBool::new(false)),
+                generating: Arc::new(AtomicBool::new(false)),
             });
 
             // File watcher: auto-reload when config.toml or layout files change.
@@ -1432,10 +1687,23 @@ pub fn run() {
                         }
                         last_reload = std::time::Instant::now();
                         let state = app_handle.state::<AppState>();
-                        if let Err(e) = reload_state(&state) {
-                            eprintln!("Auto-reload failed: {e}");
+
+                        // Only a config.toml change requires rebuilding the engine
+                        // (which invalidates generated results). Layout file changes
+                        // — including the app's own saves — just refresh the layout
+                        // map so in-progress work (e.g. generation results) survives.
+                        let config_changed = event.paths.iter().any(|p| p.ends_with("config.toml"));
+                        if config_changed {
+                            if let Err(e) = reload_state(&state) {
+                                eprintln!("Auto-reload failed: {e}");
+                            } else {
+                                let _ = app_handle.emit("config-reloaded", ());
+                            }
                         } else {
-                            let _ = app_handle.emit("config-reloaded", ());
+                            let config = state.config.lock().unwrap().clone();
+                            *state.layouts.lock().unwrap() =
+                                load_all_layouts(&config, state.dirs.data_dir());
+                            let _ = app_handle.emit("layouts-reloaded", ());
                         }
                     }
                 });
@@ -1451,6 +1719,7 @@ pub fn run() {
             analyze_custom,
             analyze_with_disabled,
             get_bigrams,
+            get_trigrams,
             swap_keys,
             get_char_frequencies,
             set_language,
@@ -1463,6 +1732,8 @@ pub fn run() {
             get_layout_detail,
             save_layout_edit,
             fork_layout,
+            delete_layout,
+            save_custom_layout,
             get_session,
             set_session,
             get_config,
