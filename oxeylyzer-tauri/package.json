@@ -1,6 +1,6 @@
 {
   "name": "oxeylyzer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A web frontend for Oxeylyzer, a keyboard layout analyzer",
   "type": "module",
   "scripts": {
