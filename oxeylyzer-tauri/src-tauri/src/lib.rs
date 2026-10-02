@@ -1207,67 +1207,6 @@ fn set_session(session: SessionDto, state: tauri::State<'_, AppState>) -> Result
 
 // ─── Config Commands ──────────────────────────────────────────────────────────
 
-fn config_dto_to_toml(dto: &ConfigDto) -> String {
-    let layouts_lines = dto
-        .layouts
-        .iter()
-        .map(|p| format!("  {p:?}"))
-        .collect::<Vec<_>>()
-        .join(",\n");
-    let fw = &dto.weights.finger_weights;
-    let mfu = &dto.weights.max_finger_use;
-    let w = &dto.weights;
-    format!(
-        "corpus = {:?}\nlayouts = [\n{}\n]\n\
-         corpus_configs = {:?}\ntrigram_precision = {}\nmax_cores = {}\n\n\
-         [weights]\n\
-         lateral_penalty = {}\nsfbs = {}\nsfs = {}\nstretches = {}\n\
-         pinky_ring_bigrams = {}\ninrolls = {}\noutrolls = {}\nonehands = {}\n\
-         alternates = {}\nalternates_sfs = {}\nredirects = {}\nredirects_sfs = {}\n\
-         bad_redirects = {}\nbad_redirects_sfs = {}\n\n\
-         [weights.finger_weights]\n\
-         lp = {}\nlr = {}\nlm = {}\nli = {}\nlt = {}\n\
-         rt = {}\nri = {}\nrm = {}\nrr = {}\nrp = {}\n\n\
-         [weights.max_finger_use]\n\
-         penalty = {}\npinky = {}\nring = {}\nmiddle = {}\nindex = {}\nthumb = {}\n",
-        dto.corpus,
-        layouts_lines,
-        dto.corpus_configs,
-        dto.trigram_precision,
-        dto.max_cores,
-        w.lateral_penalty,
-        w.sfbs,
-        w.sfs,
-        w.stretches,
-        w.pinky_ring_bigrams,
-        w.inrolls,
-        w.outrolls,
-        w.onehands,
-        w.alternates,
-        w.alternates_sfs,
-        w.redirects,
-        w.redirects_sfs,
-        w.bad_redirects,
-        w.bad_redirects_sfs,
-        fw.lp,
-        fw.lr,
-        fw.lm,
-        fw.li,
-        fw.lt,
-        fw.rt,
-        fw.ri,
-        fw.rm,
-        fw.rr,
-        fw.rp,
-        mfu.penalty,
-        mfu.pinky,
-        mfu.ring,
-        mfu.middle,
-        mfu.index,
-        mfu.thumb,
-    )
-}
-
 fn config_to_dto(config: &Config) -> ConfigDto {
     let w = &config.weights;
     ConfigDto {
@@ -1354,10 +1293,10 @@ fn set_config(config_dto: ConfigDto, state: tauri::State<'_, AppState>) -> Resul
         weights: new_weights,
     };
 
-    // Write config.toml as hand-built TOML string.
     let config_path = state.dirs.config_file();
-    std::fs::write(&config_path, config_dto_to_toml(&config_dto))
-        .map_err(|e| format!("Write failed: {e}"))?;
+    let toml = toml::to_string_pretty(&new_config)
+        .map_err(|e| format!("Failed to serialize config: {e}"))?;
+    std::fs::write(&config_path, toml).map_err(|e| format!("Write failed: {e}"))?;
 
     // Rebuild engine with new config
     let corpus_path = state.dirs.data_dir().join(&new_config.corpus);
@@ -1382,52 +1321,6 @@ fn get_defaults() -> Result<ConfigDto, String> {
 
 fn preset_dir(dirs: &OxeylyzerDirs) -> PathBuf {
     dirs.weight_presets_dir()
-}
-
-fn weights_dto_to_toml(w: &WeightsDto) -> String {
-    let fw = &w.finger_weights;
-    let mfu = &w.max_finger_use;
-    format!(
-        "lateral_penalty = {}\nsfbs = {}\nsfs = {}\nstretches = {}\n\
-         pinky_ring_bigrams = {}\ninrolls = {}\noutrolls = {}\nonehands = {}\n\
-         alternates = {}\nalternates_sfs = {}\nredirects = {}\nredirects_sfs = {}\n\
-         bad_redirects = {}\nbad_redirects_sfs = {}\n\n\
-         [finger_weights]\n\
-         lp = {}\nlr = {}\nlm = {}\nli = {}\nlt = {}\n\
-         rt = {}\nri = {}\nrm = {}\nrr = {}\nrp = {}\n\n\
-         [max_finger_use]\n\
-         penalty = {}\npinky = {}\nring = {}\nmiddle = {}\nindex = {}\nthumb = {}\n",
-        w.lateral_penalty,
-        w.sfbs,
-        w.sfs,
-        w.stretches,
-        w.pinky_ring_bigrams,
-        w.inrolls,
-        w.outrolls,
-        w.onehands,
-        w.alternates,
-        w.alternates_sfs,
-        w.redirects,
-        w.redirects_sfs,
-        w.bad_redirects,
-        w.bad_redirects_sfs,
-        fw.lp,
-        fw.lr,
-        fw.lm,
-        fw.li,
-        fw.lt,
-        fw.rt,
-        fw.ri,
-        fw.rm,
-        fw.rr,
-        fw.rp,
-        mfu.penalty,
-        mfu.pinky,
-        mfu.ring,
-        mfu.middle,
-        mfu.index,
-        mfu.thumb,
-    )
 }
 
 #[tauri::command]
@@ -1458,7 +1351,8 @@ fn save_weight_preset(
     let dir = preset_dir(&state.dirs);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(&name).with_extension("toml");
-    std::fs::write(&path, weights_dto_to_toml(&weights)).map_err(|e| e.to_string())
+    let toml = toml::to_string_pretty(&weights).map_err(|e| e.to_string())?;
+    std::fs::write(&path, toml).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1640,4 +1534,22 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_round_trips_through_toml() {
+        let config = Config {
+            corpus: PathBuf::from("/data/\"quoted\" dir/english.json"),
+            ..Config::with_defaults()
+        };
+        let toml = toml::to_string_pretty(&config).unwrap();
+        let parsed: Config = toml::from_str(&toml).unwrap();
+        assert_eq!(parsed.corpus, config.corpus);
+        assert_eq!(parsed.weights.stretches, config.weights.stretches);
+        assert_eq!(parsed.layouts, config.layouts);
+    }
 }
