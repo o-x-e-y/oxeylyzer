@@ -10,7 +10,8 @@ const FINGER_LABELS = ["LP", "LR", "LM", "LI", "LT", "RT", "RI", "RM", "RR", "RP
  */
 export default function FingerStats(props: { stats: LayoutStats }) {
   const usage = () => props.stats.finger_usage ?? [];
-  const speed = () => props.stats.finger_speed ?? [];
+  // Finger speed is a penalty and comes through negative; the bars show its size.
+  const speed = () => (props.stats.finger_speed ?? []).map(Math.abs);
   const maxUsage = () => Math.max(...usage(), 1e-9);
   const maxSpeed = () => Math.max(...speed(), 1e-9);
   const hand = (from: number, to: number) =>
