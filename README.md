@@ -56,22 +56,21 @@ The REPL supports the following main commands:
 - **analyze** — Show a full stat breakdown for a layout by name.
 - **compare** — Compare two layouts and see how their stats differ.
 - **rank** — Rank all loaded layouts by a specific metric.
-- **generate** — Generate new layouts from scratch for the current language. Run with `1000` iterations usually, though `500` gives pretty good results too.
-- **improve** — Attempt to improve an existing layout. Especially powerful when combined with pins — if you know your vowel block you can pin it and get roughly a 250% speed increase by not having to search those positions.
+- **generate** (alias **improve**) — Generate new layouts. `generate semimak 1000` uses the keys, board and fingering of `semimak` as the base; its arrangement is shuffled first, so you get fresh layouts rather than tweaks of it. Without a name (`generate 1000`), the best-ranked loaded layout is the base. Run with `1000` iterations usually, though `500` gives pretty good results too.
 - **load** — Load a language corpus. Use `--raw` to load without any corpus rules applied.
 - **config** — Edit analyzer weights from within the REPL.
 - **save** / **remove** — Save or remove a layout.
 
-As a piece of advice, if you for example have a vowel block in mind you want to use, pinning it and running `improve` can speed up your generation process by a _lot_. For example, if you know you want `eu ao i` (for English) you can pin these positions and run `improve semimak <amount>` (or any other layout with this vowel setup) to get about a 250% speed increase or something similar, just by pinning 5 keys.
+As a piece of advice, if you for example have a vowel block in mind you want to use, pinning it can speed up your generation process by a _lot_. For example, if you know you want `eu ao i` (for English) you can run `generate semimak <amount> -p euaoi` (or use any other layout with this vowel setup) to get about a 250% speed increase or something similar, just by pinning 5 keys.
 
 ---
 
 ## Configuration
 
-There are a lot of metrics that can be configured, which all happens in the `config.toml`. Keys used in generation can be configured as well in `languages_default.cfg`, though I would probably not recommend changing these unless you want to do some custom stuff like pretending `e` is on a thumb key and replacing it with `/`. Dedicated thumb keys will be added some time in the future. 
+There are a lot of metrics that can be configured, which all happens in the `config.toml`. The keys used in generation come from the base layout, so to generate with a different set of keys, make a layout with those keys and generate from it.
 
 ### Pins
-Pins allow you to lock certain keys to a certain position when you run `improve` on a certain layout. if you change a `.` into an `x`, it becomes pinned. This is useful if you want certain keys to be in certain locations, but want to optimize everything else.
+Pins lock characters to their position in the base layout while everything else is optimized: `generate <layout> <amount> -p abc` keeps `a`, `b` and `c` where they are in `<layout>`. This is useful if you want certain keys to be in certain locations.
 
 ### Defaults
 `language` is the language the repl starts out in, and `trigram_precision` is the amount of trigrams that are used during generation. Note however that this does not actually work yet, it's hardcoded to be 1000 everywhere. I will fix this at some point. There is also `keyboard_type`, which sets some values for the heatmap the analyzer uses. This has a few settings:
@@ -177,10 +176,6 @@ This basically does what `punct_unshifted` does, except it doesn't add the simul
 This takes a `list` attribute which is an array `[]` of arrays. The arrays inside contain two elements: a single character, and the sequence of keys this character should be converted into. In the `default.toml` config this is used to convert ellipsis into three separate `.` characters, but this is very useful for languages like Spanish or French where you can use an accent key (denoted by `*` in those languages) to collapse all kinds of accented keys into a single key + letter. You don't need to change the corpus for this at all, it's purely handled within these corpus rules.
 
 This also takes an optional argument `uppercase_versions`, which takes a `true/false` value. This is false by default, but when set to true it will also generate uppercase versions of these sequences. For example, if you have an `["ç", "*c"]` rule, you will get `["Ç", " *c"]` completely for free which is useful for these alphabetic conversions.
-
-### languages_default.cfg
-
-In the root there is also a file which contains language names, and the 30 keys that are used for generation by default. You can and should select these yourself (I think it might straight up crash if you try to generate for a language that doesn't have these). Usually a pretty good way to find out good keys is to take the top 30, give or take some punctuation you might not want.
 
 ### Coming up with good rules
 
