@@ -1618,6 +1618,39 @@ mod tests {
     }
 
     #[test]
+    fn cancel_stops_generation_promptly() {
+        let (dirs, root) = temp_dirs("cancel");
+        let (loaded, _) = initial_load(&dirs);
+        let base = loaded.engine.fast_layout(&loaded.layouts["gust"].layout, &[]);
+
+        for algorithm in ["hill", "ils", "sa", "lahc"] {
+            let run = GenerateRun {
+                engine: loaded.engine.clone(),
+                algorithm: algorithm.to_string(),
+                count: 1_000_000,
+                base: base.clone(),
+                pins: vec![],
+                max_cores: 0,
+                cancel: Arc::new(AtomicBool::new(false)),
+            };
+            let cancel = run.cancel.clone();
+            let canceller = std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(300));
+                cancel.store(true, Ordering::Relaxed);
+                std::time::Instant::now()
+            });
+            let (results, cancelled) = run_generation(&run, &|_| {}).unwrap();
+            let stopped = std::time::Instant::now();
+            let latency = stopped - canceller.join().unwrap();
+            eprintln!("{algorithm}: stopped {latency:?} after cancel, {} results", results.len());
+            assert!(cancelled);
+            assert!(latency < Duration::from_secs(10), "{algorithm} took {latency:?}");
+        }
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn startup_survives_a_broken_config_and_a_missing_corpus() {
         let (dirs, root) = temp_dirs("startup");
 
