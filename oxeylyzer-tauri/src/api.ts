@@ -13,6 +13,10 @@ export async function currentLanguage(): Promise<string> {
   return invoke("current_language");
 }
 
+export async function textDir(): Promise<string> {
+  return invoke("text_dir");
+}
+
 export async function analyzeLayout(name: string): Promise<Layout> {
   return invoke("analyze_layout", { name });
 }

@@ -8,6 +8,7 @@ use std::{
 };
 
 use oxeylyzer_core::{
+    SPACE_CHAR,
     data::Data,
     fast_layout::{BigramPair, FastLayout},
     generate::{LayoutStats, Oxeylyzer},
@@ -400,6 +401,11 @@ fn current_language(state: tauri::State<'_, AppState>) -> Result<String, String>
     Ok(state.engine.lock().unwrap().language.clone())
 }
 
+#[tauri::command]
+fn text_dir(state: tauri::State<'_, AppState>) -> String {
+    state.dirs.text_dir().display().to_string()
+}
+
 #[tauri::command(async)]
 fn analyze_layout(name: String, state: tauri::State<'_, AppState>) -> Result<LayoutDto, String> {
     let engine = state.engine.lock().unwrap().clone();
@@ -631,6 +637,12 @@ fn lookup_ngram(
 ) -> Result<NgramResultDto, String> {
     let engine = state.engine.lock().unwrap().clone();
     let data = &engine.data;
+
+    // The corpus stores spaces as SPACE_CHAR.
+    let ngram: String = ngram
+        .chars()
+        .map(|c| if c == ' ' { SPACE_CHAR } else { c })
+        .collect();
 
     // get_u maps unknown characters to byte 0 (the replacement character);
     // report those instead of silently returning the replacement's stats.
@@ -1469,6 +1481,7 @@ pub fn run() {
             list_layouts,
             list_languages,
             current_language,
+            text_dir,
             analyze_layout,
             analyze_custom,
             get_bigrams,
