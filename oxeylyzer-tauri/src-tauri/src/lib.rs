@@ -1,10 +1,12 @@
 use std::{
     collections::HashMap,
+    panic::AssertUnwindSafe,
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 
 use oxeylyzer_core::{
@@ -13,7 +15,10 @@ use oxeylyzer_core::{
     fast_layout::{BigramPair, FastLayout},
     generate::{LayoutStats, Oxeylyzer},
     layout::{Layout, LayoutMetadata, PosPair},
-    rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    rayon::{
+        self, ThreadPoolBuilder,
+        iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    },
     weights::{Config, FingerWeights, MaxFingerUse, Weights},
 };
 use oxeylyzer_resources::OxeylyzerDirs;
@@ -167,10 +172,6 @@ pub struct AppState {
     pub engine: Mutex<Arc<Oxeylyzer>>,
     /// All loaded layouts, keyed by lowercase name.
     pub layouts: Mutex<HashMap<String, Layout>>,
-    /// Results from the most recent generation run. Cleared when the engine
-    /// changes (language switch, config change) since the layouts are tied to
-    /// the engine's character mapping.
-    pub generated: Mutex<Vec<FastLayout>>,
     /// Managed resource paths (XDG/AppData config dir in release, override in dev).
     pub dirs: OxeylyzerDirs,
     /// Cached config for reload and language switching.
@@ -179,6 +180,15 @@ pub struct AppState {
     pub cancel_flag: Arc<AtomicBool>,
     /// True while a generation run is in progress; prevents overlapping runs.
     pub generating: Arc<AtomicBool>,
+}
+
+/// Clears the generating flag when dropped, including when generation panics.
+struct GeneratingGuard(Arc<AtomicBool>);
+
+impl Drop for GeneratingGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -231,31 +241,33 @@ fn stats_to_dto(stats: &LayoutStats, char_total: i64, finger_usage: [f64; 10]) -
     }
 }
 
-fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
-    let fast = engine.fast_layout(layout, &[]);
-    let stats = engine.get_layout_stats(&fast);
-    let stats_dto = stats_to_dto(
-        &stats,
-        engine.data.char_total,
-        finger_usage_pct(engine, &fast),
-    );
+fn fast_layout_to_dto(
+    engine: &Oxeylyzer,
+    fl: &FastLayout,
+    name: String,
+    keys: String,
+    board: String,
+) -> LayoutDto {
+    let stats = engine.get_layout_stats(fl);
     LayoutDto {
-        name: layout.name.clone(),
-        keys: fast.layout_str(),
-        board: board_name(layout),
-        fingering_name: layout
-            .metadata
-            .fingering_name
-            .as_ref()
-            .map(|n| n.to_string()),
-        stats: stats_dto,
-        keyboard: fast
+        name,
+        keys,
+        board,
+        fingering_name: fl.metadata.fingering_name.as_ref().map(|n| n.to_string()),
+        stats: stats_to_dto(&stats, engine.data.char_total, finger_usage_pct(engine, fl)),
+        keyboard: fl
             .keyboard
             .iter()
             .map(|k| [k.x(), k.y(), k.width(), k.height()])
             .collect(),
-        shape: fast.shape.inner().to_vec(),
+        shape: fl.shape.inner().to_vec(),
     }
+}
+
+fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
+    let fast = engine.fast_layout(layout, &[]);
+    let keys = fast.layout_str();
+    fast_layout_to_dto(engine, &fast, layout.name.clone(), keys, board_name(layout))
 }
 
 /// The named board (ortho, ansi, …), or "custom" for layouts with explicit key geometry.
@@ -375,6 +387,14 @@ fn list_languages_from_dir(dir: &Path) -> Vec<String> {
 
 fn corpus_path_for(language_data_dir: &Path, language: &str) -> PathBuf {
     language_data_dir.join(language).with_extension("json")
+}
+
+fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
+    panic
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| panic.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown error".to_string())
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
@@ -547,7 +567,7 @@ fn get_trigrams(
 }
 
 /// Analyze an arbitrary key arrangement (swaps + disabled keys) derived from a named base layout.
-/// `keys` is the full 30-char current arrangement; `disabled_indices` are zeroed out before scoring.
+/// `keys` is the full current arrangement; `disabled_indices` are zeroed out before scoring.
 /// Returns `keys` unchanged so the frontend always has the clean arrangement available.
 #[tauri::command(async)]
 fn analyze_custom(
@@ -559,33 +579,13 @@ fn analyze_custom(
     let engine = state.engine.lock().unwrap().clone();
     let layout = get_layout(&state, &name)?;
     let fl = custom_fast_layout(&engine, &layout, Some(&keys), &disabled_indices)?;
-
-    let keyboard = fl
-        .keyboard
-        .iter()
-        .map(|k| [k.x(), k.y(), k.width(), k.height()])
-        .collect();
-    let shape = fl.shape.inner().to_vec();
-
-    let stats = engine.get_layout_stats(&fl);
-    let stats_dto = stats_to_dto(
-        &stats,
-        engine.data.char_total,
-        finger_usage_pct(&engine, &fl),
-    );
-    Ok(LayoutDto {
-        name: format!("{name}*"),
+    Ok(fast_layout_to_dto(
+        &engine,
+        &fl,
+        format!("{}*", layout.name),
         keys,
-        board: board_name(&layout),
-        fingering_name: layout
-            .metadata
-            .fingering_name
-            .as_ref()
-            .map(|n| n.to_string()),
-        stats: stats_dto,
-        keyboard,
-        shape,
-    })
+        board_name(&layout),
+    ))
 }
 
 #[tauri::command]
@@ -626,7 +626,6 @@ fn set_language(language: String, state: tauri::State<'_, AppState>) -> Result<(
 
     *state.engine.lock().unwrap() = new_engine;
     *state.layouts.lock().unwrap() = new_layouts;
-    state.generated.lock().unwrap().clear();
     Ok(())
 }
 
@@ -801,6 +800,72 @@ fn generate_batch(
     }
 }
 
+struct GenerateRun {
+    engine: Arc<Oxeylyzer>,
+    algorithm: String,
+    count: usize,
+    base: FastLayout,
+    pins: Vec<usize>,
+    max_cores: usize,
+    cancel: Arc<AtomicBool>,
+}
+
+/// Runs generation on a pool sized by `max_cores` and returns the top 50
+/// results plus whether the run was cancelled.
+fn run_generation(
+    run: &GenerateRun,
+    on_progress: &(dyn Fn(usize) + Sync),
+) -> Result<(Vec<LayoutDto>, bool), String> {
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(run.max_cores)
+        .build()
+        .map_err(|e| format!("Failed to start worker threads: {e}"))?;
+
+    Ok(pool.install(|| {
+        // Generate in parallel batches, checking the cancel flag between
+        // batches — this is what makes cancellation actually stop the work
+        // instead of merely discarding its results.
+        let batch = rayon::current_num_threads();
+        let mut results: Vec<FastLayout> = Vec::with_capacity(run.count);
+        let mut last_emit = std::time::Instant::now();
+
+        while results.len() < run.count && !run.cancel.load(Ordering::Relaxed) {
+            let n = batch.min(run.count - results.len());
+            results.extend(generate_batch(&run.engine, &run.algorithm, n, &run.base, &run.pins));
+
+            if last_emit.elapsed() >= Duration::from_millis(200) {
+                last_emit = std::time::Instant::now();
+                on_progress(results.len());
+            }
+        }
+
+        let cancelled = run.cancel.load(Ordering::Relaxed);
+
+        // Pre-compute scores once per layout, then sort by cached value.
+        let mut scored: Vec<(i64, FastLayout)> = results
+            .into_iter()
+            .map(|fl| (run.engine.score(&fl), fl))
+            .collect();
+        scored.sort_unstable_by(|(s1, _), (s2, _)| s2.cmp(s1));
+
+        let top = &scored[..50.min(scored.len())];
+        let dtos = top
+            .par_iter()
+            .enumerate()
+            .map(|(i, (_, fl))| {
+                fast_layout_to_dto(
+                    &run.engine,
+                    fl,
+                    format!("gen-{}", i + 1),
+                    fl.layout_str(),
+                    "generated".to_string(),
+                )
+            })
+            .collect();
+        (dtos, cancelled)
+    }))
+}
+
 #[tauri::command]
 async fn start_generate(
     base_layout: String,
@@ -810,8 +875,8 @@ async fn start_generate(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    // Reject overlapping runs — two concurrent runs would race for
-    // `state.generated` and double CPU usage.
+    // Reject overlapping runs — two concurrent runs would double CPU usage
+    // and interleave their progress events.
     if state
         .generating
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -819,168 +884,45 @@ async fn start_generate(
     {
         return Err("A generation run is already in progress.".to_string());
     }
+    let guard = GeneratingGuard(state.generating.clone());
     state.cancel_flag.store(false, Ordering::Relaxed);
 
-    // Clone what we need before spawning — avoids moving tauri::State into a thread.
     let engine = state.engine.lock().unwrap().clone();
-    let cancel = state.cancel_flag.clone();
-    let generating = state.generating.clone();
-    let algorithm = algorithm.unwrap_or_else(|| "hill".to_string());
-
-    let fast_base = {
-        let layouts = state.layouts.lock().unwrap();
-        let base = match layouts.get(&base_layout.to_lowercase()) {
-            Some(base) => base,
-            None => {
-                generating.store(false, Ordering::SeqCst);
-                return Err(format!("Layout '{base_layout}' not found"));
-            }
-        };
-        engine.fast_layout(base, &[])
+    let base = engine.fast_layout(&get_layout(&state, &base_layout)?, &[]);
+    let run = GenerateRun {
+        pins: pin_positions(&base, &engine, &pins),
+        engine,
+        algorithm: algorithm.unwrap_or_else(|| "hill".to_string()),
+        count,
+        base,
+        max_cores: state.config.lock().unwrap().max_cores,
+        cancel: state.cancel_flag.clone(),
     };
 
-    let pin_pos = pin_positions(&fast_base, &engine, &pins);
-    let app = app_handle.clone();
-
     std::thread::spawn(move || {
-        // Generate in parallel batches, checking the cancel flag between
-        // batches — this is what makes cancellation actually stop the work
-        // instead of merely discarding its results.
-        let batch = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4);
-        let mut results: Vec<FastLayout> = Vec::with_capacity(count);
-        let mut last_emit = std::time::Instant::now();
-
-        while results.len() < count && !cancel.load(Ordering::Relaxed) {
-            let n = batch.min(count - results.len());
-            results.extend(generate_batch(&engine, &algorithm, n, &fast_base, &pin_pos));
-
-            if last_emit.elapsed() >= std::time::Duration::from_millis(200) {
-                last_emit = std::time::Instant::now();
-                let _ = app.emit(
+        let _guard = guard;
+        let payload = match std::panic::catch_unwind(AssertUnwindSafe(|| {
+            run_generation(&run, &|done| {
+                let _ = app_handle.emit(
                     "generate-progress",
-                    serde_json::json!({ "done": results.len(), "total": count }),
+                    serde_json::json!({ "done": done, "total": run.count }),
                 );
-            }
-        }
-
-        let cancelled = cancel.load(Ordering::Relaxed);
-
-        // Pre-compute scores once per layout, then sort by cached value.
-        // Avoids calling engine.score() O(N log N) times inside the comparator.
-        let char_total = engine.data.char_total;
-        let mut scored: Vec<(i64, FastLayout)> = results
-            .into_iter()
-            .map(|fl| (engine.score(&fl), fl))
-            .collect();
-        scored.sort_unstable_by(|(s1, _), (s2, _)| s2.cmp(s1));
-
-        // Build DTOs for the top 50 in parallel — get_layout_stats is expensive
-        // but read-only, so rayon can safely run it across threads.
-        let top = &scored[..50.min(scored.len())];
-        let layout_dtos: Vec<LayoutDto> = top
-            .par_iter()
-            .enumerate()
-            .map(|(i, (_, fl))| {
-                let stats = engine.get_layout_stats(fl);
-                let stats_dto = stats_to_dto(&stats, char_total, finger_usage_pct(&engine, fl));
-                LayoutDto {
-                    name: fl.name.clone().unwrap_or_else(|| format!("gen-{}", i + 1)),
-                    keys: fl.layout_str(),
-                    board: "generated".to_string(),
-                    fingering_name: fl.metadata.fingering_name.as_ref().map(|n| n.to_string()),
-                    stats: stats_dto,
-                    keyboard: fl
-                        .keyboard
-                        .iter()
-                        .map(|k| [k.x(), k.y(), k.width(), k.height()])
-                        .collect(),
-                    shape: fl.shape.inner().to_vec(),
-                }
             })
-            .collect();
-
-        // Store all results (sorted) for save_generated. Partial results from a
-        // cancelled run are kept on purpose — they're still valid layouts.
-        let state = app.state::<AppState>();
-        *state.generated.lock().unwrap() = scored.into_iter().map(|(_, fl)| fl).collect();
-
-        let _ = app.emit(
-            "generate-done",
-            serde_json::json!({ "results": layout_dtos, "cancelled": cancelled }),
-        );
-
-        generating.store(false, Ordering::SeqCst);
+        })) {
+            Ok(Ok((results, cancelled))) => {
+                serde_json::json!({ "results": results, "cancelled": cancelled })
+            }
+            Ok(Err(e)) => serde_json::json!({ "results": [], "cancelled": false, "error": e }),
+            Err(panic) => serde_json::json!({
+                "results": [],
+                "cancelled": false,
+                "error": format!("Generation failed: {}", panic_message(panic.as_ref())),
+            }),
+        };
+        let _ = app_handle.emit("generate-done", payload);
     });
 
     Ok(())
-}
-
-#[tauri::command(async)]
-fn save_generated(
-    index: usize,
-    name: Option<String>,
-    state: tauri::State<'_, AppState>,
-) -> Result<LayoutDto, String> {
-    let engine = state.engine.lock().unwrap().clone();
-    let mut generated = state.generated.lock().unwrap();
-
-    let len = generated.len();
-    let fl = generated
-        .get_mut(index)
-        .ok_or_else(|| format!("Index {index} out of bounds ({len} results)"))?;
-
-    // Assign the chosen name.
-    let save_name = name.unwrap_or_else(|| {
-        fl.keys
-            .iter()
-            .skip(10)
-            .take(4)
-            .map(|&u| engine.mapping.get_c(u))
-            .collect::<String>()
-    });
-    fl.name = Some(save_name.clone());
-
-    // Serialize to .dof JSON, clearing provenance fields from the base layout.
-    let layout: Layout = fl.clone().into();
-    let layout = Layout {
-        metadata: Arc::new(LayoutMetadata {
-            authors: vec![],
-            year: None,
-            link: None,
-            ..(*layout.metadata).clone()
-        }),
-        ..layout
-    };
-    let json =
-        serde_json::to_string_pretty(&layout).map_err(|e| format!("Serialization failed: {e}"))?;
-
-    // Write to the layouts directory for the current language.
-    let lang = engine.language.clone();
-    let file_name = save_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .dirs
-        .layouts_dir()
-        .join(&lang)
-        .join(&file_name)
-        .with_extension("dof");
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
-
-    // Add to loaded layouts.
-    let layout_loaded = Layout::load(&path).map_err(|e| e.to_string())?;
-    let dto = layout_to_dto(&engine, &layout_loaded);
-    state
-        .layouts
-        .lock()
-        .unwrap()
-        .insert(save_name.to_lowercase(), layout_loaded);
-
-    Ok(dto)
 }
 
 #[tauri::command]
@@ -1010,8 +952,8 @@ fn delete_layout(name: String, state: tauri::State<'_, AppState>) -> Result<(), 
     Ok(())
 }
 
-/// Saves a modified key arrangement (e.g. from drag-swaps in the Analyze view)
-/// as a new layout derived from `base_name`.
+/// Saves a key arrangement (drag-swaps in Analyze, or a generated layout) as a
+/// new layout derived from `base_name`.
 #[tauri::command(async)]
 fn save_custom_layout(
     base_name: String,
@@ -1281,8 +1223,6 @@ fn set_config(config_dto: ConfigDto, state: tauri::State<'_, AppState>) -> Resul
     *state.config.lock().unwrap() = new_config;
     *state.engine.lock().unwrap() = new_engine;
     *state.layouts.lock().unwrap() = new_layouts;
-    // Generated layouts are tied to the old engine's character mapping.
-    state.generated.lock().unwrap().clear();
     Ok(())
 }
 
@@ -1351,7 +1291,6 @@ fn reload_state(state: &AppState) -> Result<(), String> {
     *state.config.lock().unwrap() = config;
     *state.engine.lock().unwrap() = new_engine;
     *state.layouts.lock().unwrap() = new_layouts;
-    state.generated.lock().unwrap().clear();
     Ok(())
 }
 
@@ -1419,7 +1358,6 @@ pub fn run() {
             app.manage(AppState {
                 engine: Mutex::new(engine),
                 layouts: Mutex::new(layouts),
-                generated: Mutex::new(Vec::new()),
                 dirs,
                 config: Mutex::new(config),
                 cancel_flag: Arc::new(AtomicBool::new(false)),
@@ -1454,10 +1392,9 @@ pub fn run() {
                         last_reload = std::time::Instant::now();
                         let state = app_handle.state::<AppState>();
 
-                        // Only a config.toml change requires rebuilding the engine
-                        // (which invalidates generated results). Layout file changes
-                        // — including the app's own saves — just refresh the layout
-                        // map so in-progress work (e.g. generation results) survives.
+                        // Only a config.toml change requires rebuilding the engine.
+                        // Layout file changes — including the app's own saves — just
+                        // refresh the layout map.
                         let config_changed = event.paths.iter().any(|p| p.ends_with("config.toml"));
                         if config_changed {
                             if let Err(e) = reload_state(&state) {
@@ -1491,7 +1428,6 @@ pub fn run() {
             lookup_ngram,
             load_corpus,
             start_generate,
-            save_generated,
             cancel_generate,
             get_layout_detail,
             save_layout_edit,

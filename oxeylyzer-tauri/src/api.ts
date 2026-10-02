@@ -66,10 +66,6 @@ export async function startGenerate(
   return invoke("start_generate", { baseLayout, count, pins, algorithm });
 }
 
-export async function saveGenerated(index: number, name?: string): Promise<Layout> {
-  return invoke("save_generated", { index, name });
-}
-
 export async function cancelGenerate(): Promise<void> {
   return invoke("cancel_generate");
 }
