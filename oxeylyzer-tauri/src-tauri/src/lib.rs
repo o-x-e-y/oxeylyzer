@@ -11,7 +11,7 @@ use oxeylyzer_core::{
     data::Data,
     fast_layout::{BigramPair, FastLayout},
     generate::{LayoutStats, Oxeylyzer},
-    layout::{Layout, LayoutMetadata},
+    layout::{Layout, LayoutMetadata, PosPair},
     rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     weights::{Config, FingerWeights, MaxFingerUse, Weights},
 };
@@ -426,10 +426,8 @@ fn get_bigrams(
     )?;
     let bigram_total = engine.data.bigram_total as f64;
 
-    let mut entries: Vec<BigramEntryDto> = match category.as_str() {
-        "sfbs" => fl
-            .fspeed_indices
-            .all
+    let frequency_entries = |pairs: Vec<BigramPair>| -> Vec<BigramEntryDto> {
+        pairs
             .iter()
             .filter_map(|pair| {
                 let bigram = bigram_str(&engine, &fl, pair)?;
@@ -439,58 +437,22 @@ fn get_bigrams(
                     percent: (raw as f64 * 100.0) / bigram_total,
                 })
             })
-            .collect(),
-        "scissors" => fl
-            .scissor_indices
-            .pairs
+            .collect()
+    };
+    let unit_pairs = |pairs: &[PosPair]| -> Vec<BigramPair> {
+        pairs
             .iter()
-            .filter_map(|&pos_pair| {
-                let pair = BigramPair {
-                    pair: pos_pair,
-                    dist: 1,
-                };
-                let bigram = bigram_str(&engine, &fl, &pair)?;
-                let raw = engine.pair_sfb(&fl, &pair);
-                Some(BigramEntryDto {
-                    bigram,
-                    percent: (raw as f64 * 100.0) / bigram_total,
-                })
-            })
-            .collect(),
-        "lsbs" => fl
-            .lsb_indices
-            .pairs
-            .iter()
-            .filter_map(|&pos_pair| {
-                let pair = BigramPair {
-                    pair: pos_pair,
-                    dist: 1,
-                };
-                let bigram = bigram_str(&engine, &fl, &pair)?;
-                let raw = engine.pair_sfb(&fl, &pair);
-                Some(BigramEntryDto {
-                    bigram,
-                    percent: (raw as f64 * 100.0) / bigram_total,
-                })
-            })
-            .collect(),
-        "pinky-ring" => fl
-            .pinky_ring_indices
-            .pairs
-            .iter()
-            .filter_map(|&pos_pair| {
-                let pair = BigramPair {
-                    pair: pos_pair,
-                    dist: 1,
-                };
-                let bigram = bigram_str(&engine, &fl, &pair)?;
-                let raw = engine.pair_sfb(&fl, &pair);
-                Some(BigramEntryDto {
-                    bigram,
-                    percent: (raw as f64 * 100.0) / bigram_total,
-                })
-            })
-            .collect(),
+            .map(|&pair| BigramPair { pair, dist: 1 })
+            .collect()
+    };
+
+    // fspeed and stretch entries use the same scaling as the matching stat in
+    // `get_layout_stats`, so the list adds up to the headline number.
+    let mut entries: Vec<BigramEntryDto> = match category.as_str() {
+        "sfbs" => frequency_entries(fl.fspeed_indices.all.to_vec()),
+        "scissors" => frequency_entries(unit_pairs(&fl.scissor_indices.pairs)),
+        "lsbs" => frequency_entries(unit_pairs(&fl.lsb_indices.pairs)),
+        "pinky-ring" => frequency_entries(unit_pairs(&fl.pinky_ring_indices.pairs)),
         "fspeed" => fl
             .fspeed_indices
             .all
@@ -500,7 +462,7 @@ fn get_bigrams(
                 let raw = engine.pair_fspeed(&fl, pair).abs();
                 Some(BigramEntryDto {
                     bigram,
-                    percent: raw as f64 / bigram_total,
+                    percent: raw as f64 / bigram_total / 10.0,
                 })
             })
             .collect(),
@@ -513,7 +475,7 @@ fn get_bigrams(
                 let raw = engine.pair_stretch(&fl, pair).abs();
                 Some(BigramEntryDto {
                     bigram,
-                    percent: raw as f64 / bigram_total,
+                    percent: raw as f64 / bigram_total * 10.0,
                 })
             })
             .collect(),

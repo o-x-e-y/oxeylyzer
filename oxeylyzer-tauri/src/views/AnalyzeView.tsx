@@ -332,6 +332,7 @@ export default function AnalyzeView(props: Props) {
                 <BigramList
                   entries={displayBigrams()}
                   columns={2}
+                  unit={activeTabId() === "fspeed" || activeTabId() === "stretches" ? "" : "%"}
                   onHoverBigram={(chars) => setHighlightedKeys(chars)}
                   onLeave={() => setHighlightedKeys([])}
                 />
