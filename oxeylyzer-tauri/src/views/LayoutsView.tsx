@@ -1,7 +1,7 @@
-import { createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import KeyboardDisplay from "../components/KeyboardDisplay";
 import Dropdown from "../components/Dropdown";
-import { appStore, initStore, refreshStore } from "../store";
+import { appStore, refreshStore } from "../store";
 import { setLanguage, deleteLayout } from "../api";
 
 type Props = {
@@ -34,7 +34,10 @@ export default function LayoutsView(props: Props) {
   const [boardFilter, setBoardFilter] = createSignal<string | null>(null);
   const [expandedLayout, setExpandedLayout] = createSignal<string | null>(null);
   const [changingLanguage, setChangingLanguage] = createSignal(false);
+  const [languageError, setLanguageError] = createSignal("");
   const [pendingLang, setPendingLang] = createSignal(appStore.currentLanguage || "english");
+  // Follow switches made from the Language view.
+  createEffect(() => setPendingLang(appStore.currentLanguage));
   const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null);
   const [deleteError, setDeleteError] = createSignal("");
 
@@ -91,11 +94,12 @@ export default function LayoutsView(props: Props) {
 
   async function handleSetLanguage() {
     setChangingLanguage(true);
+    setLanguageError("");
     try {
       await setLanguage(pendingLang());
-      await initStore();
+      await refreshStore();
     } catch (e) {
-      console.error("Failed to set language:", e);
+      setLanguageError(String(e));
     } finally {
       setChangingLanguage(false);
     }
@@ -187,6 +191,9 @@ export default function LayoutsView(props: Props) {
 
       <Show when={deleteError()}>
         <div class="text-red-400 text-xs font-mono">{deleteError()}</div>
+      </Show>
+      <Show when={languageError()}>
+        <div class="text-red-400 text-xs font-mono">{languageError()}</div>
       </Show>
 
       {/* Layout list */}

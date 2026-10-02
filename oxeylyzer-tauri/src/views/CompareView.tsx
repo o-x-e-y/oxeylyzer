@@ -2,7 +2,7 @@ import { createEffect, createSignal, Show } from "solid-js";
 import LayoutSearch from "../components/LayoutSearch";
 import KeyboardDisplay from "../components/KeyboardDisplay";
 import { CompareStatColumns } from "../components/StatColumns";
-import { appStore } from "../store";
+import { appStore, dataVersion } from "../store";
 import { analyzeLayout } from "../api";
 import type { Layout } from "../types";
 
@@ -13,16 +13,20 @@ export default function CompareView() {
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal("");
 
+  // Re-runs on dataVersion too, since a config or language change alters the stats.
+  let seq = 0;
   createEffect(() => {
     const n1 = name1(),
       n2 = name2();
+    dataVersion();
     if (!n1 || !n2) return;
+    const s = ++seq;
     setLoading(true);
     setError("");
     Promise.all([analyzeLayout(n1), analyzeLayout(n2)])
-      .then(([l1, l2]) => setCompared([l1, l2]))
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false));
+      .then(([l1, l2]) => s === seq && setCompared([l1, l2]))
+      .catch((e) => s === seq && setError(String(e)))
+      .finally(() => s === seq && setLoading(false));
   });
 
   return (

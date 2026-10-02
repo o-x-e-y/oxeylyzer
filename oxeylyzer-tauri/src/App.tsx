@@ -1,5 +1,6 @@
-import { createEffect, createSignal, Match, onMount, onCleanup, Show, Switch } from "solid-js";
-import { listen } from "@tauri-apps/api/event";
+import { createEffect, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import type { JSX } from "solid-js";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import TitleBar from "./components/TitleBar";
 import LayoutsView from "./views/LayoutsView";
 import AnalyzeView from "./views/AnalyzeView";
@@ -8,7 +9,15 @@ import GenerateView from "./views/GenerateView";
 import LanguageView from "./views/LanguageView";
 import EditView from "./views/EditView";
 import ConfigView from "./views/ConfigView";
-import { initStore, refreshStore, appStore, heatScheme, setHeatScheme } from "./store";
+import {
+  appStore,
+  backendError,
+  fetchStore,
+  heatScheme,
+  refreshStore,
+  setBackendError,
+  setHeatScheme,
+} from "./store";
 import type { HeatScheme } from "./store";
 import { getSession, setSession } from "./api";
 
@@ -26,31 +35,33 @@ const NAV_ITEMS: { id: View; label: string }[] = [
 
 function App() {
   const [view, setView] = createSignal<View>("layouts");
-  const [analyzeTarget, setAnalyzeTarget] = createSignal<string | undefined>(undefined);
-  const [editTarget, setEditTarget] = createSignal<string | undefined>(undefined);
+  const [phase, setPhase] = createSignal<"starting" | "ready" | "failed">("starting");
+  const [startError, setStartError] = createSignal("");
+  // Navigation requests are fresh objects, so asking for the layout a view
+  // already shows still reloads it.
+  const [analyzeRequest, setAnalyzeRequest] = createSignal<{ name: string }>();
+  const [editRequest, setEditRequest] = createSignal<{ name: string }>();
+  const [lastLayout, setLastLayout] = createSignal<string | null>(null);
 
-  let sessionRestored = false;
-
-  onMount(async () => {
-    await initStore();
-
-    // Refresh (without unmounting views) when files change on disk —
-    // config-reloaded means the engine was rebuilt, layouts-reloaded means
-    // only layout files changed (e.g. the app's own saves).
-    const unlistenConfig = await listen("config-reloaded", () => refreshStore());
-    const unlistenLayouts = await listen("layouts-reloaded", () => refreshStore());
-    onCleanup(() => {
-      unlistenConfig();
-      unlistenLayouts();
-    });
+  async function start() {
+    try {
+      await fetchStore();
+    } catch (e) {
+      setStartError(String(e));
+      setPhase("failed");
+      return;
+    }
 
     try {
       const session = await getSession();
-      if (session.view && NAV_ITEMS.some((n) => n.id === session.view)) {
-        setView(session.view as View);
-      }
-      if (session.lastLayout) {
-        setAnalyzeTarget(session.lastLayout);
+      if (NAV_ITEMS.some((n) => n.id === session.view)) setView(session.view as View);
+      const last = appStore.layouts.find(
+        (l) => l.name.toLowerCase() === session.lastLayout?.toLowerCase(),
+      );
+      if (last) {
+        setLastLayout(last.name);
+        setAnalyzeRequest({ name: last.name });
+        setEditRequest({ name: last.name });
       }
       if (session.heatScheme && ["original", "playground", "v2"].includes(session.heatScheme)) {
         setHeatScheme(session.heatScheme as HeatScheme);
@@ -58,43 +69,52 @@ function App() {
     } catch {
       // session restore is best-effort
     }
-    sessionRestored = true;
-  });
-
-  // Persist the heat scheme whenever it changes (after initial restore).
-  createEffect(() => {
-    heatScheme();
-    if (sessionRestored) persistSession(view(), analyzeTarget() ?? null);
-  });
-
-  function goAnalyze(layoutName: string) {
-    setAnalyzeTarget(layoutName);
-    setView("analyze");
-    persistSession("analyze", layoutName);
+    setPhase("ready");
   }
 
-  function goEdit(layoutName: string) {
-    setEditTarget(layoutName);
+  onMount(() => {
+    const unlisteners: Promise<UnlistenFn>[] = [
+      listen("config-reloaded", () => refreshStore()),
+      listen("layouts-reloaded", () => refreshStore()),
+    ];
+    onCleanup(() => unlisteners.forEach((u) => u.then((unlisten) => unlisten())));
+    start();
+  });
+
+  createEffect(() => {
+    const session = { view: view(), lastLayout: lastLayout(), heatScheme: heatScheme() };
+    if (phase() === "ready") setSession(session).catch(() => {});
+  });
+
+  function goAnalyze(name: string) {
+    setAnalyzeRequest({ name });
+    setView("analyze");
+  }
+
+  function goEdit(name: string) {
+    setEditRequest({ name });
     setView("edit");
   }
 
-  function navigate(v: View) {
-    setView(v);
-    persistSession(v, analyzeTarget() ?? null);
-  }
-
-  function persistSession(v: string, lastLayout: string | null) {
-    setSession({
-      view: v,
-      language: appStore.currentLanguage,
-      lastLayout,
-      heatScheme: heatScheme(),
-    }).catch(() => {});
-  }
+  // Views stay mounted while hidden, so switching tabs keeps their state —
+  // including a generation run that finishes while another tab is open.
+  const Pane = (p: { id: View; children: JSX.Element }) => (
+    <div class="flex-1 min-h-0 flex flex-col" classList={{ hidden: view() !== p.id }}>
+      {p.children}
+    </div>
+  );
 
   return (
     <div class="flex flex-col h-screen w-screen overflow-hidden bg-neutral-900 text-neutral-100 font-mono">
       <TitleBar />
+      <Show when={backendError()}>
+        <div class="shrink-0 flex items-start gap-3 border-b border-red-900 bg-red-950/50 px-3 py-1.5 text-xs text-red-300">
+          <span class="flex-1 whitespace-pre-wrap">{backendError()}</span>
+          <button class="text-red-400 hover:text-red-200" onClick={() => setBackendError(null)}>
+            ✕
+          </button>
+        </div>
+      </Show>
       <div class="flex flex-1 min-h-0 overflow-hidden">
         {/* ── Sidebar ─────────────────────────────────────── */}
         <nav class="w-36 shrink-0 border-r border-neutral-700 flex flex-col pt-3 gap-0.5">
@@ -106,7 +126,7 @@ function App() {
                 "border-neutral-100 text-neutral-100 bg-neutral-800": view() === item.id,
                 "border-transparent text-neutral-400": view() !== item.id,
               }}
-              onClick={() => navigate(item.id)}
+              onClick={() => setView(item.id)}
             >
               {item.label}
             </button>
@@ -115,41 +135,41 @@ function App() {
 
         {/* ── Main content ────────────────────────────────── */}
         <main class="flex-1 overflow-hidden flex flex-col p-4">
-          <Show when={appStore.loading}>
-            <div class="flex-1 flex items-center justify-center text-neutral-500 text-sm font-mono">
-              Loading…
-            </div>
-          </Show>
-          <Show when={appStore.error}>
-            <div class="flex-1 flex items-center justify-center text-red-400 text-sm font-mono">
-              Error: {appStore.error}
-            </div>
-          </Show>
-          <Show when={!appStore.loading && !appStore.error}>
-            <Switch>
-              <Match when={view() === "layouts"}>
+          <Switch>
+            <Match when={phase() === "starting"}>
+              <div class="flex-1 flex items-center justify-center text-neutral-500 text-sm">
+                Loading…
+              </div>
+            </Match>
+            <Match when={phase() === "failed"}>
+              <div class="flex-1 flex items-center justify-center text-red-400 text-sm">
+                Error: {startError()}
+              </div>
+            </Match>
+            <Match when={phase() === "ready"}>
+              <Pane id="layouts">
                 <LayoutsView onAnalyze={goAnalyze} onEdit={goEdit} />
-              </Match>
-              <Match when={view() === "analyze"}>
-                <AnalyzeView initialLayout={analyzeTarget()} onEdit={goEdit} />
-              </Match>
-              <Match when={view() === "compare"}>
+              </Pane>
+              <Pane id="analyze">
+                <AnalyzeView request={analyzeRequest()} onEdit={goEdit} onLayoutShown={setLastLayout} />
+              </Pane>
+              <Pane id="compare">
                 <CompareView />
-              </Match>
-              <Match when={view() === "generate"}>
+              </Pane>
+              <Pane id="generate">
                 <GenerateView />
-              </Match>
-              <Match when={view() === "language"}>
+              </Pane>
+              <Pane id="language">
                 <LanguageView />
-              </Match>
-              <Match when={view() === "edit"}>
-                <EditView layoutName={editTarget()} />
-              </Match>
-              <Match when={view() === "config"}>
+              </Pane>
+              <Pane id="edit">
+                <EditView request={editRequest()} onLayoutShown={setLastLayout} />
+              </Pane>
+              <Pane id="config">
                 <ConfigView />
-              </Match>
-            </Switch>
-          </Show>
+              </Pane>
+            </Match>
+          </Switch>
         </main>
       </div>
     </div>

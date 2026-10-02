@@ -170,7 +170,6 @@ export async function loadWeightPreset(name: string): Promise<WeightsDto> {
 
 export type Session = {
   view: string;
-  language: string;
   lastLayout: string | null;
   heatScheme?: string | null;
 };

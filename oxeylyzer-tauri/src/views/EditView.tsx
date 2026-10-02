@@ -70,7 +70,9 @@ function parseDof(d: DofJson): Parsed | { error: string } {
 const isParsed = (p: Parsed | { error: string } | null): p is Parsed => !!p && !("error" in p);
 
 type Props = {
-  layoutName?: string;
+  /** Layout to edit; a new object reloads it even if it's already open. */
+  request?: { name: string };
+  onLayoutShown?: (_layoutName: string) => void;
 };
 
 export default function EditView(props: Props) {
@@ -97,6 +99,7 @@ export default function EditView(props: Props) {
       setConfirmOverwrite(false);
       setViewMode("keys");
       setMsg(null);
+      props.onLayoutShown?.(d.name);
     } catch (e) {
       if (s === loadSeq) setMsg({ text: String(e), ok: false });
     }
@@ -104,9 +107,9 @@ export default function EditView(props: Props) {
 
   createEffect(
     on(
-      () => props.layoutName,
-      (layoutName) => {
-        const name = layoutName ?? untrack(() => appStore.layouts[0]?.name);
+      () => props.request,
+      (request) => {
+        const name = request?.name ?? untrack(() => appStore.layouts[0]?.name);
         if (name) load(name);
       },
     ),
