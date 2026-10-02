@@ -1,13 +1,19 @@
-import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import KeyboardDisplay from "../components/KeyboardDisplay";
 import LayoutSearch from "../components/LayoutSearch";
 import Dropdown from "../components/Dropdown";
 import { appStore } from "../store";
-import { startGenerate, saveGenerated, cancelGenerate } from "../api";
+import { startGenerate, saveCustomLayout, cancelGenerate } from "../api";
 import type { Layout } from "../types";
 import { listen } from "@tauri-apps/api/event";
 
-type SaveState = { name: string; saved: boolean };
+type SaveState = { name: string; savedAs: string | null };
+
+/** The first four keys of the second row, e.g. "stnd" — the default name for a save. */
+function defaultName(layout: Layout): string {
+  const start = layout.shape[0] ?? 0;
+  return Array.from(layout.keys).slice(start, start + 4).join("");
+}
 
 const ALGORITHMS: { id: string; label: string; hint: string }[] = [
   { id: "hill", label: "hill climb", hint: "fastest — many layouts per second" },
@@ -17,7 +23,12 @@ const ALGORITHMS: { id: string; label: string; hint: string }[] = [
 ];
 
 export default function GenerateView() {
-  const [baseName, setBaseName] = createSignal(appStore.layouts[0]?.name ?? "");
+  const [baseName, setBaseNameRaw] = createSignal(appStore.layouts[0]?.name ?? "");
+  // Pins are characters of the base layout, so they don't carry over to another one.
+  const setBaseName = (name: string) => {
+    if (name !== baseName()) setPinnedChars(new Set<string>());
+    setBaseNameRaw(name);
+  };
   const [countStr, setCountStr] = createSignal("1000");
   const count = () => Math.max(1, parseInt(countStr()) || 1);
   const [visibleCount, setVisibleCount] = createSignal(10);
@@ -40,54 +51,38 @@ export default function GenerateView() {
   const [wasCancelled, setWasCancelled] = createSignal(false);
   const [progress, setProgress] = createSignal<{ done: number; total: number } | null>(null);
   const [results, setResults] = createSignal<Layout[]>([]);
+  // The layout the shown results were generated from; saves derive from it.
+  const [runBase, setRunBase] = createSignal("");
   const [saveStates, setSaveStates] = createSignal<SaveState[]>([]);
   const [error, setError] = createSignal("");
 
-  let unlisteners: (() => void)[] = [];
-
-  const clearListeners = () => {
-    unlisteners.forEach((u) => u());
-    unlisteners = [];
-  };
-
-  onCleanup(clearListeners);
-
-  function initSaveStates(layouts: Layout[]) {
-    setSaveStates(layouts.map((l) => ({ name: l.name, saved: false })));
-  }
+  onMount(() => {
+    const unlisteners = [
+      listen<{ done: number; total: number }>("generate-progress", (e) => setProgress(e.payload)),
+      // A single done event carries the results; `cancelled: true` means the run
+      // was stopped early and these are the (still valid) partial results.
+      listen<{ results: Layout[]; cancelled: boolean; error?: string }>("generate-done", (e) => {
+        setResults(e.payload.results);
+        setSaveStates(e.payload.results.map(() => ({ name: "", savedAs: null })));
+        setWasCancelled(e.payload.cancelled);
+        if (e.payload.error) setError(e.payload.error);
+        setVisibleCount(10);
+        setRunning(false);
+        setCancelling(false);
+        setProgress(null);
+      }),
+    ];
+    onCleanup(() => unlisteners.forEach((u) => u.then((unlisten) => unlisten())));
+  });
 
   async function handleGenerate() {
-    clearListeners();
-
     setRunning(true);
     setCancelling(false);
     setWasCancelled(false);
     setResults([]);
     setProgress({ done: 0, total: count() });
     setError("");
-
-    const progressUnlisten = await listen<{ done: number; total: number }>(
-      "generate-progress",
-      (e) => setProgress(e.payload),
-    );
-
-    // A single done event carries the results; `cancelled: true` means the run
-    // was stopped early and these are the (still valid) partial results.
-    const doneUnlisten = await listen<{ results: Layout[]; cancelled: boolean }>(
-      "generate-done",
-      (e) => {
-        setResults(e.payload.results);
-        initSaveStates(e.payload.results);
-        setWasCancelled(e.payload.cancelled);
-        setVisibleCount(10);
-        setRunning(false);
-        setCancelling(false);
-        setProgress(null);
-        clearListeners();
-      },
-    );
-
-    unlisteners = [progressUnlisten, doneUnlisten];
+    setRunBase(baseName());
 
     try {
       await startGenerate(baseName(), count(), pins(), algorithm());
@@ -96,7 +91,6 @@ export default function GenerateView() {
       setRunning(false);
       setCancelling(false);
       setProgress(null);
-      clearListeners();
     }
   }
 
@@ -104,7 +98,7 @@ export default function GenerateView() {
   // "cancelling" state until the backend's done event arrives.
   async function handleCancel() {
     setCancelling(true);
-    await cancelGenerate().catch(console.error);
+    await cancelGenerate().catch((e) => setError(String(e)));
   }
 
   function updateSaveName(i: number, name: string) {
@@ -112,10 +106,12 @@ export default function GenerateView() {
   }
 
   async function handleSave(i: number) {
-    const state = saveStates()[i];
+    const layout = results()[i];
+    const name = saveStates()[i].name.trim() || defaultName(layout);
     try {
-      await saveGenerated(i, state.name || undefined);
-      setSaveStates((prev) => prev.map((s, idx) => (idx === i ? { ...s, saved: true } : s)));
+      await saveCustomLayout(runBase(), layout.keys, name);
+      setError("");
+      setSaveStates((prev) => prev.map((s, idx) => (idx === i ? { ...s, savedAs: name } : s)));
     } catch (e) {
       setError(String(e));
     }
@@ -282,17 +278,17 @@ export default function GenerateView() {
 
                   <div class="pl-8 flex items-center gap-2">
                     <Show
-                      when={!save()?.saved}
+                      when={!save()?.savedAs}
                       fallback={
                         <span class="text-xs font-mono text-neutral-400">
-                          Saved as <span class="text-neutral-200">{save()?.name}</span>
+                          Saved as <span class="text-neutral-200">{save()?.savedAs}</span>
                         </span>
                       }
                     >
                       <label class="text-xs text-neutral-500 font-mono shrink-0">Save as</label>
                       <input
                         class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-xs px-2 py-0.5 w-44"
-                        placeholder="name (optional)"
+                        placeholder={defaultName(layout)}
                         value={save()?.name ?? ""}
                         onInput={(e) => updateSaveName(i(), e.currentTarget.value)}
                       />

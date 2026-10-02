@@ -1,6 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Layout, BigramEntry, TrigramEntry, NgramResult } from "./types";
 
+export async function backendStatus(): Promise<{ ready: boolean; error: string | null }> {
+  return invoke("backend_status");
+}
+
 export async function listLayouts(): Promise<Layout[]> {
   return invoke("list_layouts");
 }
@@ -11,6 +15,10 @@ export async function listLanguages(): Promise<string[]> {
 
 export async function currentLanguage(): Promise<string> {
   return invoke("current_language");
+}
+
+export async function textDir(): Promise<string> {
+  return invoke("text_dir");
 }
 
 export async function analyzeLayout(name: string): Promise<Layout> {
@@ -37,20 +45,12 @@ export async function getTrigrams(
   return invoke("get_trigrams", { name, category, count, keys, disabledIndices });
 }
 
-export async function swapKeys(name: string, swaps: string): Promise<Layout> {
-  return invoke("swap_keys", { name, swaps });
-}
-
 export async function getCharFrequencies(): Promise<{ char: string; percent: number }[]> {
   return invoke("get_char_frequencies");
 }
 
 export async function setLanguage(language: string): Promise<void> {
   return invoke("set_language", { language });
-}
-
-export async function reloadConfig(): Promise<void> {
-  return invoke("reload_config");
 }
 
 export async function lookupNgram(ngram: string): Promise<NgramResult> {
@@ -70,24 +70,16 @@ export async function startGenerate(
   return invoke("start_generate", { baseLayout, count, pins, algorithm });
 }
 
-export async function saveGenerated(index: number, name?: string): Promise<Layout> {
-  return invoke("save_generated", { index, name });
-}
-
 export async function cancelGenerate(): Promise<void> {
   return invoke("cancel_generate");
 }
 
-export async function getLayoutDetail(name: string): Promise<unknown> {
+export async function getLayoutDetail(name: string): Promise<Record<string, unknown>> {
   return invoke("get_layout_detail", { name });
 }
 
 export async function saveLayoutEdit(dofJson: unknown, originalName: string): Promise<void> {
   return invoke("save_layout_edit", { dofJson, originalName });
-}
-
-export async function forkLayout(name: string, newName: string): Promise<Layout> {
-  return invoke("fork_layout", { name, newName });
 }
 
 export async function deleteLayout(name: string): Promise<void> {
@@ -160,13 +152,6 @@ export async function getDefaults(): Promise<ConfigDto> {
   return invoke("get_defaults");
 }
 
-export async function analyzeWithDisabled(
-  name: string,
-  disabledIndices: number[],
-): Promise<Layout> {
-  return invoke("analyze_with_disabled", { name, disabledIndices });
-}
-
 export async function analyzeCustom(
   name: string,
   keys: string,
@@ -189,7 +174,6 @@ export async function loadWeightPreset(name: string): Promise<WeightsDto> {
 
 export type Session = {
   view: string;
-  language: string;
   lastLayout: string | null;
   heatScheme?: string | null;
 };

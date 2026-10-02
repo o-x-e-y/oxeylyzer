@@ -1,10 +1,16 @@
 import { createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
+import { listLayouts, listLanguages, currentLanguage, getCharFrequencies } from "./api";
+import type { Layout } from "./types";
 
 export type HeatScheme = "original" | "playground" | "v2";
 export const [heatScheme, setHeatScheme] = createSignal<HeatScheme>("playground");
-import { listLayouts, listLanguages, currentLanguage, getCharFrequencies } from "./api";
-import type { Layout } from "./types";
+
+/** Bumped after every store refresh, so views showing computed stats re-fetch them. */
+export const [dataVersion, setDataVersion] = createSignal(0);
+
+/** A backend problem shown in the app-wide banner. */
+export const [backendError, setBackendError] = createSignal<string | null>(null);
 
 type AppStore = {
   layouts: Layout[];
@@ -12,8 +18,6 @@ type AppStore = {
   currentLanguage: string;
   /** char → frequency percent (0–100), for heatmap coloring */
   charFrequencies: Record<string, number>;
-  loading: boolean;
-  error: string | null;
 };
 
 export const [appStore, setAppStore] = createStore<AppStore>({
@@ -21,34 +25,21 @@ export const [appStore, setAppStore] = createStore<AppStore>({
   languages: [],
   currentLanguage: "",
   charFrequencies: {},
-  loading: false,
-  error: null,
 });
 
-export async function initStore(): Promise<void> {
-  setAppStore("loading", true);
-  setAppStore("error", null);
-  try {
-    await fetchStore();
-    setAppStore("loading", false);
-  } catch (e) {
-    setAppStore({ error: String(e), loading: false });
-  }
-}
-
 /**
- * Refreshes store data without toggling `loading`, so mounted views keep
- * their local state (generation results, comparisons, …) across the refresh.
+ * Refreshes store data in place, so mounted views keep their local state
+ * (generation results, comparisons, …) across the refresh.
  */
 export async function refreshStore(): Promise<void> {
   try {
     await fetchStore();
   } catch (e) {
-    console.error("Store refresh failed:", e);
+    setBackendError(`Refreshing data failed: ${e}`);
   }
 }
 
-async function fetchStore(): Promise<void> {
+export async function fetchStore(): Promise<void> {
   const [layouts, languages, lang, freqList] = await Promise.all([
     listLayouts(),
     listLanguages(),
@@ -67,4 +58,5 @@ async function fetchStore(): Promise<void> {
     currentLanguage: lang,
     charFrequencies,
   });
+  setDataVersion((v) => v + 1);
 }

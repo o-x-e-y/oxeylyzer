@@ -1,7 +1,7 @@
-import { createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import KeyboardDisplay from "../components/KeyboardDisplay";
 import Dropdown from "../components/Dropdown";
-import { appStore, initStore, refreshStore } from "../store";
+import { appStore, refreshStore } from "../store";
 import { setLanguage, deleteLayout } from "../api";
 
 type Props = {
@@ -11,16 +11,16 @@ type Props = {
 
 type SortKey = "score" | "sfb" | "dsfb" | "fspeed" | "scissors" | "lsbs" | "stretches";
 
-const BOARD_TYPES = ["ortho", "ansi", "iso", "colstag", "rowstag"] as const;
-
-const SORT_COLS: { key: SortKey; label: string }[] = [
-  { key: "score", label: "Score" },
+// Score, fspeed and stretches are signed so that higher is better; the rest are
+// percentages where lower is better.
+const SORT_COLS: { key: SortKey; label: string; higherIsBetter?: boolean }[] = [
+  { key: "score", label: "Score", higherIsBetter: true },
   { key: "sfb", label: "SFB%" },
   { key: "dsfb", label: "DSFB%" },
-  { key: "fspeed", label: "Fspeed" },
+  { key: "fspeed", label: "Fspeed", higherIsBetter: true },
   { key: "scissors", label: "Scissors" },
   { key: "lsbs", label: "LSBs" },
-  { key: "stretches", label: "Stretches" },
+  { key: "stretches", label: "Stretches", higherIsBetter: true },
 ];
 
 function statForKey(stats: { [k: string]: number }, key: SortKey): number {
@@ -29,13 +29,22 @@ function statForKey(stats: { [k: string]: number }, key: SortKey): number {
 
 export default function LayoutsView(props: Props) {
   const [sortKey, setSortKey] = createSignal<SortKey>("score");
-  const [sortAsc, setSortAsc] = createSignal(false);
+  // false = best first
+  const [sortReversed, setSortReversed] = createSignal(false);
   const [boardFilter, setBoardFilter] = createSignal<string | null>(null);
   const [expandedLayout, setExpandedLayout] = createSignal<string | null>(null);
   const [changingLanguage, setChangingLanguage] = createSignal(false);
+  const [languageError, setLanguageError] = createSignal("");
   const [pendingLang, setPendingLang] = createSignal(appStore.currentLanguage || "english");
+  // Follow switches made from the Language view.
+  createEffect(() => setPendingLang(appStore.currentLanguage));
   const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null);
   const [deleteError, setDeleteError] = createSignal("");
+
+  const boardTypes = () => [...new Set(appStore.layouts.map((l) => l.board))].sort();
+  const higherIsBetter = (key: SortKey) => SORT_COLS.find((c) => c.key === key)?.higherIsBetter ?? false;
+  // The arrow shows which way the values run down the list.
+  const sortArrow = () => (higherIsBetter(sortKey()) !== sortReversed() ? " ↓" : " ↑");
 
   async function handleDelete(name: string) {
     if (confirmDelete() !== name) {
@@ -61,22 +70,21 @@ export default function LayoutsView(props: Props) {
 
   const sorted = () => {
     const key = sortKey();
-    const asc = sortAsc();
+    const reversed = sortReversed();
     return [...filtered()].sort((a, b) => {
-      const va = key === "score" ? a.stats.score : statForKey(a.stats as any, key);
-      const vb = key === "score" ? b.stats.score : statForKey(b.stats as any, key);
-      // score: higher = better (desc by default); penalties: lower = better (asc by default)
-      const natural = key === "score" ? vb - va : va - vb;
-      return asc ? -natural : natural;
+      const va = statForKey(a.stats as any, key);
+      const vb = statForKey(b.stats as any, key);
+      const bestFirst = higherIsBetter(key) ? vb - va : va - vb;
+      return reversed ? -bestFirst : bestFirst;
     });
   };
 
   const toggleSort = (key: SortKey) => {
     if (sortKey() === key) {
-      setSortAsc((v) => !v);
+      setSortReversed((v) => !v);
     } else {
       setSortKey(key);
-      setSortAsc(false);
+      setSortReversed(false);
     }
   };
 
@@ -86,11 +94,12 @@ export default function LayoutsView(props: Props) {
 
   async function handleSetLanguage() {
     setChangingLanguage(true);
+    setLanguageError("");
     try {
       await setLanguage(pendingLang());
-      await initStore();
+      await refreshStore();
     } catch (e) {
-      console.error("Failed to set language:", e);
+      setLanguageError(String(e));
     } finally {
       setChangingLanguage(false);
     }
@@ -138,7 +147,7 @@ export default function LayoutsView(props: Props) {
             >
               all
             </button>
-            <For each={BOARD_TYPES}>
+            <For each={boardTypes()}>
               {(bt) => (
                 <button
                   class="border font-mono text-xs px-2 py-1 hover:bg-neutral-700"
@@ -172,7 +181,7 @@ export default function LayoutsView(props: Props) {
                   onClick={() => toggleSort(col.key)}
                 >
                   {col.label}
-                  {sortKey() === col.key ? (sortAsc() ? " ↑" : " ↓") : ""}
+                  {sortKey() === col.key ? sortArrow() : ""}
                 </button>
               )}
             </For>
@@ -182,6 +191,9 @@ export default function LayoutsView(props: Props) {
 
       <Show when={deleteError()}>
         <div class="text-red-400 text-xs font-mono">{deleteError()}</div>
+      </Show>
+      <Show when={languageError()}>
+        <div class="text-red-400 text-xs font-mono">{languageError()}</div>
       </Show>
 
       {/* Layout list */}

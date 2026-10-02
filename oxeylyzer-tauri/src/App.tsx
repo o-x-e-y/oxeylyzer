@@ -1,5 +1,6 @@
-import { createEffect, createSignal, Match, onMount, onCleanup, Show, Switch } from "solid-js";
-import { listen } from "@tauri-apps/api/event";
+import { createEffect, createSignal, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import type { JSX } from "solid-js";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import TitleBar from "./components/TitleBar";
 import LayoutsView from "./views/LayoutsView";
 import AnalyzeView from "./views/AnalyzeView";
@@ -8,9 +9,17 @@ import GenerateView from "./views/GenerateView";
 import LanguageView from "./views/LanguageView";
 import EditView from "./views/EditView";
 import ConfigView from "./views/ConfigView";
-import { initStore, refreshStore, appStore, heatScheme, setHeatScheme } from "./store";
+import {
+  appStore,
+  backendError,
+  fetchStore,
+  heatScheme,
+  refreshStore,
+  setBackendError,
+  setHeatScheme,
+} from "./store";
 import type { HeatScheme } from "./store";
-import { getSession, setSession } from "./api";
+import { backendStatus, getSession, setSession } from "./api";
 
 type View = "layouts" | "analyze" | "compare" | "generate" | "language" | "edit" | "config";
 
@@ -24,33 +33,57 @@ const NAV_ITEMS: { id: View; label: string }[] = [
   { id: "config", label: "Config" },
 ];
 
+type Download = { status: string; bytesDone?: number; bytesTotal?: number };
+
+function downloadText(d: Download): string {
+  const mb = (bytes = 0) => (bytes / 1e6).toFixed(1);
+  switch (d.status) {
+    case "connecting":
+      return "Connecting to download the data files…";
+    case "downloading":
+      return `Downloading data files… ${mb(d.bytesDone)} / ${mb(d.bytesTotal)} MB`;
+    case "extracting":
+      return "Extracting data files…";
+    default:
+      return "Loading…";
+  }
+}
+
 function App() {
   const [view, setView] = createSignal<View>("layouts");
-  const [analyzeTarget, setAnalyzeTarget] = createSignal<string | undefined>(undefined);
-  const [editTarget, setEditTarget] = createSignal<string | undefined>(undefined);
+  const [phase, setPhase] = createSignal<"starting" | "ready" | "failed">("starting");
+  const [startError, setStartError] = createSignal("");
+  const [download, setDownload] = createSignal<Download | null>(null);
+  // Navigation requests are fresh objects, so asking for the layout a view
+  // already shows still reloads it.
+  const [analyzeRequest, setAnalyzeRequest] = createSignal<{ name: string }>();
+  const [editRequest, setEditRequest] = createSignal<{ name: string }>();
+  const [lastLayout, setLastLayout] = createSignal<string | null>(null);
 
-  let sessionRestored = false;
-
-  onMount(async () => {
-    await initStore();
-
-    // Refresh (without unmounting views) when files change on disk —
-    // config-reloaded means the engine was rebuilt, layouts-reloaded means
-    // only layout files changed (e.g. the app's own saves).
-    const unlistenConfig = await listen("config-reloaded", () => refreshStore());
-    const unlistenLayouts = await listen("layouts-reloaded", () => refreshStore());
-    onCleanup(() => {
-      unlistenConfig();
-      unlistenLayouts();
-    });
+  let started = false;
+  async function start() {
+    if (started) return;
+    started = true;
+    try {
+      const status = await backendStatus();
+      if (status.error) setBackendError(status.error);
+      await fetchStore();
+    } catch (e) {
+      setStartError(String(e));
+      setPhase("failed");
+      return;
+    }
 
     try {
       const session = await getSession();
-      if (session.view && NAV_ITEMS.some((n) => n.id === session.view)) {
-        setView(session.view as View);
-      }
-      if (session.lastLayout) {
-        setAnalyzeTarget(session.lastLayout);
+      if (NAV_ITEMS.some((n) => n.id === session.view)) setView(session.view as View);
+      const last = appStore.layouts.find(
+        (l) => l.name.toLowerCase() === session.lastLayout?.toLowerCase(),
+      );
+      if (last) {
+        setLastLayout(last.name);
+        setAnalyzeRequest({ name: last.name });
+        setEditRequest({ name: last.name });
       }
       if (session.heatScheme && ["original", "playground", "v2"].includes(session.heatScheme)) {
         setHeatScheme(session.heatScheme as HeatScheme);
@@ -58,43 +91,64 @@ function App() {
     } catch {
       // session restore is best-effort
     }
-    sessionRestored = true;
-  });
-
-  // Persist the heat scheme whenever it changes (after initial restore).
-  createEffect(() => {
-    heatScheme();
-    if (sessionRestored) persistSession(view(), analyzeTarget() ?? null);
-  });
-
-  function goAnalyze(layoutName: string) {
-    setAnalyzeTarget(layoutName);
-    setView("analyze");
-    persistSession("analyze", layoutName);
+    setPhase("ready");
   }
 
-  function goEdit(layoutName: string) {
-    setEditTarget(layoutName);
+  onMount(() => {
+    const unlisteners: Promise<UnlistenFn>[] = [
+      listen("config-reloaded", () => refreshStore()),
+      listen("layouts-reloaded", () => refreshStore()),
+      listen<string>("load-error", (e) => setBackendError(e.payload)),
+      listen<Download>("download-progress", (e) => setDownload(e.payload)),
+      listen("backend-ready", () => start()),
+    ];
+    onCleanup(() => unlisteners.forEach((u) => u.then((unlisten) => unlisten())));
+    // The backend may have become ready before the listener was registered.
+    Promise.all(unlisteners)
+      .then(() => backendStatus())
+      .then((s) => {
+        if (s.ready) start();
+      })
+      .catch((e) => {
+        setStartError(String(e));
+        setPhase("failed");
+      });
+  });
+
+  createEffect(() => {
+    const session = { view: view(), lastLayout: lastLayout(), heatScheme: heatScheme() };
+    if (phase() === "ready") setSession(session).catch(() => {});
+  });
+
+  function goAnalyze(name: string) {
+    setAnalyzeRequest({ name });
+    setView("analyze");
+  }
+
+  function goEdit(name: string) {
+    setEditRequest({ name });
     setView("edit");
   }
 
-  function navigate(v: View) {
-    setView(v);
-    persistSession(v, analyzeTarget() ?? null);
-  }
-
-  function persistSession(v: string, lastLayout: string | null) {
-    setSession({
-      view: v,
-      language: appStore.currentLanguage,
-      lastLayout,
-      heatScheme: heatScheme(),
-    }).catch(() => {});
-  }
+  // Views stay mounted while hidden, so switching tabs keeps their state —
+  // including a generation run that finishes while another tab is open.
+  const Pane = (p: { id: View; children: JSX.Element }) => (
+    <div class="flex-1 min-h-0 flex flex-col" classList={{ hidden: view() !== p.id }}>
+      {p.children}
+    </div>
+  );
 
   return (
     <div class="flex flex-col h-screen w-screen overflow-hidden bg-neutral-900 text-neutral-100 font-mono">
       <TitleBar />
+      <Show when={backendError()}>
+        <div class="shrink-0 flex items-start gap-3 border-b border-red-900 bg-red-950/50 px-3 py-1.5 text-xs text-red-300">
+          <span class="flex-1 whitespace-pre-wrap">{backendError()}</span>
+          <button class="text-red-400 hover:text-red-200" onClick={() => setBackendError(null)}>
+            ✕
+          </button>
+        </div>
+      </Show>
       <div class="flex flex-1 min-h-0 overflow-hidden">
         {/* ── Sidebar ─────────────────────────────────────── */}
         <nav class="w-36 shrink-0 border-r border-neutral-700 flex flex-col pt-3 gap-0.5">
@@ -106,7 +160,7 @@ function App() {
                 "border-neutral-100 text-neutral-100 bg-neutral-800": view() === item.id,
                 "border-transparent text-neutral-400": view() !== item.id,
               }}
-              onClick={() => navigate(item.id)}
+              onClick={() => setView(item.id)}
             >
               {item.label}
             </button>
@@ -115,41 +169,51 @@ function App() {
 
         {/* ── Main content ────────────────────────────────── */}
         <main class="flex-1 overflow-hidden flex flex-col p-4">
-          <Show when={appStore.loading}>
-            <div class="flex-1 flex items-center justify-center text-neutral-500 text-sm font-mono">
-              Loading…
-            </div>
-          </Show>
-          <Show when={appStore.error}>
-            <div class="flex-1 flex items-center justify-center text-red-400 text-sm font-mono">
-              Error: {appStore.error}
-            </div>
-          </Show>
-          <Show when={!appStore.loading && !appStore.error}>
-            <Switch>
-              <Match when={view() === "layouts"}>
+          <Switch>
+            <Match when={phase() === "starting"}>
+              <div class="flex-1 flex flex-col items-center justify-center gap-3 text-neutral-500 text-sm">
+                <span>{download() ? downloadText(download()!) : "Loading…"}</span>
+                <Show when={download()?.bytesTotal}>
+                  {(total) => (
+                    <div class="h-1 w-64 bg-neutral-700">
+                      <div
+                        class="h-1 bg-neutral-400"
+                        style={{ width: `${Math.min(100, ((download()?.bytesDone ?? 0) / total()) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </Show>
+              </div>
+            </Match>
+            <Match when={phase() === "failed"}>
+              <div class="flex-1 flex items-center justify-center text-red-400 text-sm">
+                Error: {startError()}
+              </div>
+            </Match>
+            <Match when={phase() === "ready"}>
+              <Pane id="layouts">
                 <LayoutsView onAnalyze={goAnalyze} onEdit={goEdit} />
-              </Match>
-              <Match when={view() === "analyze"}>
-                <AnalyzeView initialLayout={analyzeTarget()} onEdit={goEdit} />
-              </Match>
-              <Match when={view() === "compare"}>
+              </Pane>
+              <Pane id="analyze">
+                <AnalyzeView request={analyzeRequest()} onEdit={goEdit} onLayoutShown={setLastLayout} />
+              </Pane>
+              <Pane id="compare">
                 <CompareView />
-              </Match>
-              <Match when={view() === "generate"}>
+              </Pane>
+              <Pane id="generate">
                 <GenerateView />
-              </Match>
-              <Match when={view() === "language"}>
+              </Pane>
+              <Pane id="language">
                 <LanguageView />
-              </Match>
-              <Match when={view() === "edit"}>
-                <EditView layoutName={editTarget()} />
-              </Match>
-              <Match when={view() === "config"}>
+              </Pane>
+              <Pane id="edit">
+                <EditView request={editRequest()} onLayoutShown={setLastLayout} />
+              </Pane>
+              <Pane id="config">
                 <ConfigView />
-              </Match>
-            </Switch>
-          </Show>
+              </Pane>
+            </Match>
+          </Switch>
         </main>
       </div>
     </div>

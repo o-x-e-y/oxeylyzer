@@ -42,6 +42,8 @@ fn get_subcommand(cmd: &str) -> String {
 pub enum ReplError {
     #[error("Layout '{0}' not found. It might exist, but it's not currently loaded.")]
     UnknownLayout(String),
+    #[error("No layouts are loaded to generate from. Add some to `layouts` in config.toml.")]
+    NoLayoutsLoaded,
     #[error("Could not find a placeholder name, try `save <index> <your own name>` instead")]
     FailedToFindPlaceholderName,
     #[error("Path '{0}' either doesn't exist or is not a directory")]
@@ -368,13 +370,38 @@ impl Repl {
             .collect()
     }
 
+    /// The best-scoring loaded layout, which `generate` uses when no base is named.
+    fn best_layout(&self) -> Result<FastLayout> {
+        self.saved
+            .values()
+            .map(|l| self.layout_gen.fast_layout(l, &[]))
+            .max_by_key(|fast| self.layout_gen.score(fast))
+            .ok_or(ReplError::NoLayoutsLoaded)
+    }
+
     pub fn generate(
         &mut self,
-        name: &str,
+        name: Option<&str>,
         count: Option<usize>,
         pin_chars: Option<String>,
     ) -> Result<ReplResponse> {
-        let layout = self.layout(name)?.clone();
+        // `generate 500` means a count, unless a layout is actually called "500".
+        let (name, count) = match (name, count) {
+            (Some(n), None) if self.layout(n).is_err() && n.parse::<usize>().is_ok() => {
+                (None, n.parse().ok())
+            }
+            other => other,
+        };
+        let layout = match name {
+            Some(name) => self.layout(name)?,
+            None => {
+                let best = self.best_layout()?;
+                if let Some(name) = &best.name {
+                    println!("Generating from the keys and board of '{name}'.");
+                }
+                best
+            }
+        };
 
         let count = count.unwrap_or(2500);
         let pins = match pin_chars {
@@ -1225,5 +1252,38 @@ mod tests {
 
         let pins = REPL.pin_positions(&QWERTY, "wasd".to_string());
         assert_eq!(pins, vec![1, 10, 11, 12]);
+    }
+
+    #[test]
+    fn generate_without_a_name_uses_the_best_layout_and_reads_a_number_as_count() {
+        let core = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../oxeylyzer-core/static");
+        let root = std::env::temp_dir().join(format!("oxeylyzer-repl-gen-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let config = Config {
+            corpus: core.join("language_data/english.json"),
+            layouts: vec![core.join("layouts/*.dof")],
+            ..Default::default()
+        };
+        std::fs::write(root.join("config.toml"), toml::to_string(&config).unwrap()).unwrap();
+        let mut repl = Repl::new(OxeylyzerDirs::with_override(root.clone())).unwrap();
+        let best = repl.best_layout().unwrap();
+
+        repl.generate(Some("2"), None, None).unwrap();
+        assert_eq!(repl.temp_generated.len(), 2);
+
+        let sorted_keys = |l: &FastLayout| {
+            let mut keys = l.keys.to_vec();
+            keys.sort();
+            keys
+        };
+        let generated = repl.layout_gen.fast_layout(&repl.temp_generated[0], &[]);
+        assert_eq!(sorted_keys(&generated), sorted_keys(&best));
+
+        assert!(matches!(
+            repl.generate(Some("no-such-layout"), Some(1), None),
+            Err(ReplError::UnknownLayout(_))
+        ));
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

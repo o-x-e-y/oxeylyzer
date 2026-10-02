@@ -21,10 +21,12 @@ xflags::xflags! {
         }
         /// Rank all layouts for the currently specified language. A higher score is better.
         cmd rank list {}
-        /// Improves the the given layout. Optionally, you can provide a list of pinned characters
-        /// to keep in place during optimization.
+        /// Generates new layouts from the keys, board and fingering of a base layout. The base is
+        /// shuffled before optimizing, so results don't depend on its arrangement. Without a name,
+        /// the best-ranked loaded layout is used. `generate 500` generates 500 from that default.
+        /// Pinned characters keep their position from the base layout.
         cmd generate gen g improve i optimize {
-            required name: String
+            optional name: String
             optional count: usize
             /// Sets pinned characters on the layout to optimize, `-p abc` pins `abc`.
             optional -p, --pins pins: String

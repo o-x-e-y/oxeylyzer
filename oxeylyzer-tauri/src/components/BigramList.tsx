@@ -5,6 +5,8 @@ type Props = {
   entries: BigramEntry[];
   count?: number;
   columns?: 1 | 2;
+  /** Suffix after each value; fspeed and stretch lists are weighted scores, not percentages. */
+  unit?: string;
   onHoverBigram?: (_chars: string[]) => void;
   onLeave?: () => void;
 };
@@ -13,6 +15,7 @@ function Entry(props: {
   n: number;
   bigram: string;
   percent: number;
+  unit: string;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
 }) {
@@ -24,7 +27,10 @@ function Entry(props: {
     >
       <span class="text-neutral-500 w-5 text-right shrink-0">{props.n}.</span>
       <span class="w-8 shrink-0">{props.bigram}</span>
-      <span>{props.percent.toFixed(3)}%</span>
+      <span>
+        {props.percent.toFixed(3)}
+        {props.unit}
+      </span>
     </div>
   );
 }
@@ -35,7 +41,7 @@ export default function BigramList(props: Props) {
   const twoCol = () => (props.columns ?? 1) === 2;
 
   const handleEnter = (bigram: string) => {
-    props.onHoverBigram?.(bigram.split(""));
+    props.onHoverBigram?.(Array.from(bigram));
   };
 
   const renderEntry = (entry: BigramEntry, n: number) => (
@@ -43,6 +49,7 @@ export default function BigramList(props: Props) {
       n={n}
       bigram={entry.bigram}
       percent={entry.percent}
+      unit={props.unit ?? "%"}
       onMouseEnter={() => handleEnter(entry.bigram)}
       onMouseLeave={() => props.onLeave?.()}
     />

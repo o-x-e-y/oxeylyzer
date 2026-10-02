@@ -1,4 +1,4 @@
-import { For, Show, createMemo, onCleanup } from "solid-js";
+import { Index, Show, createMemo, onCleanup } from "solid-js";
 import {
   DragDropProvider,
   DragDropSensors,
@@ -24,7 +24,8 @@ declare module "solid-js" {
 const GAP = 0.3;
 
 type Props = {
-  keys: string;
+  /** A string gives one key per character; an array gives each key's label. */
+  keys: string | string[];
   keyboard: PhysKey[];
   shape: number[];
   class?: string;
@@ -87,6 +88,8 @@ const KeyTile = (props: KeyTileProps) => {
   onCleanup(cancelLongPress);
 
   const isEditing = () => props.editingIdx === props.flatIdx;
+  // Empty and unsupported keys come through as the replacement character.
+  const label = () => (props.char === "\uFFFD" ? "" : props.char);
 
   const baseClass =
     "w-full h-full rounded-[12%] flex items-center justify-center select-none touch-none relative";
@@ -109,6 +112,7 @@ const KeyTile = (props: KeyTileProps) => {
         "border-neutral-500": !props.isHighlighted && !props.isPinned && !props.isDisabled,
         "cursor-pointer hover:border-neutral-300":
           (props.interactive || props.draggableEnabled) && !isEditing(),
+        "text-[0.55em]": Array.from(label()).length > 1,
       }}
       style={effectiveStyle()}
       onContextMenu={(e) => {
@@ -134,7 +138,7 @@ const KeyTile = (props: KeyTileProps) => {
         }
       }}
     >
-      {props.char}
+      {label()}
       {props.isPinned && (
         <span class="absolute top-0 right-0 text-[9px] text-yellow-300 leading-none p-px">⚑</span>
       )}
@@ -149,7 +153,7 @@ const KeyTile = (props: KeyTileProps) => {
           onInput={(e) => {
             const val = e.currentTarget.value;
             if (val) {
-              props.onEditCommit(props.flatIdx, val[val.length - 1]);
+              props.onEditCommit(props.flatIdx, Array.from(val).pop()!);
               e.currentTarget.value = "";
             }
           }}
@@ -171,6 +175,8 @@ const KeyTile = (props: KeyTileProps) => {
 };
 
 export default function KeyboardDisplay(props: Props) {
+  // Compared by value: callers pass a fresh but identical array on every analysis, and
+  // rebuilding the tiles would drop focus and drag state for nothing.
   const geom = createMemo(() => {
     const kb = props.keyboard;
     if (!kb || kb.length === 0) return null;
@@ -188,10 +194,10 @@ export default function KeyboardDisplay(props: Props) {
       dy = maxY - minY;
     const kw = 100 / dx;
     const ym = dx / dy;
-    return { kw, ym, heightCss: dy * kw, fontSizeCqw: kw / 2.25, minX, minY };
-  });
+    return { kw, ym, heightCss: dy * kw, fontSizeCqw: kw / 2.25, minX, minY, json: JSON.stringify(kb) };
+  }, undefined, { equals: (a, b) => a?.json === b?.json });
 
-  const chars = () => props.keys.split("");
+  const chars = () => (typeof props.keys === "string" ? Array.from(props.keys) : props.keys);
 
   const isHighlighted = (key: string) => props.highlight?.includes(key) ?? false;
   const isPinned = (key: string) => props.pinned?.has(key) ?? false;
@@ -220,9 +226,8 @@ export default function KeyboardDisplay(props: Props) {
           "line-height": "0",
         }}
       >
-        <For each={chars()}>
-          {(char, i) => {
-            const flatIdx = i();
+        <Index each={chars()}>
+          {(char, flatIdx) => {
             const pk = props.keyboard[flatIdx];
             if (!pk) return null;
             const [px, py, pw, ph] = pk;
@@ -243,12 +248,12 @@ export default function KeyboardDisplay(props: Props) {
                 }}
               >
                 <KeyTile
-                  char={char}
+                  char={char()}
                   flatIdx={flatIdx}
-                  isHighlighted={isHighlighted(char)}
-                  isPinned={isPinned(char)}
+                  isHighlighted={isHighlighted(char())}
+                  isPinned={isPinned(char())}
                   isDisabled={props.disabledIndices?.has(flatIdx) ?? false}
-                  heatStyle={heatStyle(char)}
+                  heatStyle={heatStyle(char())}
                   fingerColor={props.fingerColors?.[flatIdx]}
                   interactive={props.interactive ?? false}
                   draggableEnabled={props.draggable ?? false}
@@ -263,7 +268,7 @@ export default function KeyboardDisplay(props: Props) {
               </div>
             );
           }}
-        </For>
+        </Index>
       </div>
     );
   };

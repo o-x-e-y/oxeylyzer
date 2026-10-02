@@ -85,7 +85,7 @@ impl Repl {
             Compare(c) => self.compare(&c.name1, &c.name2),
             Swap(s) => self.swap(&s.name, &s.swaps),
             Rank(_) => self.rank(),
-            Generate(i) => self.generate(&i.name, i.count, i.pins),
+            Generate(i) => self.generate(i.name.as_deref(), i.count, i.pins),
             Save(s) => self.save(&s.name_or_nr, s.name),
             Sfbs(s) => self.sfbs(&s.name, s.count),
             Remove(r) => self.remove(&r.name, r.yes),

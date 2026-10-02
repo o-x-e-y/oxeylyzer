@@ -10,7 +10,7 @@ type Props = {
 
 function* trigrams(str: string): Generator<string> {
   if (!str) return;
-  const padded = "  " + str + " ";
+  const padded = "  " + str.toLowerCase() + " ";
   for (let i = 0; i < padded.length - 2; i++) yield padded[i] + padded[i + 1] + padded[i + 2];
 }
 
@@ -33,12 +33,20 @@ function searchLayouts(query: string, names: string[], max = 7): string[] {
 
 export default function LayoutSearch(props: Props) {
   const [query, setQuery] = createSignal("");
+  const [open, setOpen] = createSignal(false);
   const [results, setResults] = createSignal<string[]>([]);
   const [selectedIdx, setSelectedIdx] = createSignal(0);
   const [hovering, setHovering] = createSignal(false);
+  let input!: HTMLInputElement;
 
   const names = () => appStore.layouts.map((l) => l.name);
   const allSorted = () => [...names()].sort((a, b) => a.localeCompare(b));
+
+  const close = () => {
+    setOpen(false);
+    setResults([]);
+    setQuery("");
+  };
 
   const doSearch = (q: string) => {
     // Empty query shows the full (alphabetical) list so the user can browse
@@ -46,24 +54,20 @@ export default function LayoutSearch(props: Props) {
     const found = q ? searchLayouts(q, names()) : allSorted();
     setResults(found);
     setSelectedIdx(0);
-    // Auto-select on exact or unique match (not a pure integer), keep dropdown open
-    if (q && isNaN(parseInt(q))) {
-      const exact = names().find((n) => n.toLowerCase() === q.toLowerCase());
-      const hit = exact ?? (found.length === 1 ? found[0] : null);
-      if (hit) props.onSelect(hit);
-    }
+    const exact = names().find((n) => n.toLowerCase() === q.toLowerCase());
+    if (exact) props.onSelect(exact);
   };
 
   // Click or Enter: select and clear so the box is blank (shows placeholder = selected name)
   const selectAndClear = (name: string) => {
     props.onSelect(name);
-    setQuery("");
-    setResults([]);
+    close();
   };
 
   return (
     <div class={`relative ${props.class ?? ""}`}>
       <input
+        ref={(el) => (input = el)}
         type="text"
         class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-1 w-44"
         placeholder={props.placeholder ?? (props.value || "search layout…")}
@@ -73,6 +77,7 @@ export default function LayoutSearch(props: Props) {
           setQuery("");
           setResults(allSorted());
           setSelectedIdx(0);
+          setOpen(true);
         }}
         onInput={(e) => {
           setQuery(e.currentTarget.value);
@@ -80,10 +85,7 @@ export default function LayoutSearch(props: Props) {
         }}
         onBlur={() => {
           setTimeout(() => {
-            if (!hovering()) {
-              setResults([]);
-              setQuery("");
-            }
+            if (!hovering()) close();
           }, 150);
         }}
         onKeyDown={(e) => {
@@ -98,18 +100,24 @@ export default function LayoutSearch(props: Props) {
             e.preventDefault();
             if (res.length) selectAndClear(res[selectedIdx()]);
           } else if (e.key === "Escape") {
-            setResults([]);
-            setQuery("");
+            close();
+            input.blur();
           }
         }}
       />
-      <Show when={results().length > 0}>
+      <Show when={open()}>
         <div
           class="absolute left-0 top-full mt-0.5 w-full bg-neutral-800 border border-neutral-600 z-50 flex flex-col max-h-64 overflow-y-auto"
           onMouseEnter={() => setHovering(true)}
-          onMouseLeave={() => setHovering(false)}
+          onMouseLeave={() => {
+            setHovering(false);
+            if (document.activeElement !== input) close();
+          }}
         >
-          <For each={results()}>
+          <For
+            each={results()}
+            fallback={<div class="px-2 py-1 font-mono text-sm text-neutral-500">no matches</div>}
+          >
             {(name, i) => (
               <div
                 class="px-2 py-1 font-mono text-sm cursor-pointer"

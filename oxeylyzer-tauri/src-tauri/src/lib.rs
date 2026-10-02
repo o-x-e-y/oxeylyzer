@@ -1,18 +1,24 @@
 use std::{
     collections::HashMap,
+    panic::AssertUnwindSafe,
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 
 use oxeylyzer_core::{
+    SPACE_CHAR,
     data::Data,
     fast_layout::{BigramPair, FastLayout},
     generate::{LayoutStats, Oxeylyzer},
-    layout::{Layout, LayoutMetadata},
-    rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    layout::{Layout, LayoutMetadata, PosPair},
+    rayon::{
+        self, ThreadPoolBuilder,
+        iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    },
     weights::{Config, FingerWeights, MaxFingerUse, Weights},
 };
 use oxeylyzer_resources::OxeylyzerDirs;
@@ -110,12 +116,17 @@ pub enum NgramResultDto {
 #[serde(rename_all = "camelCase")]
 pub struct SessionDto {
     pub view: String,
-    pub language: String,
     // Option fields default to None when missing, which keeps old session
     // files (snake_case last_layout) loadable — that key is simply ignored.
     pub last_layout: Option<String>,
     #[serde(default)]
     pub heat_scheme: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct BackendStatusDto {
+    pub ready: bool,
+    pub error: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -160,24 +171,46 @@ pub struct ConfigDto {
 
 // ─── App State ────────────────────────────────────────────────────────────────
 
+/// A layout together with the file it was loaded from, so edits and deletes
+/// act on that file instead of a path guessed from the layout's name.
+pub struct LoadedLayout {
+    pub layout: Layout,
+    pub path: PathBuf,
+}
+
 pub struct AppState {
     /// The active analyzer engine, wrapped in Arc so it can be cheaply cloned for
     /// background generation without holding the lock.
     pub engine: Mutex<Arc<Oxeylyzer>>,
     /// All loaded layouts, keyed by lowercase name.
-    pub layouts: Mutex<HashMap<String, Layout>>,
-    /// Results from the most recent generation run. Cleared when the engine
-    /// changes (language switch, config change) since the layouts are tied to
-    /// the engine's character mapping.
-    pub generated: Mutex<Vec<FastLayout>>,
+    pub layouts: Mutex<HashMap<String, LoadedLayout>>,
     /// Managed resource paths (XDG/AppData config dir in release, override in dev).
     pub dirs: OxeylyzerDirs,
-    /// Cached config for reload and language switching.
+    /// The config the engine and layouts were built from.
     pub config: Mutex<Config>,
     /// Set to true to request cancellation of an in-progress generation.
     pub cancel_flag: Arc<AtomicBool>,
     /// True while a generation run is in progress; prevents overlapping runs.
     pub generating: Arc<AtomicBool>,
+    /// The config.toml contents this app last wrote, so the file watcher can
+    /// tell its own writes apart from external edits.
+    pub last_config_write: Mutex<Option<String>>,
+}
+
+/// Managed before [`AppState`], which only exists once data is downloaded and loaded.
+#[derive(Default)]
+pub struct Startup {
+    ready: AtomicBool,
+    error: Mutex<Option<String>>,
+}
+
+/// Clears the generating flag when dropped, including when generation panics.
+struct GeneratingGuard(Arc<AtomicBool>);
+
+impl Drop for GeneratingGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -204,85 +237,164 @@ fn finger_usage_pct(engine: &Oxeylyzer, fl: &FastLayout) -> [f64; 10] {
 }
 
 fn stats_to_dto(stats: &LayoutStats, char_total: i64, finger_usage: [f64; 10]) -> LayoutStatsDto {
+    // An empty corpus divides by zero; NaN would serialize as null and break the frontend.
+    let f = |v: f64| if v.is_finite() { v } else { 0.0 };
     let t = &stats.trigram_stats;
     LayoutStatsDto {
-        sfb: stats.sfb,
-        dsfb: stats.dsfb,
-        fspeed: stats.fspeed,
-        finger_speed: stats.finger_speed,
-        finger_usage,
-        stretches: stats.stretches,
-        scissors: stats.scissors,
-        lsbs: stats.lsbs,
-        pinky_ring: stats.pinky_ring,
+        sfb: f(stats.sfb),
+        dsfb: f(stats.dsfb),
+        fspeed: f(stats.fspeed),
+        finger_speed: stats.finger_speed.map(f),
+        finger_usage: finger_usage.map(f),
+        stretches: f(stats.stretches),
+        scissors: f(stats.scissors),
+        lsbs: f(stats.lsbs),
+        pinky_ring: f(stats.pinky_ring),
         score: normalize_score(stats.score, char_total),
-        inrolls: t.inrolls,
-        outrolls: t.outrolls,
-        onehands: t.onehands,
-        alternates: t.alternates,
-        alternates_sfs: t.alternates_sfs,
-        redirects: t.redirects,
-        redirects_sfs: t.redirects_sfs,
-        bad_redirects: t.bad_redirects,
-        bad_redirects_sfs: t.bad_redirects_sfs,
-        bad_sfbs: t.bad_sfbs,
-        sfts: t.sfts,
+        inrolls: f(t.inrolls),
+        outrolls: f(t.outrolls),
+        onehands: f(t.onehands),
+        alternates: f(t.alternates),
+        alternates_sfs: f(t.alternates_sfs),
+        redirects: f(t.redirects),
+        redirects_sfs: f(t.redirects_sfs),
+        bad_redirects: f(t.bad_redirects),
+        bad_redirects_sfs: f(t.bad_redirects_sfs),
+        bad_sfbs: f(t.bad_sfbs),
+        sfts: f(t.sfts),
+    }
+}
+
+fn fast_layout_to_dto(
+    engine: &Oxeylyzer,
+    fl: &FastLayout,
+    name: String,
+    keys: String,
+    board: String,
+) -> LayoutDto {
+    let stats = engine.get_layout_stats(fl);
+    LayoutDto {
+        name,
+        keys,
+        board,
+        fingering_name: fl.metadata.fingering_name.as_ref().map(|n| n.to_string()),
+        stats: stats_to_dto(&stats, engine.data.char_total, finger_usage_pct(engine, fl)),
+        keyboard: fl
+            .keyboard
+            .iter()
+            .map(|k| [k.x(), k.y(), k.width(), k.height()])
+            .collect(),
+        shape: fl.shape.inner().to_vec(),
     }
 }
 
 fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
     let fast = engine.fast_layout(layout, &[]);
-    let stats = engine.get_layout_stats(&fast);
-    let stats_dto = stats_to_dto(
-        &stats,
-        engine.data.char_total,
-        finger_usage_pct(engine, &fast),
-    );
-    LayoutDto {
-        name: layout.name.clone(),
-        keys: fast.layout_str(),
-        board: get_board_str(layout),
-        fingering_name: layout
-            .metadata
-            .fingering_name
-            .as_ref()
-            .map(|n| n.to_string()),
-        stats: stats_dto,
-        keyboard: fast
-            .keyboard
-            .iter()
-            .map(|k| [k.x(), k.y(), k.width(), k.height()])
-            .collect(),
-        shape: fast.shape.inner().to_vec(),
+    let keys = fast.layout_str();
+    fast_layout_to_dto(engine, &fast, layout.name.clone(), keys, board_name(layout))
+}
+
+/// The named board (ortho, ansi, …), or "custom" for layouts with explicit key geometry.
+fn board_name(layout: &Layout) -> String {
+    match serde_json::to_value(layout)
+        .ok()
+        .and_then(|v| v.get("board").cloned())
+    {
+        Some(serde_json::Value::String(s)) => s,
+        _ => "custom".to_string(),
     }
 }
 
-fn get_board_str(layout: &Layout) -> String {
-    serde_json::to_value(layout)
-        .ok()
-        .and_then(|v| v.get("board")?.as_str().map(str::to_string))
-        .unwrap_or_default()
-}
-
-fn load_all_layouts(config: &Config, base_path: &Path) -> HashMap<String, Layout> {
+/// Loads every layout matched by the config's globs, plus the managed directory
+/// for the current language — that's where the app saves layouts, so saved
+/// layouts are always found again whatever the globs say.
+fn load_all_layouts(
+    config: &Config,
+    dirs: &OxeylyzerDirs,
+    language: &str,
+) -> HashMap<String, LoadedLayout> {
+    let managed = dirs.layouts_dir().join(language).join("*.dof");
     config
         .layouts
         .iter()
-        .flat_map(|p| {
-            let full = base_path.join(p);
-            let pattern = full.to_string_lossy().into_owned();
-            glob::glob(&pattern)
+        .map(|p| dirs.data_dir().join(p))
+        .chain(std::iter::once(managed))
+        .flat_map(|pattern| {
+            glob::glob(&pattern.to_string_lossy())
                 .into_iter()
                 .flatten()
                 .flatten()
-                .flat_map(|path| {
-                    Layout::load(&path).inspect_err(|e| {
-                        eprintln!("Error loading layout '{}': {e}", path.display())
-                    })
-                })
-                .map(|l| (l.name.to_lowercase(), l))
+        })
+        .filter_map(|path| match Layout::load(&path) {
+            Ok(layout) => Some((layout.name.to_lowercase(), LoadedLayout { layout, path })),
+            Err(e) => {
+                eprintln!("Error loading layout '{}': {e}", path.display());
+                None
+            }
         })
         .collect()
+}
+
+fn get_layout(state: &AppState, name: &str) -> Result<Layout, String> {
+    state
+        .layouts
+        .lock()
+        .unwrap()
+        .get(&name.to_lowercase())
+        .map(|l| l.layout.clone())
+        .ok_or_else(|| format!("Layout '{name}' not found"))
+}
+
+/// Turns a layout or preset name into a file stem without path separators or
+/// other characters filesystems reject.
+fn file_stem(name: &str) -> String {
+    name.trim()
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            c if c.is_whitespace() || c.is_control() => '_',
+            c => c,
+        })
+        .collect()
+}
+
+/// Path for a new layout file in the managed directory, refusing names that are
+/// empty or already taken (on disk or by any loaded layout).
+fn new_layout_path(
+    dirs: &OxeylyzerDirs,
+    layouts: &HashMap<String, LoadedLayout>,
+    language: &str,
+    name: &str,
+) -> Result<PathBuf, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("A name is required.".to_string());
+    }
+    let dir = dirs.layouts_dir().join(language);
+    let path = dir.join(format!("{}.dof", file_stem(name).to_lowercase()));
+    if layouts.contains_key(&name.to_lowercase()) || path.exists() {
+        return Err(format!("A layout named '{name}' already exists."));
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
+/// Writes `json` to `path` and loads it back as the layout stored under its name.
+fn write_layout(
+    layouts: &mut HashMap<String, LoadedLayout>,
+    path: PathBuf,
+    json: &str,
+) -> Result<Layout, String> {
+    std::fs::write(&path, json).map_err(|e| format!("Write failed: {e}"))?;
+    let layout = Layout::load(&path).map_err(|e| e.to_string())?;
+    layouts.insert(
+        layout.name.to_lowercase(),
+        LoadedLayout {
+            layout: layout.clone(),
+            path,
+        },
+    );
+    Ok(layout)
 }
 
 /// Builds a [`FastLayout`] from a base layout with an optional custom key
@@ -343,33 +455,157 @@ fn bigram_str(engine: &Oxeylyzer, fl: &FastLayout, pair: &BigramPair) -> Option<
 }
 
 fn list_languages_from_dir(dir: &Path) -> Vec<String> {
-    std::fs::read_dir(dir)
+    let mut languages: Vec<String> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
         .filter_map(|entry| {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.ends_with(".json") {
-                Some(name.trim_end_matches(".json").to_string())
-            } else {
-                None
-            }
+            name.strip_suffix(".json").map(str::to_string)
         })
-        .collect()
+        .collect();
+    languages.sort();
+    languages
 }
 
-fn corpus_path_for(language_data_dir: &Path, language: &str) -> PathBuf {
-    language_data_dir.join(language).with_extension("json")
+fn corpus_path_for(dirs: &OxeylyzerDirs, language: &str) -> PathBuf {
+    dirs.language_data_dir().join(format!("{language}.json"))
+}
+
+fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
+    panic
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| panic.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "unknown error".to_string())
+}
+
+// ─── Engine Loading ───────────────────────────────────────────────────────────
+
+struct Loaded {
+    config: Config,
+    engine: Arc<Oxeylyzer>,
+    layouts: HashMap<String, LoadedLayout>,
+}
+
+/// Builds the engine and layout map for `config` without touching app state,
+/// so a config that doesn't load is rejected before anything is replaced.
+fn load_with(dirs: &OxeylyzerDirs, config: Config) -> Result<Loaded, String> {
+    let corpus = dirs.data_dir().join(&config.corpus);
+    let data = Data::load(&corpus)
+        .map_err(|e| format!("Failed to load corpus '{}': {e}", corpus.display()))?;
+    let engine = Arc::new(Oxeylyzer::new(data, config.clone()));
+    let layouts = load_all_layouts(&config, dirs, &engine.language);
+    Ok(Loaded {
+        config,
+        engine,
+        layouts,
+    })
+}
+
+fn install(state: &AppState, loaded: Loaded) {
+    *state.config.lock().unwrap() = loaded.config;
+    *state.engine.lock().unwrap() = loaded.engine;
+    *state.layouts.lock().unwrap() = loaded.layouts;
+}
+
+fn write_config(state: &AppState, config: &Config) -> Result<(), String> {
+    let toml = toml::to_string_pretty(config)
+        .map_err(|e| format!("Failed to serialize config: {e}"))?;
+    // Recorded before writing so the watcher can never see the new file first.
+    *state.last_config_write.lock().unwrap() = Some(toml.clone());
+    std::fs::write(state.dirs.config_file(), toml)
+        .map_err(|e| format!("Failed to write config.toml: {e}"))
+}
+
+/// Reloads config.toml from disk. Returns `false` without reloading when the
+/// file holds what this app last wrote itself.
+fn reload_from_disk(state: &AppState) -> Result<bool, String> {
+    let content = std::fs::read_to_string(state.dirs.config_file())
+        .map_err(|e| format!("Failed to read config.toml: {e}"))?;
+    if state.last_config_write.lock().unwrap().as_deref() == Some(content.as_str()) {
+        return Ok(false);
+    }
+    let config: Config =
+        toml::from_str(&content).map_err(|e| format!("Failed to parse config.toml: {e}"))?;
+    install(state, load_with(&state.dirs, config)?);
+    Ok(true)
+}
+
+/// The config a fresh install starts with.
+fn seed_config(dirs: &OxeylyzerDirs) -> Config {
+    Config {
+        corpus: corpus_path_for(dirs, "english"),
+        layouts: vec![dirs.layouts_dir().join("english").join("*.dof")],
+        corpus_configs: dirs.corpus_configs_dir().join("**").join("*.toml"),
+        ..Default::default()
+    }
+}
+
+/// Loads the configured engine, falling back to defaults and then to any
+/// corpus that loads, so a broken config.toml can still be fixed from the
+/// Config view instead of the app refusing to start.
+fn initial_load(dirs: &OxeylyzerDirs) -> (Loaded, Vec<String>) {
+    let mut errors = Vec::new();
+    let config = Config::with_loaded_weights(dirs.config_file()).unwrap_or_else(|e| {
+        errors.push(format!(
+            "Couldn't read config.toml ({e}); using the default config until it's saved from the Config view."
+        ));
+        seed_config(dirs)
+    });
+
+    match load_with(dirs, config.clone()) {
+        Ok(loaded) => return (loaded, errors),
+        Err(e) => errors.push(e),
+    }
+
+    let fallbacks = std::iter::once("english".to_string())
+        .chain(list_languages_from_dir(&dirs.language_data_dir()))
+        .map(|language| corpus_path_for(dirs, &language));
+    for corpus in fallbacks {
+        let fallback = Config {
+            corpus: corpus.clone(),
+            ..config.clone()
+        };
+        if let Ok(loaded) = load_with(dirs, fallback) {
+            errors.push(format!("Loaded '{}' instead.", corpus.display()));
+            return (loaded, errors);
+        }
+    }
+
+    errors.push("No corpus could be loaded.".to_string());
+    let engine = Arc::new(Oxeylyzer::new(Data::default(), config.clone()));
+    let layouts = load_all_layouts(&config, dirs, &engine.language);
+    let loaded = Loaded {
+        config,
+        engine,
+        layouts,
+    };
+    (loaded, errors)
 }
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
 
 #[tauri::command]
+fn backend_status(startup: tauri::State<'_, Startup>) -> BackendStatusDto {
+    BackendStatusDto {
+        ready: startup.ready.load(Ordering::SeqCst),
+        error: startup.error.lock().unwrap().clone(),
+    }
+}
+
+#[tauri::command(async)]
 fn list_layouts(state: tauri::State<'_, AppState>) -> Result<Vec<LayoutDto>, String> {
     let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let mut dtos: Vec<LayoutDto> = layouts
+    let layouts: Vec<Layout> = state
+        .layouts
+        .lock()
+        .unwrap()
         .values()
+        .map(|l| l.layout.clone())
+        .collect();
+    let mut dtos: Vec<LayoutDto> = layouts
+        .par_iter()
         .map(|l| layout_to_dto(&engine, l))
         .collect();
     dtos.sort_by(|a, b| b.stats.score.total_cmp(&a.stats.score));
@@ -387,16 +623,18 @@ fn current_language(state: tauri::State<'_, AppState>) -> Result<String, String>
 }
 
 #[tauri::command]
-fn analyze_layout(name: String, state: tauri::State<'_, AppState>) -> Result<LayoutDto, String> {
-    let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    Ok(layout_to_dto(&engine, layout))
+fn text_dir(state: tauri::State<'_, AppState>) -> String {
+    state.dirs.text_dir().display().to_string()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
+fn analyze_layout(name: String, state: tauri::State<'_, AppState>) -> Result<LayoutDto, String> {
+    let engine = state.engine.lock().unwrap().clone();
+    let layout = get_layout(&state, &name)?;
+    Ok(layout_to_dto(&engine, &layout))
+}
+
+#[tauri::command(async)]
 fn get_bigrams(
     name: String,
     category: String,
@@ -406,22 +644,17 @@ fn get_bigrams(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<BigramEntryDto>, String> {
     let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    let layout = get_layout(&state, &name)?;
     let fl = custom_fast_layout(
         &engine,
-        layout,
+        &layout,
         keys.as_deref(),
         &disabled_indices.unwrap_or_default(),
     )?;
     let bigram_total = engine.data.bigram_total as f64;
 
-    let mut entries: Vec<BigramEntryDto> = match category.as_str() {
-        "sfbs" => fl
-            .fspeed_indices
-            .all
+    let frequency_entries = |pairs: Vec<BigramPair>| -> Vec<BigramEntryDto> {
+        pairs
             .iter()
             .filter_map(|pair| {
                 let bigram = bigram_str(&engine, &fl, pair)?;
@@ -431,58 +664,22 @@ fn get_bigrams(
                     percent: (raw as f64 * 100.0) / bigram_total,
                 })
             })
-            .collect(),
-        "scissors" => fl
-            .scissor_indices
-            .pairs
+            .collect()
+    };
+    let unit_pairs = |pairs: &[PosPair]| -> Vec<BigramPair> {
+        pairs
             .iter()
-            .filter_map(|&pos_pair| {
-                let pair = BigramPair {
-                    pair: pos_pair,
-                    dist: 1,
-                };
-                let bigram = bigram_str(&engine, &fl, &pair)?;
-                let raw = engine.pair_sfb(&fl, &pair);
-                Some(BigramEntryDto {
-                    bigram,
-                    percent: (raw as f64 * 100.0) / bigram_total,
-                })
-            })
-            .collect(),
-        "lsbs" => fl
-            .lsb_indices
-            .pairs
-            .iter()
-            .filter_map(|&pos_pair| {
-                let pair = BigramPair {
-                    pair: pos_pair,
-                    dist: 1,
-                };
-                let bigram = bigram_str(&engine, &fl, &pair)?;
-                let raw = engine.pair_sfb(&fl, &pair);
-                Some(BigramEntryDto {
-                    bigram,
-                    percent: (raw as f64 * 100.0) / bigram_total,
-                })
-            })
-            .collect(),
-        "pinky-ring" => fl
-            .pinky_ring_indices
-            .pairs
-            .iter()
-            .filter_map(|&pos_pair| {
-                let pair = BigramPair {
-                    pair: pos_pair,
-                    dist: 1,
-                };
-                let bigram = bigram_str(&engine, &fl, &pair)?;
-                let raw = engine.pair_sfb(&fl, &pair);
-                Some(BigramEntryDto {
-                    bigram,
-                    percent: (raw as f64 * 100.0) / bigram_total,
-                })
-            })
-            .collect(),
+            .map(|&pair| BigramPair { pair, dist: 1 })
+            .collect()
+    };
+
+    // fspeed and stretch entries use the same scaling as the matching stat in
+    // `get_layout_stats`, so the list adds up to the headline number.
+    let mut entries: Vec<BigramEntryDto> = match category.as_str() {
+        "sfbs" => frequency_entries(fl.fspeed_indices.all.to_vec()),
+        "scissors" => frequency_entries(unit_pairs(&fl.scissor_indices.pairs)),
+        "lsbs" => frequency_entries(unit_pairs(&fl.lsb_indices.pairs)),
+        "pinky-ring" => frequency_entries(unit_pairs(&fl.pinky_ring_indices.pairs)),
         "fspeed" => fl
             .fspeed_indices
             .all
@@ -492,7 +689,7 @@ fn get_bigrams(
                 let raw = engine.pair_fspeed(&fl, pair).abs();
                 Some(BigramEntryDto {
                     bigram,
-                    percent: raw as f64 / bigram_total,
+                    percent: raw as f64 / bigram_total / 10.0,
                 })
             })
             .collect(),
@@ -505,7 +702,7 @@ fn get_bigrams(
                 let raw = engine.pair_stretch(&fl, pair).abs();
                 Some(BigramEntryDto {
                     bigram,
-                    percent: raw as f64 / bigram_total,
+                    percent: raw as f64 / bigram_total * 10.0,
                 })
             })
             .collect(),
@@ -517,7 +714,7 @@ fn get_bigrams(
     Ok(entries)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_trigrams(
     name: String,
     category: String,
@@ -529,13 +726,10 @@ fn get_trigrams(
     use oxeylyzer_core::trigram_patterns::TrigramPattern;
 
     let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    let layout = get_layout(&state, &name)?;
     let fl = custom_fast_layout(
         &engine,
-        layout,
+        &layout,
         keys.as_deref(),
         &disabled_indices.unwrap_or_default(),
     )?;
@@ -573,65 +767,10 @@ fn get_trigrams(
     Ok(entries)
 }
 
-#[tauri::command]
-fn swap_keys(
-    name: String,
-    swaps: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<LayoutDto, String> {
-    let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    let mut fl = engine.fast_layout(layout, &[]);
-
-    // Parse swap string: space-separated tokens, each token is 2+ chars.
-    // "ab" = swap a and b; "abc" = cycle a→b→c.
-    for token in swaps.split_whitespace() {
-        let chars: Vec<char> = token.chars().collect();
-        if chars.len() < 2 {
-            continue;
-        }
-        for window in chars.windows(2) {
-            let (c1, c2) = (window[0], window[1]);
-            let p1 = fl.keys.iter().position(|&k| k == engine.mapping.get_u(c1));
-            let p2 = fl.keys.iter().position(|&k| k == engine.mapping.get_u(c2));
-            if let (Some(p1), Some(p2)) = (p1, p2) {
-                fl.swap(p1 as u8, p2 as u8);
-            }
-        }
-    }
-
-    let stats = engine.get_layout_stats(&fl);
-    let stats_dto = stats_to_dto(
-        &stats,
-        engine.data.char_total,
-        finger_usage_pct(&engine, &fl),
-    );
-    Ok(LayoutDto {
-        name: format!("{name}*"),
-        keys: fl.layout_str(),
-        board: get_board_str(layout),
-        fingering_name: layout
-            .metadata
-            .fingering_name
-            .as_ref()
-            .map(|n| n.to_string()),
-        stats: stats_dto,
-        keyboard: fl
-            .keyboard
-            .iter()
-            .map(|k| [k.x(), k.y(), k.width(), k.height()])
-            .collect(),
-        shape: fl.shape.inner().to_vec(),
-    })
-}
-
 /// Analyze an arbitrary key arrangement (swaps + disabled keys) derived from a named base layout.
-/// `keys` is the full 30-char current arrangement; `disabled_indices` are zeroed out before scoring.
+/// `keys` is the full current arrangement; `disabled_indices` are zeroed out before scoring.
 /// Returns `keys` unchanged so the frontend always has the clean arrangement available.
-#[tauri::command]
+#[tauri::command(async)]
 fn analyze_custom(
     name: String,
     keys: String,
@@ -639,79 +778,15 @@ fn analyze_custom(
     state: tauri::State<'_, AppState>,
 ) -> Result<LayoutDto, String> {
     let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    let fl = custom_fast_layout(&engine, layout, Some(&keys), &disabled_indices)?;
-
-    let keyboard = fl
-        .keyboard
-        .iter()
-        .map(|k| [k.x(), k.y(), k.width(), k.height()])
-        .collect();
-    let shape = fl.shape.inner().to_vec();
-
-    let stats = engine.get_layout_stats(&fl);
-    let stats_dto = stats_to_dto(
-        &stats,
-        engine.data.char_total,
-        finger_usage_pct(&engine, &fl),
-    );
-    Ok(LayoutDto {
-        name: format!("{name}*"),
+    let layout = get_layout(&state, &name)?;
+    let fl = custom_fast_layout(&engine, &layout, Some(&keys), &disabled_indices)?;
+    Ok(fast_layout_to_dto(
+        &engine,
+        &fl,
+        format!("{}*", layout.name),
         keys,
-        board: get_board_str(layout),
-        fingering_name: layout
-            .metadata
-            .fingering_name
-            .as_ref()
-            .map(|n| n.to_string()),
-        stats: stats_dto,
-        keyboard,
-        shape,
-    })
-}
-
-#[tauri::command]
-fn analyze_with_disabled(
-    name: String,
-    disabled_indices: Vec<usize>,
-    state: tauri::State<'_, AppState>,
-) -> Result<LayoutDto, String> {
-    let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    let original_keys = engine.fast_layout(layout, &[]).layout_str();
-    let fl = custom_fast_layout(&engine, layout, None, &disabled_indices)?;
-    let keyboard = fl
-        .keyboard
-        .iter()
-        .map(|k| [k.x(), k.y(), k.width(), k.height()])
-        .collect();
-    let shape = fl.shape.inner().to_vec();
-
-    let stats = engine.get_layout_stats(&fl);
-    let stats_dto = stats_to_dto(
-        &stats,
-        engine.data.char_total,
-        finger_usage_pct(&engine, &fl),
-    );
-    Ok(LayoutDto {
-        name: format!("{name}*"),
-        keys: original_keys,
-        board: get_board_str(layout),
-        fingering_name: layout
-            .metadata
-            .fingering_name
-            .as_ref()
-            .map(|n| n.to_string()),
-        stats: stats_dto,
-        keyboard,
-        shape,
-    })
+        board_name(&layout),
+    ))
 }
 
 #[tauri::command]
@@ -741,33 +816,33 @@ fn get_char_frequencies(state: tauri::State<'_, AppState>) -> Result<Vec<CharFre
     Ok(freqs)
 }
 
-#[tauri::command]
+/// Switches the corpus and persists it to config.toml, so the choice survives
+/// restarts and later config saves.
+#[tauri::command(async)]
 fn set_language(language: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let config = state.config.lock().unwrap().clone();
-    let corpus_path = corpus_path_for(&state.dirs.language_data_dir(), &language);
-    let data = Data::load(&corpus_path)
-        .map_err(|e| format!("Failed to load corpus for '{language}': {e}"))?;
-    let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-    let new_layouts = load_all_layouts(&config, state.dirs.data_dir());
-
-    *state.engine.lock().unwrap() = new_engine;
-    *state.layouts.lock().unwrap() = new_layouts;
-    state.generated.lock().unwrap().clear();
+    let config = Config {
+        corpus: corpus_path_for(&state.dirs, &language),
+        ..state.config.lock().unwrap().clone()
+    };
+    let loaded = load_with(&state.dirs, config)?;
+    write_config(&state, &loaded.config)?;
+    install(&state, loaded);
     Ok(())
 }
 
-#[tauri::command]
-fn reload_config(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    reload_state(&state)
-}
-
-#[tauri::command]
+#[tauri::command(async)]
 fn lookup_ngram(
     ngram: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<NgramResultDto, String> {
     let engine = state.engine.lock().unwrap().clone();
     let data = &engine.data;
+
+    // The corpus stores spaces as SPACE_CHAR.
+    let ngram: String = ngram
+        .chars()
+        .map(|c| if c == ' ' { SPACE_CHAR } else { c })
+        .collect();
 
     // get_u maps unknown characters to byte 0 (the replacement character);
     // report those instead of silently returning the replacement's stats.
@@ -926,6 +1001,72 @@ fn generate_batch(
     }
 }
 
+struct GenerateRun {
+    engine: Arc<Oxeylyzer>,
+    algorithm: String,
+    count: usize,
+    base: FastLayout,
+    pins: Vec<usize>,
+    max_cores: usize,
+    cancel: Arc<AtomicBool>,
+}
+
+/// Runs generation on a pool sized by `max_cores` and returns the top 50
+/// results plus whether the run was cancelled.
+fn run_generation(
+    run: &GenerateRun,
+    on_progress: &(dyn Fn(usize) + Sync),
+) -> Result<(Vec<LayoutDto>, bool), String> {
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(run.max_cores)
+        .build()
+        .map_err(|e| format!("Failed to start worker threads: {e}"))?;
+
+    Ok(pool.install(|| {
+        // Generate in parallel batches, checking the cancel flag between
+        // batches — this is what makes cancellation actually stop the work
+        // instead of merely discarding its results.
+        let batch = rayon::current_num_threads();
+        let mut results: Vec<FastLayout> = Vec::with_capacity(run.count);
+        let mut last_emit = std::time::Instant::now();
+
+        while results.len() < run.count && !run.cancel.load(Ordering::Relaxed) {
+            let n = batch.min(run.count - results.len());
+            results.extend(generate_batch(&run.engine, &run.algorithm, n, &run.base, &run.pins));
+
+            if last_emit.elapsed() >= Duration::from_millis(200) {
+                last_emit = std::time::Instant::now();
+                on_progress(results.len());
+            }
+        }
+
+        let cancelled = run.cancel.load(Ordering::Relaxed);
+
+        // Pre-compute scores once per layout, then sort by cached value.
+        let mut scored: Vec<(i64, FastLayout)> = results
+            .into_iter()
+            .map(|fl| (run.engine.score(&fl), fl))
+            .collect();
+        scored.sort_unstable_by(|(s1, _), (s2, _)| s2.cmp(s1));
+
+        let top = &scored[..50.min(scored.len())];
+        let dtos = top
+            .par_iter()
+            .enumerate()
+            .map(|(i, (_, fl))| {
+                fast_layout_to_dto(
+                    &run.engine,
+                    fl,
+                    format!("gen-{}", i + 1),
+                    fl.layout_str(),
+                    "generated".to_string(),
+                )
+            })
+            .collect();
+        (dtos, cancelled)
+    }))
+}
+
 #[tauri::command]
 async fn start_generate(
     base_layout: String,
@@ -935,8 +1076,8 @@ async fn start_generate(
     app_handle: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    // Reject overlapping runs — two concurrent runs would race for
-    // `state.generated` and double CPU usage.
+    // Reject overlapping runs — two concurrent runs would double CPU usage
+    // and interleave their progress events.
     if state
         .generating
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -944,168 +1085,45 @@ async fn start_generate(
     {
         return Err("A generation run is already in progress.".to_string());
     }
+    let guard = GeneratingGuard(state.generating.clone());
     state.cancel_flag.store(false, Ordering::Relaxed);
 
-    // Clone what we need before spawning — avoids moving tauri::State into a thread.
     let engine = state.engine.lock().unwrap().clone();
-    let cancel = state.cancel_flag.clone();
-    let generating = state.generating.clone();
-    let algorithm = algorithm.unwrap_or_else(|| "hill".to_string());
-
-    let fast_base = {
-        let layouts = state.layouts.lock().unwrap();
-        let base = match layouts.get(&base_layout.to_lowercase()) {
-            Some(base) => base,
-            None => {
-                generating.store(false, Ordering::SeqCst);
-                return Err(format!("Layout '{base_layout}' not found"));
-            }
-        };
-        engine.fast_layout(base, &[])
+    let base = engine.fast_layout(&get_layout(&state, &base_layout)?, &[]);
+    let run = GenerateRun {
+        pins: pin_positions(&base, &engine, &pins),
+        engine,
+        algorithm: algorithm.unwrap_or_else(|| "hill".to_string()),
+        count,
+        base,
+        max_cores: state.config.lock().unwrap().max_cores,
+        cancel: state.cancel_flag.clone(),
     };
 
-    let pin_pos = pin_positions(&fast_base, &engine, &pins);
-    let app = app_handle.clone();
-
     std::thread::spawn(move || {
-        // Generate in parallel batches, checking the cancel flag between
-        // batches — this is what makes cancellation actually stop the work
-        // instead of merely discarding its results.
-        let batch = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4);
-        let mut results: Vec<FastLayout> = Vec::with_capacity(count);
-        let mut last_emit = std::time::Instant::now();
-
-        while results.len() < count && !cancel.load(Ordering::Relaxed) {
-            let n = batch.min(count - results.len());
-            results.extend(generate_batch(&engine, &algorithm, n, &fast_base, &pin_pos));
-
-            if last_emit.elapsed() >= std::time::Duration::from_millis(200) {
-                last_emit = std::time::Instant::now();
-                let _ = app.emit(
+        let _guard = guard;
+        let payload = match std::panic::catch_unwind(AssertUnwindSafe(|| {
+            run_generation(&run, &|done| {
+                let _ = app_handle.emit(
                     "generate-progress",
-                    serde_json::json!({ "done": results.len(), "total": count }),
+                    serde_json::json!({ "done": done, "total": run.count }),
                 );
-            }
-        }
-
-        let cancelled = cancel.load(Ordering::Relaxed);
-
-        // Pre-compute scores once per layout, then sort by cached value.
-        // Avoids calling engine.score() O(N log N) times inside the comparator.
-        let char_total = engine.data.char_total;
-        let mut scored: Vec<(i64, FastLayout)> = results
-            .into_iter()
-            .map(|fl| (engine.score(&fl), fl))
-            .collect();
-        scored.sort_unstable_by(|(s1, _), (s2, _)| s2.cmp(s1));
-
-        // Build DTOs for the top 50 in parallel — get_layout_stats is expensive
-        // but read-only, so rayon can safely run it across threads.
-        let top = &scored[..50.min(scored.len())];
-        let layout_dtos: Vec<LayoutDto> = top
-            .par_iter()
-            .enumerate()
-            .map(|(i, (_, fl))| {
-                let stats = engine.get_layout_stats(fl);
-                let stats_dto = stats_to_dto(&stats, char_total, finger_usage_pct(&engine, fl));
-                LayoutDto {
-                    name: fl.name.clone().unwrap_or_else(|| format!("gen-{}", i + 1)),
-                    keys: fl.layout_str(),
-                    board: "generated".to_string(),
-                    fingering_name: fl.metadata.fingering_name.as_ref().map(|n| n.to_string()),
-                    stats: stats_dto,
-                    keyboard: fl
-                        .keyboard
-                        .iter()
-                        .map(|k| [k.x(), k.y(), k.width(), k.height()])
-                        .collect(),
-                    shape: fl.shape.inner().to_vec(),
-                }
             })
-            .collect();
-
-        // Store all results (sorted) for save_generated. Partial results from a
-        // cancelled run are kept on purpose — they're still valid layouts.
-        let state = app.state::<AppState>();
-        *state.generated.lock().unwrap() = scored.into_iter().map(|(_, fl)| fl).collect();
-
-        let _ = app.emit(
-            "generate-done",
-            serde_json::json!({ "results": layout_dtos, "cancelled": cancelled }),
-        );
-
-        generating.store(false, Ordering::SeqCst);
+        })) {
+            Ok(Ok((results, cancelled))) => {
+                serde_json::json!({ "results": results, "cancelled": cancelled })
+            }
+            Ok(Err(e)) => serde_json::json!({ "results": [], "cancelled": false, "error": e }),
+            Err(panic) => serde_json::json!({
+                "results": [],
+                "cancelled": false,
+                "error": format!("Generation failed: {}", panic_message(panic.as_ref())),
+            }),
+        };
+        let _ = app_handle.emit("generate-done", payload);
     });
 
     Ok(())
-}
-
-#[tauri::command]
-fn save_generated(
-    index: usize,
-    name: Option<String>,
-    state: tauri::State<'_, AppState>,
-) -> Result<LayoutDto, String> {
-    let engine = state.engine.lock().unwrap().clone();
-    let mut generated = state.generated.lock().unwrap();
-
-    let len = generated.len();
-    let fl = generated
-        .get_mut(index)
-        .ok_or_else(|| format!("Index {index} out of bounds ({len} results)"))?;
-
-    // Assign the chosen name.
-    let save_name = name.unwrap_or_else(|| {
-        fl.keys
-            .iter()
-            .skip(10)
-            .take(4)
-            .map(|&u| engine.mapping.get_c(u))
-            .collect::<String>()
-    });
-    fl.name = Some(save_name.clone());
-
-    // Serialize to .dof JSON, clearing provenance fields from the base layout.
-    let layout: Layout = fl.clone().into();
-    let layout = Layout {
-        metadata: Arc::new(LayoutMetadata {
-            authors: vec![],
-            year: None,
-            link: None,
-            ..(*layout.metadata).clone()
-        }),
-        ..layout
-    };
-    let json =
-        serde_json::to_string_pretty(&layout).map_err(|e| format!("Serialization failed: {e}"))?;
-
-    // Write to the layouts directory for the current language.
-    let lang = engine.language.clone();
-    let file_name = save_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .dirs
-        .layouts_dir()
-        .join(&lang)
-        .join(&file_name)
-        .with_extension("dof");
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
-
-    // Add to loaded layouts.
-    let layout_loaded = Layout::load(&path).map_err(|e| e.to_string())?;
-    let dto = layout_to_dto(&engine, &layout_loaded);
-    state
-        .layouts
-        .lock()
-        .unwrap()
-        .insert(save_name.to_lowercase(), layout_loaded);
-
-    Ok(dto)
 }
 
 #[tauri::command]
@@ -1113,51 +1131,40 @@ fn cancel_generate(state: tauri::State<'_, AppState>) {
     state.cancel_flag.store(true, Ordering::Relaxed);
 }
 
-#[tauri::command]
+/// Deletes a layout's file. Only files inside the managed layouts directory are
+/// deleted; layouts loaded from other config globs belong to the user.
+#[tauri::command(async)]
 fn delete_layout(name: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let lang = state.engine.lock().unwrap().language.clone();
-    let file_name = name.replace(' ', "_").to_lowercase();
-    let path = state
-        .dirs
-        .layouts_dir()
-        .join(&lang)
-        .join(&file_name)
-        .with_extension("dof");
-
-    if !path.exists() {
+    let mut layouts = state.layouts.lock().unwrap();
+    let key = name.to_lowercase();
+    let path = &layouts
+        .get(&key)
+        .ok_or_else(|| format!("Layout '{name}' not found"))?
+        .path;
+    if !path.starts_with(state.dirs.layouts_dir()) {
         return Err(format!(
-            "Layout file '{}' not found — it may live outside the managed layouts directory.",
+            "'{}' lives outside the managed layouts directory; delete it manually.",
             path.display()
         ));
     }
-    std::fs::remove_file(&path).map_err(|e| format!("Delete failed: {e}"))?;
-    state.layouts.lock().unwrap().remove(&name.to_lowercase());
+    std::fs::remove_file(path).map_err(|e| format!("Delete failed: {e}"))?;
+    layouts.remove(&key);
     Ok(())
 }
 
-/// Saves a modified key arrangement (e.g. from drag-swaps in the Analyze view)
-/// as a new layout derived from `base_name`.
-#[tauri::command]
+/// Saves a key arrangement (drag-swaps in Analyze, or a generated layout) as a
+/// new layout derived from `base_name`.
+#[tauri::command(async)]
 fn save_custom_layout(
     base_name: String,
     keys: String,
     new_name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<LayoutDto, String> {
-    let new_name = new_name.trim().to_string();
-    if new_name.is_empty() {
-        return Err("A name is required.".to_string());
-    }
-
     let engine = state.engine.lock().unwrap().clone();
-    let mut fl = {
-        let layouts = state.layouts.lock().unwrap();
-        let base = layouts
-            .get(&base_name.to_lowercase())
-            .ok_or_else(|| format!("Layout '{base_name}' not found"))?;
-        custom_fast_layout(&engine, base, Some(&keys), &[])?
-    };
-    fl.name = Some(new_name.clone());
+    let base = get_layout(&state, &base_name)?;
+    let mut fl = custom_fast_layout(&engine, &base, Some(&keys), &[])?;
+    fl.name = Some(new_name.trim().to_string());
 
     // Serialize to .dof JSON, clearing provenance fields from the base layout.
     let layout: Layout = fl.into();
@@ -1173,116 +1180,62 @@ fn save_custom_layout(
     let json =
         serde_json::to_string_pretty(&layout).map_err(|e| format!("Serialization failed: {e}"))?;
 
-    let lang = engine.language.clone();
-    let file_name = new_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .dirs
-        .layouts_dir()
-        .join(&lang)
-        .join(&file_name)
-        .with_extension("dof");
-
-    if path.exists() {
-        return Err(format!("A layout named '{new_name}' already exists."));
-    }
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
-
-    let layout_loaded = Layout::load(&path).map_err(|e| e.to_string())?;
-    let dto = layout_to_dto(&engine, &layout_loaded);
-    state
-        .layouts
-        .lock()
-        .unwrap()
-        .insert(new_name.to_lowercase(), layout_loaded);
-
-    Ok(dto)
+    let mut layouts = state.layouts.lock().unwrap();
+    let path = new_layout_path(&state.dirs, &layouts, &engine.language, &new_name)?;
+    let saved = write_layout(&mut layouts, path, &json)?;
+    Ok(layout_to_dto(&engine, &saved))
 }
 
-#[tauri::command]
+/// Returns the layout's .dof file as written, so fields the core doesn't model
+/// (extra layers, magic, combos, description) survive an edit.
+#[tauri::command(async)]
 fn get_layout_detail(
     name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    serde_json::to_value(layout).map_err(|e| e.to_string())
+    let (path, layout) = {
+        let layouts = state.layouts.lock().unwrap();
+        let loaded = layouts
+            .get(&name.to_lowercase())
+            .ok_or_else(|| format!("Layout '{name}' not found"))?;
+        (loaded.path.clone(), loaded.layout.clone())
+    };
+    match std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+    {
+        Some(json) => Ok(json),
+        None => serde_json::to_value(&layout).map_err(|e| e.to_string()),
+    }
 }
 
-#[tauri::command]
+/// Saves an edited .dof. Keeping the name (ignoring case) overwrites the file the
+/// layout was loaded from; a different name creates a new layout instead.
+#[tauri::command(async)]
 fn save_layout_edit(
     dof_json: serde_json::Value,
     original_name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let layout: Layout = serde_json::from_value(dof_json.clone())
-        .map_err(|e| format!("Invalid layout JSON: {e}"))?;
-    let new_name = layout.name.clone();
-
-    // Find the original file path.
-    let lang = state.engine.lock().unwrap().language.clone();
-    let file_name = original_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .dirs
-        .layouts_dir()
-        .join(&lang)
-        .join(&file_name)
-        .with_extension("dof");
-
+    let layout: Layout =
+        serde_json::from_value(dof_json.clone()).map_err(|e| format!("Invalid layout: {e}"))?;
     let json = serde_json::to_string_pretty(&dof_json).map_err(|e| e.to_string())?;
-    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
+    let language = state.engine.lock().unwrap().language.clone();
 
-    // Reload into state.
-    let layout_loaded = Layout::load(&path).map_err(|e| e.to_string())?;
     let mut layouts = state.layouts.lock().unwrap();
-    layouts.remove(&original_name.to_lowercase());
-    layouts.insert(new_name.to_lowercase(), layout_loaded);
+    let original_key = original_name.to_lowercase();
+    if layout.name.trim().to_lowercase() == original_key {
+        let path = layouts
+            .get(&original_key)
+            .ok_or_else(|| format!("Layout '{original_name}' not found"))?
+            .path
+            .clone();
+        write_layout(&mut layouts, path, &json)?;
+    } else {
+        let path = new_layout_path(&state.dirs, &layouts, &language, &layout.name)?;
+        write_layout(&mut layouts, path, &json)?;
+    }
     Ok(())
-}
-
-#[tauri::command]
-fn fork_layout(
-    name: String,
-    new_name: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<LayoutDto, String> {
-    let engine = state.engine.lock().unwrap().clone();
-    let lang = engine.language.clone();
-
-    let mut layouts = state.layouts.lock().unwrap();
-    let original = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?
-        .clone();
-
-    let mut forked = original.clone();
-    forked.name = new_name.clone();
-
-    let file_name = new_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .dirs
-        .layouts_dir()
-        .join(&lang)
-        .join(&file_name)
-        .with_extension("dof");
-
-    if path.exists() {
-        return Err(format!("A layout named '{new_name}' already exists."));
-    }
-
-    let json = serde_json::to_string_pretty(&forked).map_err(|e| e.to_string())?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
-
-    let dto = layout_to_dto(&engine, &forked);
-    layouts.insert(new_name.to_lowercase(), forked);
-    Ok(dto)
 }
 
 #[tauri::command]
@@ -1291,7 +1244,6 @@ fn get_session(state: tauri::State<'_, AppState>) -> Result<SessionDto, String> 
     if !path.exists() {
         return Ok(SessionDto {
             view: "layouts".to_string(),
-            language: state.engine.lock().unwrap().language.clone(),
             last_layout: None,
             heat_scheme: None,
         });
@@ -1308,67 +1260,6 @@ fn set_session(session: SessionDto, state: tauri::State<'_, AppState>) -> Result
 }
 
 // ─── Config Commands ──────────────────────────────────────────────────────────
-
-fn config_dto_to_toml(dto: &ConfigDto) -> String {
-    let layouts_lines = dto
-        .layouts
-        .iter()
-        .map(|p| format!("  {p:?}"))
-        .collect::<Vec<_>>()
-        .join(",\n");
-    let fw = &dto.weights.finger_weights;
-    let mfu = &dto.weights.max_finger_use;
-    let w = &dto.weights;
-    format!(
-        "corpus = {:?}\nlayouts = [\n{}\n]\n\
-         corpus_configs = {:?}\ntrigram_precision = {}\nmax_cores = {}\n\n\
-         [weights]\n\
-         lateral_penalty = {}\nsfbs = {}\nsfs = {}\nstretches = {}\n\
-         pinky_ring_bigrams = {}\ninrolls = {}\noutrolls = {}\nonehands = {}\n\
-         alternates = {}\nalternates_sfs = {}\nredirects = {}\nredirects_sfs = {}\n\
-         bad_redirects = {}\nbad_redirects_sfs = {}\n\n\
-         [weights.finger_weights]\n\
-         lp = {}\nlr = {}\nlm = {}\nli = {}\nlt = {}\n\
-         rt = {}\nri = {}\nrm = {}\nrr = {}\nrp = {}\n\n\
-         [weights.max_finger_use]\n\
-         penalty = {}\npinky = {}\nring = {}\nmiddle = {}\nindex = {}\nthumb = {}\n",
-        dto.corpus,
-        layouts_lines,
-        dto.corpus_configs,
-        dto.trigram_precision,
-        dto.max_cores,
-        w.lateral_penalty,
-        w.sfbs,
-        w.sfs,
-        w.stretches,
-        w.pinky_ring_bigrams,
-        w.inrolls,
-        w.outrolls,
-        w.onehands,
-        w.alternates,
-        w.alternates_sfs,
-        w.redirects,
-        w.redirects_sfs,
-        w.bad_redirects,
-        w.bad_redirects_sfs,
-        fw.lp,
-        fw.lr,
-        fw.lm,
-        fw.li,
-        fw.lt,
-        fw.rt,
-        fw.ri,
-        fw.rm,
-        fw.rr,
-        fw.rp,
-        mfu.penalty,
-        mfu.pinky,
-        mfu.ring,
-        mfu.middle,
-        mfu.index,
-        mfu.thumb,
-    )
-}
 
 fn config_to_dto(config: &Config) -> ConfigDto {
     let w = &config.weights;
@@ -1444,34 +1335,21 @@ fn get_config(state: tauri::State<'_, AppState>) -> Result<ConfigDto, String> {
     Ok(config_to_dto(&config))
 }
 
-#[tauri::command]
+/// Applies a config only after it loads, so a bad corpus path is rejected
+/// instead of being written to config.toml.
+#[tauri::command(async)]
 fn set_config(config_dto: ConfigDto, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let new_weights = dto_to_weights(&config_dto.weights);
-    let new_config = Config {
+    let config = Config {
         corpus: PathBuf::from(&config_dto.corpus),
         layouts: config_dto.layouts.iter().map(PathBuf::from).collect(),
         corpus_configs: PathBuf::from(&config_dto.corpus_configs),
         trigram_precision: config_dto.trigram_precision,
         max_cores: config_dto.max_cores,
-        weights: new_weights,
+        weights: dto_to_weights(&config_dto.weights),
     };
-
-    // Write config.toml as hand-built TOML string.
-    let config_path = state.dirs.config_file();
-    std::fs::write(&config_path, config_dto_to_toml(&config_dto))
-        .map_err(|e| format!("Write failed: {e}"))?;
-
-    // Rebuild engine with new config
-    let corpus_path = state.dirs.data_dir().join(&new_config.corpus);
-    let data = Data::load(&corpus_path).map_err(|e| format!("Failed to load corpus: {e}"))?;
-    let new_engine = Arc::new(Oxeylyzer::new(data, new_config.clone()));
-    let new_layouts = load_all_layouts(&new_config, state.dirs.data_dir());
-
-    *state.config.lock().unwrap() = new_config;
-    *state.engine.lock().unwrap() = new_engine;
-    *state.layouts.lock().unwrap() = new_layouts;
-    // Generated layouts are tied to the old engine's character mapping.
-    state.generated.lock().unwrap().clear();
+    let loaded = load_with(&state.dirs, config)?;
+    write_config(&state, &loaded.config)?;
+    install(&state, loaded);
     Ok(())
 }
 
@@ -1482,59 +1360,17 @@ fn get_defaults() -> Result<ConfigDto, String> {
 
 // ─── Weight Presets ───────────────────────────────────────────────────────────
 
-fn preset_dir(dirs: &OxeylyzerDirs) -> PathBuf {
-    dirs.weight_presets_dir()
-}
-
-fn weights_dto_to_toml(w: &WeightsDto) -> String {
-    let fw = &w.finger_weights;
-    let mfu = &w.max_finger_use;
-    format!(
-        "lateral_penalty = {}\nsfbs = {}\nsfs = {}\nstretches = {}\n\
-         pinky_ring_bigrams = {}\ninrolls = {}\noutrolls = {}\nonehands = {}\n\
-         alternates = {}\nalternates_sfs = {}\nredirects = {}\nredirects_sfs = {}\n\
-         bad_redirects = {}\nbad_redirects_sfs = {}\n\n\
-         [finger_weights]\n\
-         lp = {}\nlr = {}\nlm = {}\nli = {}\nlt = {}\n\
-         rt = {}\nri = {}\nrm = {}\nrr = {}\nrp = {}\n\n\
-         [max_finger_use]\n\
-         penalty = {}\npinky = {}\nring = {}\nmiddle = {}\nindex = {}\nthumb = {}\n",
-        w.lateral_penalty,
-        w.sfbs,
-        w.sfs,
-        w.stretches,
-        w.pinky_ring_bigrams,
-        w.inrolls,
-        w.outrolls,
-        w.onehands,
-        w.alternates,
-        w.alternates_sfs,
-        w.redirects,
-        w.redirects_sfs,
-        w.bad_redirects,
-        w.bad_redirects_sfs,
-        fw.lp,
-        fw.lr,
-        fw.lm,
-        fw.li,
-        fw.lt,
-        fw.rt,
-        fw.ri,
-        fw.rm,
-        fw.rr,
-        fw.rp,
-        mfu.penalty,
-        mfu.pinky,
-        mfu.ring,
-        mfu.middle,
-        mfu.index,
-        mfu.thumb,
-    )
+fn preset_path(dirs: &OxeylyzerDirs, name: &str) -> Result<PathBuf, String> {
+    let stem = file_stem(name);
+    if stem.is_empty() {
+        return Err("A preset name is required.".to_string());
+    }
+    Ok(dirs.weight_presets_dir().join(format!("{stem}.toml")))
 }
 
 #[tauri::command]
 fn list_weight_presets(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
-    let dir = preset_dir(&state.dirs);
+    let dir = state.dirs.weight_presets_dir();
     if !dir.exists() {
         return Ok(vec![]);
     }
@@ -1543,8 +1379,7 @@ fn list_weight_presets(state: tauri::State<'_, AppState>) -> Result<Vec<String>,
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().into_owned();
-            name.ends_with(".toml")
-                .then(|| name.trim_end_matches(".toml").to_string())
+            name.strip_suffix(".toml").map(str::to_string)
         })
         .collect();
     names.sort();
@@ -1557,10 +1392,10 @@ fn save_weight_preset(
     weights: WeightsDto,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let dir = preset_dir(&state.dirs);
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(&name).with_extension("toml");
-    std::fs::write(&path, weights_dto_to_toml(&weights)).map_err(|e| e.to_string())
+    let path = preset_path(&state.dirs, &name)?;
+    std::fs::create_dir_all(state.dirs.weight_presets_dir()).map_err(|e| e.to_string())?;
+    let toml = toml::to_string_pretty(&weights).map_err(|e| e.to_string())?;
+    std::fs::write(&path, toml).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1568,25 +1403,130 @@ fn load_weight_preset(
     name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<WeightsDto, String> {
-    let path = preset_dir(&state.dirs).join(&name).with_extension("toml");
+    let path = preset_path(&state.dirs, &name)?;
     let s = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     toml::from_str::<WeightsDto>(&s).map_err(|e| format!("Failed to parse preset '{name}': {e}"))
 }
 
-// ─── Reload Helper ────────────────────────────────────────────────────────────
+// ─── Startup & File Watching ─────────────────────────────────────────────────
 
-fn reload_state(state: &AppState) -> Result<(), String> {
-    let config = Config::with_loaded_weights(state.dirs.config_file())
-        .map_err(|e| format!("Failed to reload config: {e}"))?;
-    let corpus_path = state.dirs.data_dir().join(&config.corpus);
-    let data = Data::load(&corpus_path).map_err(|e| format!("Failed to load corpus: {e}"))?;
-    let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-    let new_layouts = load_all_layouts(&config, state.dirs.data_dir());
-    *state.config.lock().unwrap() = config;
-    *state.engine.lock().unwrap() = new_engine;
-    *state.layouts.lock().unwrap() = new_layouts;
-    state.generated.lock().unwrap().clear();
-    Ok(())
+/// Downloads data on first run and builds [`AppState`] off the main thread, so
+/// the window can show download progress instead of freezing.
+fn init_backend(app: tauri::AppHandle, dirs: OxeylyzerDirs) {
+    let mut errors = Vec::new();
+
+    if dirs.is_first_run() {
+        use oxeylyzer_resources::DownloadProgress;
+        let emitter = app.clone();
+        let downloaded = dirs.ensure_data(move |p| {
+            let payload = match &p {
+                DownloadProgress::Connecting => serde_json::json!({"status": "connecting"}),
+                DownloadProgress::Downloading {
+                    bytes_done,
+                    bytes_total,
+                } => serde_json::json!({
+                    "status": "downloading",
+                    "bytesDone": bytes_done,
+                    "bytesTotal": bytes_total,
+                }),
+                DownloadProgress::Extracting => serde_json::json!({"status": "extracting"}),
+                DownloadProgress::Done => serde_json::json!({"status": "done"}),
+            };
+            let _ = emitter.emit("download-progress", payload);
+        });
+        if let Err(e) = downloaded {
+            errors.push(format!("Failed to download the data files: {e}."));
+        }
+    }
+
+    // ensure_config is idempotent; ensure_data already calls it on first run,
+    // but call it here too so a missing config is always recovered.
+    if let Err(e) = dirs.ensure_config() {
+        errors.push(format!("Failed to write the default config: {e}."));
+    }
+
+    let (loaded, load_errors) = initial_load(&dirs);
+    errors.extend(load_errors);
+
+    let config_file = dirs.config_file();
+    let layouts_dir = dirs.layouts_dir();
+    app.manage(AppState {
+        engine: Mutex::new(loaded.engine),
+        layouts: Mutex::new(loaded.layouts),
+        dirs,
+        config: Mutex::new(loaded.config),
+        cancel_flag: Arc::new(AtomicBool::new(false)),
+        generating: Arc::new(AtomicBool::new(false)),
+        last_config_write: Mutex::new(None),
+    });
+    spawn_watcher(app.clone(), config_file, layouts_dir);
+
+    let startup = app.state::<Startup>();
+    if !errors.is_empty() {
+        *startup.error.lock().unwrap() = Some(errors.join(" "));
+    }
+    startup.ready.store(true, Ordering::SeqCst);
+    let _ = app.emit("backend-ready", ());
+}
+
+/// Reloads when config.toml or layout files change on disk.
+fn spawn_watcher(app: tauri::AppHandle, config_file: PathBuf, layouts_dir: PathBuf) {
+    use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
+
+    std::thread::spawn(move || {
+        let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
+        let mut watcher = match recommended_watcher(tx) {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("File watcher init failed: {e}");
+                return;
+            }
+        };
+        // Watching the directory rather than config.toml itself keeps working
+        // after editors replace the file by renaming over it.
+        if let Some(config_dir) = config_file.parent() {
+            let _ = watcher.watch(config_dir, RecursiveMode::NonRecursive);
+        }
+        let _ = watcher.watch(&layouts_dir, RecursiveMode::Recursive);
+
+        while let Ok(first) = rx.recv() {
+            // Wait for the writes to settle: the first event fires as soon as a
+            // file is created or truncated, before its contents are written.
+            let mut events = vec![first];
+            while let Ok(event) = rx.recv_timeout(Duration::from_millis(300)) {
+                events.push(event);
+            }
+            let paths: Vec<PathBuf> = events
+                .into_iter()
+                .flatten()
+                .filter(|e| {
+                    matches!(
+                        e.kind,
+                        EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+                    )
+                })
+                .flat_map(|e| e.paths)
+                .collect();
+
+            let state = app.state::<AppState>();
+            if paths.iter().any(|p| p.file_name() == config_file.file_name()) {
+                match reload_from_disk(&state) {
+                    Ok(true) => {
+                        let _ = app.emit("config-reloaded", ());
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        let _ = app.emit("load-error", format!("Auto-reload failed: {e}"));
+                    }
+                }
+            } else if paths.iter().any(|p| p.extension().is_some_and(|e| e == "dof")) {
+                let config = state.config.lock().unwrap().clone();
+                let language = state.engine.lock().unwrap().language.clone();
+                *state.layouts.lock().unwrap() = load_all_layouts(&config, &state.dirs, &language);
+                let _ = app.emit("layouts-reloaded", ());
+            }
+        }
+    });
 }
 
 // ─── Entry Point ──────────────────────────────────────────────────────────────
@@ -1601,137 +1541,29 @@ pub fn run() {
             } else {
                 OxeylyzerDirs::resolve().expect("failed to resolve data directory")
             };
-
-            // On first run, download data files synchronously before initialising the
-            // engine — corpus and layout files must exist before we try to load them.
-            // Progress events are emitted so a frontend loading screen can react.
-            if dirs.is_first_run() {
-                use oxeylyzer_resources::DownloadProgress;
-                let app_handle = app.handle().clone();
-                dirs.ensure_data(move |p| {
-                    let payload = match &p {
-                        DownloadProgress::Connecting => {
-                            serde_json::json!({"status": "connecting"})
-                        }
-                        DownloadProgress::Downloading {
-                            bytes_done,
-                            bytes_total,
-                        } => {
-                            serde_json::json!({
-                                "status": "downloading",
-                                "bytesDone": bytes_done,
-                                "bytesTotal": bytes_total,
-                            })
-                        }
-                        DownloadProgress::Extracting => {
-                            serde_json::json!({"status": "extracting"})
-                        }
-                        DownloadProgress::Done => serde_json::json!({"status": "done"}),
-                    };
-                    let _ = app_handle.emit("download-progress", payload);
-                })
-                .expect("failed to download resources");
-            }
-
-            // ensure_config is idempotent; ensure_data already calls it on first run,
-            // but call it here too so a missing config is always recovered.
-            dirs.ensure_config()
-                .expect("failed to write default config");
-
-            let config = Config::with_loaded_weights(dirs.config_file())
-                .expect("failed to load config.toml");
-
-            let corpus_path = dirs.data_dir().join(&config.corpus);
-            let data = Data::load(&corpus_path).expect("failed to load corpus");
-
-            let engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-            let layouts = load_all_layouts(&config, dirs.data_dir());
-
-            let watch_config = dirs.config_file();
-            let watch_layouts = dirs.layouts_dir();
-
-            app.manage(AppState {
-                engine: Mutex::new(engine),
-                layouts: Mutex::new(layouts),
-                generated: Mutex::new(Vec::new()),
-                dirs,
-                config: Mutex::new(config),
-                cancel_flag: Arc::new(AtomicBool::new(false)),
-                generating: Arc::new(AtomicBool::new(false)),
-            });
-
-            // File watcher: auto-reload when config.toml or layout files change.
-            {
-                use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
-                let app_handle = app.handle().clone();
-                std::thread::spawn(move || {
-                    let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
-                    let mut watcher = match recommended_watcher(tx) {
-                        Ok(w) => w,
-                        Err(e) => {
-                            eprintln!("File watcher init failed: {e}");
-                            return;
-                        }
-                    };
-                    let _ = watcher.watch(&watch_config, RecursiveMode::NonRecursive);
-                    let _ = watcher.watch(&watch_layouts, RecursiveMode::Recursive);
-                    let mut last_reload = std::time::Instant::now()
-                        .checked_sub(std::time::Duration::from_secs(5))
-                        .unwrap_or_else(std::time::Instant::now);
-                    for event in rx.into_iter().flatten() {
-                        if !matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
-                            continue;
-                        }
-                        if last_reload.elapsed() < std::time::Duration::from_secs(2) {
-                            continue;
-                        }
-                        last_reload = std::time::Instant::now();
-                        let state = app_handle.state::<AppState>();
-
-                        // Only a config.toml change requires rebuilding the engine
-                        // (which invalidates generated results). Layout file changes
-                        // — including the app's own saves — just refresh the layout
-                        // map so in-progress work (e.g. generation results) survives.
-                        let config_changed = event.paths.iter().any(|p| p.ends_with("config.toml"));
-                        if config_changed {
-                            if let Err(e) = reload_state(&state) {
-                                eprintln!("Auto-reload failed: {e}");
-                            } else {
-                                let _ = app_handle.emit("config-reloaded", ());
-                            }
-                        } else {
-                            let config = state.config.lock().unwrap().clone();
-                            *state.layouts.lock().unwrap() =
-                                load_all_layouts(&config, state.dirs.data_dir());
-                            let _ = app_handle.emit("layouts-reloaded", ());
-                        }
-                    }
-                });
-            }
-
+            app.manage(Startup::default());
+            let handle = app.handle().clone();
+            std::thread::spawn(move || init_backend(handle, dirs));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            backend_status,
             list_layouts,
             list_languages,
             current_language,
+            text_dir,
             analyze_layout,
             analyze_custom,
-            analyze_with_disabled,
             get_bigrams,
             get_trigrams,
-            swap_keys,
             get_char_frequencies,
             set_language,
-            reload_config,
             lookup_ngram,
             load_corpus,
             start_generate,
-            save_generated,
             cancel_generate,
             get_layout_detail,
             save_layout_edit,
-            fork_layout,
             delete_layout,
             save_custom_layout,
             get_session,
@@ -1745,4 +1577,176 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A throwaway data root holding the core crate's english corpus and gust layout.
+    fn temp_dirs(tag: &str) -> (OxeylyzerDirs, PathBuf) {
+        let core = Path::new("../../oxeylyzer-core/static");
+        let root = std::env::temp_dir().join(format!("oxeylyzer-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dirs = OxeylyzerDirs::with_override(root.clone());
+        std::fs::create_dir_all(dirs.language_data_dir()).unwrap();
+        std::fs::copy(
+            core.join("language_data/english.json"),
+            corpus_path_for(&dirs, "english"),
+        )
+        .unwrap();
+        std::fs::create_dir_all(dirs.layouts_dir().join("english")).unwrap();
+        std::fs::copy(
+            core.join("layouts/gust.dof"),
+            dirs.layouts_dir().join("english/gust.dof"),
+        )
+        .unwrap();
+        (dirs, root)
+    }
+
+    fn app_state(dirs: OxeylyzerDirs) -> AppState {
+        let (loaded, _) = initial_load(&dirs);
+        AppState {
+            engine: Mutex::new(loaded.engine),
+            layouts: Mutex::new(loaded.layouts),
+            dirs,
+            config: Mutex::new(loaded.config),
+            cancel_flag: Arc::new(AtomicBool::new(false)),
+            generating: Arc::new(AtomicBool::new(false)),
+            last_config_write: Mutex::new(None),
+        }
+    }
+
+    #[test]
+    fn cancel_stops_generation_promptly() {
+        let (dirs, root) = temp_dirs("cancel");
+        let (loaded, _) = initial_load(&dirs);
+        let base = loaded.engine.fast_layout(&loaded.layouts["gust"].layout, &[]);
+
+        for algorithm in ["hill", "ils", "sa", "lahc"] {
+            let run = GenerateRun {
+                engine: loaded.engine.clone(),
+                algorithm: algorithm.to_string(),
+                count: 1_000_000,
+                base: base.clone(),
+                pins: vec![],
+                max_cores: 0,
+                cancel: Arc::new(AtomicBool::new(false)),
+            };
+            let cancel = run.cancel.clone();
+            let canceller = std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(300));
+                cancel.store(true, Ordering::Relaxed);
+                std::time::Instant::now()
+            });
+            let (results, cancelled) = run_generation(&run, &|_| {}).unwrap();
+            let stopped = std::time::Instant::now();
+            let latency = stopped - canceller.join().unwrap();
+            eprintln!("{algorithm}: stopped {latency:?} after cancel, {} results", results.len());
+            assert!(cancelled);
+            assert!(latency < Duration::from_secs(10), "{algorithm} took {latency:?}");
+        }
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn startup_survives_a_broken_config_and_a_missing_corpus() {
+        let (dirs, root) = temp_dirs("startup");
+
+        std::fs::write(dirs.config_file(), "this is not toml [").unwrap();
+        let (loaded, errors) = initial_load(&dirs);
+        assert!(errors[0].contains("Couldn't read config.toml"), "{errors:?}");
+        assert!(loaded.layouts.contains_key("gust"));
+
+        let broken = Config {
+            corpus: dirs.language_data_dir().join("klingon.json"),
+            ..seed_config(&dirs)
+        };
+        std::fs::write(dirs.config_file(), toml::to_string(&broken).unwrap()).unwrap();
+        let (loaded, errors) = initial_load(&dirs);
+        assert!(errors.iter().any(|e| e.contains("klingon.json")), "{errors:?}");
+        assert_eq!(loaded.config.corpus, corpus_path_for(&dirs, "english"));
+        assert!(loaded.engine.data.char_total > 0);
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn saved_layouts_load_even_when_the_globs_point_elsewhere() {
+        let (dirs, root) = temp_dirs("globs");
+        let config = Config {
+            layouts: vec![dirs.layouts_dir().join("dutch").join("*.dof")],
+            ..seed_config(&dirs)
+        };
+        let layouts = load_all_layouts(&config, &dirs, "english");
+        assert_eq!(
+            layouts["gust"].path,
+            dirs.layouts_dir().join("english/gust.dof")
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn watcher_reload_skips_the_apps_own_config_writes() {
+        let (dirs, root) = temp_dirs("watch");
+        let state = app_state(dirs);
+
+        let mut config = state.config.lock().unwrap().clone();
+        config.weights.sfbs = -9.0;
+        write_config(&state, &config).unwrap();
+        assert!(!reload_from_disk(&state).unwrap());
+
+        config.weights.sfbs = -3.0;
+        std::fs::write(state.dirs.config_file(), toml::to_string(&config).unwrap()).unwrap();
+        assert!(reload_from_disk(&state).unwrap());
+        assert_eq!(state.config.lock().unwrap().weights.sfbs, -3.0);
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn file_stem_strips_path_separators_and_keeps_dots() {
+        assert_eq!(file_stem("../etc/passwd"), ".._etc_passwd");
+        assert_eq!(file_stem(" my layout v1.5 "), "my_layout_v1.5");
+        assert_eq!(file_stem("a:b*c?d"), "a_b_c_d");
+    }
+
+    #[test]
+    fn new_layout_path_keeps_dotted_names_and_rejects_taken_ones() {
+        let root = std::env::temp_dir().join(format!("oxeylyzer-test-{}", std::process::id()));
+        let dirs = OxeylyzerDirs::with_override(root.clone());
+        let mut layouts = HashMap::new();
+
+        let path = new_layout_path(&dirs, &layouts, "english", "Gen v1.5").unwrap();
+        assert_eq!(path.file_name().unwrap(), "gen_v1.5.dof");
+        assert!(new_layout_path(&dirs, &layouts, "english", "  ").is_err());
+
+        std::fs::write(&path, "{}").unwrap();
+        assert!(new_layout_path(&dirs, &layouts, "english", "gen v1.5").is_err());
+
+        layouts.insert(
+            "qwerty".to_string(),
+            LoadedLayout {
+                layout: Layout::load("../../oxeylyzer-core/static/layouts/gust.dof").unwrap(),
+                path: PathBuf::from("/elsewhere/qwerty.dof"),
+            },
+        );
+        assert!(new_layout_path(&dirs, &layouts, "english", "QWERTY").is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn config_round_trips_through_toml() {
+        let config = Config {
+            corpus: PathBuf::from("/data/\"quoted\" dir/english.json"),
+            ..Config::with_defaults()
+        };
+        let toml = toml::to_string_pretty(&config).unwrap();
+        let parsed: Config = toml::from_str(&toml).unwrap();
+        assert_eq!(parsed.corpus, config.corpus);
+        assert_eq!(parsed.weights.stretches, config.weights.stretches);
+        assert_eq!(parsed.layouts, config.layouts);
+    }
 }

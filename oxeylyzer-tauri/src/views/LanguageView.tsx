@@ -1,12 +1,17 @@
-import { createSignal, For, Show } from "solid-js";
-import { appStore, initStore } from "../store";
+import { createEffect, createSignal, For, onMount, Show } from "solid-js";
+import { appStore, refreshStore } from "../store";
 import Dropdown from "../components/Dropdown";
-import { setLanguage, loadCorpus, lookupNgram } from "../api";
+import { setLanguage, loadCorpus, lookupNgram, textDir } from "../api";
 import type { NgramResult } from "../types";
 
 export default function LanguageView() {
   const [pendingLanguage, setPendingLanguage] = createSignal(appStore.currentLanguage || "english");
   const [settingLang, setSettingLang] = createSignal(false);
+  const [langError, setLangError] = createSignal("");
+  const [sourceDir, setSourceDir] = createSignal("");
+  onMount(() => textDir().then(setSourceDir));
+  // Follow switches made from the Layouts view.
+  createEffect(() => setPendingLanguage(appStore.currentLanguage));
 
   const [loadLang, setLoadLang] = createSignal("");
   const [rawFlag, setRawFlag] = createSignal(false);
@@ -20,11 +25,12 @@ export default function LanguageView() {
 
   async function handleSetLanguage() {
     setSettingLang(true);
+    setLangError("");
     try {
       await setLanguage(pendingLanguage());
-      await initStore();
+      await refreshStore();
     } catch (e) {
-      console.error(e);
+      setLangError(String(e));
     } finally {
       setSettingLang(false);
     }
@@ -39,7 +45,7 @@ export default function LanguageView() {
     try {
       const msg = await loadCorpus(lang, rawFlag());
       setLoadMsg(msg);
-      await initStore();
+      await refreshStore();
     } catch (e) {
       setLoadError(String(e));
     } finally {
@@ -48,12 +54,13 @@ export default function LanguageView() {
   }
 
   async function handleNgramLookup() {
-    const ng = ngramInput().trim();
+    // Not trimmed: a space is a valid character to look up.
+    const ng = ngramInput();
     setNgramError("");
     setNgramResult(null);
     if (!ng) return;
-    if (ng.length > 3) {
-      setNgramError(`Ngram length ${ng.length} is not supported (max 3).`);
+    if (Array.from(ng).length > 3) {
+      setNgramError(`Ngram length ${Array.from(ng).length} is not supported (max 3).`);
       return;
     }
     try {
@@ -86,13 +93,17 @@ export default function LanguageView() {
             {settingLang() ? "Switching…" : "Set Language"}
           </button>
         </div>
+        <Show when={langError()}>
+          <div class="text-xs font-mono text-red-400">{langError()}</div>
+        </Show>
       </section>
 
       {/* ── Load corpus ───────────────────────────────────── */}
       <section class="border border-neutral-700 p-4 flex flex-col gap-3">
         <div class="text-xs text-neutral-500 uppercase tracking-widest">Load Corpus</div>
         <div class="text-xs text-neutral-500">
-          Processes raw text in <span class="font-mono">./static/text/&lt;language&gt;/</span> and
+          Processes the raw text files in{" "}
+          <span class="font-mono text-neutral-400">{sourceDir()}/&lt;language&gt;/</span> and
           generates a language data file.
         </div>
 

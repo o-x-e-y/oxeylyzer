@@ -1,46 +1,47 @@
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { batch, createEffect, createSignal, For, on, Show, untrack } from "solid-js";
 import KeyboardDisplay from "../components/KeyboardDisplay";
 import BigramList from "../components/BigramList";
 import LayoutSearch from "../components/LayoutSearch";
 import FingerStats from "../components/FingerStats";
 import { AnalyzeStatColumns } from "../components/StatColumns";
-import { NGRAM_TABS, type Layout, type BigramEntry } from "../types";
-import { appStore, heatScheme, setHeatScheme, type HeatScheme } from "../store";
+import { NGRAM_TABS, type Layout, type BigramEntry, type LayoutStats } from "../types";
+import { appStore, dataVersion, heatScheme, setHeatScheme, type HeatScheme } from "../store";
 import { heatStyleFor } from "../heat";
 import Dropdown from "../components/Dropdown";
 import { analyzeLayout, getBigrams, getTrigrams, analyzeCustom, saveCustomLayout } from "../api";
 
 type Props = {
-  initialLayout?: string;
+  /** Layout to show; a new object reloads it even if it's already shown. */
+  request?: { name: string };
   onEdit?: (_layoutName: string) => void;
+  onLayoutShown?: (_layoutName: string) => void;
 };
 
 export default function AnalyzeView(props: Props) {
-  const initialName = () => props.initialLayout ?? appStore.layouts[0]?.name ?? "";
+  // The saved layout being worked on, and the arrangement currently on screen.
+  // The arrangement updates immediately; stats follow once the backend answers.
+  const [base, setBase] = createSignal<Layout | null>(null);
+  const [keys, setKeys] = createSignal("");
+  // Disabled positions move with their keys when keys are swapped.
+  const [disabled, setDisabled] = createSignal<Set<number>>(new Set());
+  const [stats, setStats] = createSignal<LayoutStats | null>(null);
+  const [previousStats, setPreviousStats] = createSignal<LayoutStats | null>(null);
 
-  const [layout, setLayout] = createSignal<Layout | null>(null);
-  const [baseline, setBaseline] = createSignal<Layout | null>(null);
-  const [previous, setPrevious] = createSignal<Layout | null>(null);
   const [activeTabId, setActiveTabId] = createSignal<string>("sfbs");
   const activeTab = () => NGRAM_TABS.find((t) => t.id === activeTabId()) ?? NGRAM_TABS[0];
   const [count, setCount] = createSignal(10);
   const [bigramData, setBigramData] = createSignal<BigramEntry[]>([]);
   const [highlightedKeys, setHighlightedKeys] = createSignal<string[]>([]);
   const [loading, setLoading] = createSignal(false);
+  const [error, setError] = createSignal("");
   const [saveName, setSaveName] = createSignal("");
   const [saveMsg, setSaveMsg] = createSignal<{ text: string; ok: boolean } | null>(null);
-  // Disabled state tracks characters, not positions, so they follow keys through swaps.
-  const [disabledChars, setDisabledChars] = createSignal<Set<string>>(new Set());
-  // Derive the current disabled position indices from the current key arrangement.
-  const disabledIndices = createMemo(() => {
-    const chars = disabledChars();
-    const keys = layout()?.keys ?? "";
-    const result = new Set<number>();
-    for (let i = 0; i < keys.length; i++) {
-      if (chars.has(keys[i])) result.add(i);
-    }
-    return result;
-  });
+
+  const isModified = () => {
+    const b = base();
+    return !!b && (keys() !== b.keys || disabled().size > 0);
+  };
+  const displayName = () => (base()?.name ?? "") + (isModified() ? "*" : "");
 
   // Sequence counter: any stale async result whose seq < current is discarded.
   // This prevents fast toggles / rapid selects from overwriting newer results.
@@ -50,172 +51,155 @@ export default function AnalyzeView(props: Props) {
     if (seq === s) apply();
   };
 
-  // Load layout whenever initialName changes (handles both first mount and
-  // re-navigation to a different layout while the view is already active).
-  createEffect(() => {
-    const name = initialName();
-    if (!name) return;
+  async function run(s: number, work: () => Promise<void>) {
+    setLoading(true);
+    setError("");
+    try {
+      await work();
+    } catch (e) {
+      applyIfCurrent(s, () => setError(String(e)));
+    } finally {
+      applyIfCurrent(s, () => setLoading(false));
+    }
+  }
+
+  /** Shows a saved layout, dropping swaps and disabled keys. */
+  function show(name: string) {
     const s = nextSeq();
-    setDisabledChars(new Set<string>());
-    analyzeLayout(name).then((l) => {
+    return run(s, async () => {
+      const l = await analyzeLayout(name);
       applyIfCurrent(s, () => {
-        setLayout(l);
-        setBaseline(l);
-        setPrevious(null);
+        batch(() => {
+          setBase(l);
+          setKeys(l.keys);
+          setDisabled(new Set<number>());
+          setStats(l.stats);
+          setPreviousStats(null);
+          setSaveMsg(null);
+        });
+        props.onLayoutShown?.(l.name);
       });
     });
-  });
+  }
+
+  /** Re-analyzes the arrangement on screen; `fromRefresh` drops the delta baseline. */
+  function analyzeCurrent(fromRefresh = false) {
+    const b = base();
+    if (!b) return;
+    const s = nextSeq();
+    const before = stats();
+    return run(s, async () => {
+      const fresh = fromRefresh ? await analyzeLayout(b.name) : b;
+      // The file changed underneath us — start over from what's saved now.
+      if (fresh.keys !== b.keys) {
+        applyIfCurrent(s, () => show(fresh.name));
+        return;
+      }
+      const result = isModified() ? await analyzeCustom(b.name, keys(), [...disabled()]) : fresh;
+      applyIfCurrent(s, () =>
+        batch(() => {
+          setBase(fresh);
+          setStats(result.stats);
+          setPreviousStats(fromRefresh ? null : before);
+        }),
+      );
+    });
+  }
+
+  createEffect(
+    on(
+      () => props.request,
+      (request) => {
+        const name = request?.name ?? untrack(() => appStore.layouts[0]?.name);
+        if (name) show(name);
+      },
+    ),
+  );
+
+  // Config, language and layout-file changes all bump dataVersion.
+  createEffect(on(dataVersion, () => analyzeCurrent(true), { defer: true }));
 
   // Refetch ngram lists when the arrangement, disabled keys, or tab changes.
   // Modified arrangements pass their keys/disabled positions so the lists
   // describe what's on screen, not the original saved layout.
+  let ngramSeq = 0;
   createEffect(() => {
-    const l = layout();
+    const b = base();
     const tab = activeTab();
-    const base = l?.name.replace(/\*+$/, "");
-    if (!l || !base) return;
+    const k = keys();
+    const d = [...disabled()];
+    dataVersion();
+    if (!b) return;
 
-    const modified = l.name.endsWith("*");
-    const keys = modified ? l.keys : undefined;
-    const disabled = disabledIndices().size > 0 ? [...disabledIndices()] : undefined;
-
-    if (tab.kind === "bigram") {
-      getBigrams(base, tab.id, 50, keys, disabled).then(setBigramData).catch(console.error);
-    } else {
-      getTrigrams(base, tab.id, 50, keys, disabled)
-        .then((entries) => setBigramData(entries.map((e) => ({ bigram: e.trigram, percent: e.percent }))))
-        .catch(console.error);
-    }
+    const s = ++ngramSeq;
+    const customKeys = k !== b.keys ? k : undefined;
+    const disabledArg = d.length > 0 ? d : undefined;
+    const request =
+      tab.kind === "bigram"
+        ? getBigrams(b.name, tab.id, 50, customKeys, disabledArg)
+        : getTrigrams(b.name, tab.id, 50, customKeys, disabledArg).then((entries) =>
+            entries.map((e) => ({ bigram: e.trigram, percent: e.percent })),
+          );
+    request
+      .then((entries) => s === ngramSeq && setBigramData(entries))
+      .catch((e) => s === ngramSeq && setError(String(e)));
   });
 
-  async function handleSelect(name: string) {
-    const s = nextSeq();
-    setLoading(true);
-    setDisabledChars(new Set<string>());
-    try {
-      const l = await analyzeLayout(name);
-      applyIfCurrent(s, () => {
-        setLayout(l);
-        setBaseline(l);
-        setPrevious(null);
-      });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Returns disabled position indices for a given key arrangement and disabled char set.
-  function disabledIdxsFor(chars: Set<string>, keys: string): number[] {
-    const result: number[] = [];
-    for (let i = 0; i < keys.length; i++) {
-      if (chars.has(keys[i])) result.push(i);
-    }
-    return result;
-  }
-
-  // Use analyzeLayout when fully unmodified so layout().name stays clean (no "*").
-  async function analyzeState(
-    baseName: string,
-    keys: string,
-    disabledIdxs: number[],
-  ): Promise<Layout> {
-    const isOriginal = disabledIdxs.length === 0 && keys === (baseline()?.keys ?? "");
-    return isOriginal ? analyzeLayout(baseName) : analyzeCustom(baseName, keys, disabledIdxs);
-  }
-
-  async function handleSwap(fromIdx: number, toIdx: number) {
-    const l = layout();
-    if (!l) return;
-    const baseName = l.name.replace(/\*+$/, "");
-    const arr = l.keys.split("");
+  function handleSwap(fromIdx: number, toIdx: number) {
+    const arr = Array.from(keys());
     [arr[fromIdx], arr[toIdx]] = [arr[toIdx], arr[fromIdx]];
-    const newKeys = arr.join("");
-    // Recompute disabled indices against the new key arrangement so chars follow their keys.
-    const newDisabledIdxs = disabledIdxsFor(disabledChars(), newKeys);
-    const s = nextSeq();
-    setLoading(true);
-    try {
-      const updated = await analyzeState(baseName, newKeys, newDisabledIdxs);
-      applyIfCurrent(s, () => {
-        setPrevious(l);
-        setLayout(updated);
-      });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    const prev = disabled();
+    const moved = new Set<number>();
+    for (const idx of prev) moved.add(idx === fromIdx ? toIdx : idx === toIdx ? fromIdx : idx);
+    batch(() => {
+      setKeys(arr.join(""));
+      setDisabled(moved);
+    });
+    analyzeCurrent();
   }
 
-  async function handleToggleDisabled(idx: number) {
-    const l = layout();
-    if (!l) return;
-    const baseName = l.name.replace(/\*+$/, "");
-    const char = l.keys[idx];
-    if (!char) return;
-    const newChars = new Set(disabledChars());
-    if (newChars.has(char)) newChars.delete(char);
-    else newChars.add(char);
-    setDisabledChars(newChars);
-    const s = nextSeq();
-    try {
-      const idxs = disabledIdxsFor(newChars, l.keys);
-      const updated = await analyzeState(baseName, l.keys, idxs);
-      applyIfCurrent(s, () => {
-        setPrevious(l);
-        setLayout(updated);
-      });
-    } catch (e) {
-      console.error(e);
-    }
+  function handleToggleDisabled(idx: number) {
+    const next = new Set(disabled());
+    if (next.has(idx)) next.delete(idx);
+    else next.add(idx);
+    setDisabled(next);
+    analyzeCurrent();
   }
 
   function handleReset() {
-    const bl = baseline();
-    if (!bl) return;
-    const baseName = bl.name.replace(/\*+$/, "");
-    const s = nextSeq();
-    setDisabledChars(new Set<string>());
-    setSaveMsg(null);
-    analyzeLayout(baseName).then((fresh) =>
-      applyIfCurrent(s, () => {
-        setLayout(fresh);
-        setPrevious(null);
-      }),
-    );
+    const b = base();
+    if (b) show(b.name);
   }
 
   async function handleSaveAs() {
-    const l = layout();
-    if (!l) return;
-    const baseName = l.name.replace(/\*+$/, "");
+    const b = base();
+    const name = saveName().trim();
+    if (!b || !name) return;
     try {
-      await saveCustomLayout(baseName, l.keys, saveName());
-      setSaveMsg({ text: `Saved as "${saveName()}".`, ok: true });
-      const newName = saveName();
+      const saved = await saveCustomLayout(b.name, keys(), name);
       setSaveName("");
-      await handleSelect(newName);
+      await show(saved.name);
+      setSaveMsg({ text: `Saved as "${saved.name}".`, ok: true });
     } catch (e) {
       setSaveMsg({ text: String(e), ok: false });
     }
   }
 
   const displayBigrams = () => bigramData().slice(0, count());
-  const isModified = () => layout()?.name.endsWith("*") ?? false;
+  const maxFreq = () => Math.max(1, ...Object.values(appStore.charFrequencies));
+  const legendSteps = () => Array.from({ length: 13 }, (_, i) => (i / 12) * maxFreq());
 
   return (
     <div class="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4">
       {/* ── Toolbar ─────────────────────────────────────────────── */}
       <div class="shrink-0 flex items-center gap-2 border border-neutral-700 p-2">
         <label class="text-neutral-400 text-sm shrink-0">Layout</label>
-        <LayoutSearch value={layout()?.name.replace(/\*+$/, "") ?? ""} onSelect={handleSelect} />
+        <LayoutSearch value={base()?.name ?? ""} onSelect={show} />
         <Show when={loading()}>
           <span class="text-neutral-500 text-sm">…</span>
         </Show>
-        <Show when={layout()}>
-          <span class="font-mono text-sm text-neutral-300">{layout()!.name}</span>
+        <Show when={base()}>
+          <span class="font-mono text-sm text-neutral-300">{displayName()}</span>
         </Show>
         <Show when={isModified()}>
           <button
@@ -249,10 +233,10 @@ export default function AnalyzeView(props: Props) {
             </span>
           )}
         </Show>
-        <Show when={layout() && !isModified()}>
+        <Show when={base() && !isModified()}>
           <button
             class="border border-neutral-600 px-3 py-1 text-sm hover:bg-neutral-700"
-            onClick={() => props.onEdit?.(layout()!.name)}
+            onClick={() => props.onEdit?.(base()!.name)}
           >
             Edit
           </button>
@@ -267,39 +251,49 @@ export default function AnalyzeView(props: Props) {
         </div>
       </div>
 
-      <Show when={layout()}>
-        {(l) => (
+      <Show when={error()}>
+        <div class="shrink-0 text-red-400 text-sm font-mono">{error()}</div>
+      </Show>
+
+      <Show when={base()}>
+        {(b) => (
           <div class="flex flex-col gap-6">
             {/* ── Keyboard ─────────────────────────────────────── */}
             <div class="flex flex-col gap-2 w-96">
-              <div class="font-mono text-neutral-200">{l().name}</div>
+              <div class="font-mono text-neutral-200">{displayName()}</div>
               <KeyboardDisplay
-                keys={l().keys}
-                keyboard={l().keyboard}
-                shape={l().shape}
+                keys={keys()}
+                keyboard={b().keyboard}
+                shape={b().shape}
                 heatmap={appStore.charFrequencies}
                 highlight={highlightedKeys().length > 0 ? highlightedKeys() : undefined}
                 draggable={true}
                 onSwap={handleSwap}
-                disabledIndices={disabledIndices()}
+                disabledIndices={disabled()}
                 onToggleDisabled={handleToggleDisabled}
               />
               <div class="text-xs text-neutral-700 font-mono">
                 drag to swap · right-click to disable
               </div>
-              {/* heat legend for the active color scheme */}
+              {/* heat legend for the active color scheme, over the corpus' frequency range */}
               <div class="flex items-center gap-0 font-mono text-[10px] text-neutral-500">
                 <span class="mr-1.5">0%</span>
-                <For each={[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]}>
+                <For each={legendSteps()}>
                   {(pct) => <div class="w-4 h-2.5" style={heatStyleFor(pct)} />}
                 </For>
-                <span class="ml-1.5">12%+</span>
+                <span class="ml-1.5">{maxFreq().toFixed(1)}%</span>
               </div>
             </div>
 
             {/* ── Stat columns + finger load ───────────────────── */}
-            <AnalyzeStatColumns stats={l().stats} baseline={previous()?.stats} />
-            <FingerStats stats={l().stats} />
+            <Show when={stats()}>
+              {(s) => (
+                <>
+                  <AnalyzeStatColumns stats={s()} baseline={previousStats() ?? undefined} />
+                  <FingerStats stats={s()} />
+                </>
+              )}
+            </Show>
 
             {/* ── Ngram tabs (bigram + trigram categories) ─────── */}
             <div class="flex flex-col border border-neutral-700">
@@ -324,7 +318,12 @@ export default function AnalyzeView(props: Props) {
                     value={count()}
                     min={1}
                     max={50}
-                    onInput={(e) => setCount(Math.max(1, parseInt(e.currentTarget.value) || 1))}
+                    onInput={(e) => {
+                      // Leave an empty or partial field alone while typing; blur restores it.
+                      const n = parseInt(e.currentTarget.value);
+                      if (n >= 1) setCount(Math.min(n, 50));
+                    }}
+                    onBlur={(e) => (e.currentTarget.value = String(count()))}
                   />
                 </div>
               </div>
@@ -332,6 +331,7 @@ export default function AnalyzeView(props: Props) {
                 <BigramList
                   entries={displayBigrams()}
                   columns={2}
+                  unit={activeTabId() === "fspeed" || activeTabId() === "stretches" ? "" : "%"}
                   onHoverBigram={(chars) => setHighlightedKeys(chars)}
                   onLeave={() => setHighlightedKeys([])}
                 />
