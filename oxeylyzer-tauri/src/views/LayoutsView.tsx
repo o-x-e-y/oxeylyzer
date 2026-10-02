@@ -11,8 +11,6 @@ type Props = {
 
 type SortKey = "score" | "sfb" | "dsfb" | "fspeed" | "scissors" | "lsbs" | "stretches";
 
-const BOARD_TYPES = ["ortho", "ansi", "iso", "colstag", "rowstag"] as const;
-
 // Score, fspeed and stretches are signed so that higher is better; the rest are
 // percentages where lower is better.
 const SORT_COLS: { key: SortKey; label: string; higherIsBetter?: boolean }[] = [
@@ -40,6 +38,7 @@ export default function LayoutsView(props: Props) {
   const [confirmDelete, setConfirmDelete] = createSignal<string | null>(null);
   const [deleteError, setDeleteError] = createSignal("");
 
+  const boardTypes = () => [...new Set(appStore.layouts.map((l) => l.board))].sort();
   const higherIsBetter = (key: SortKey) => SORT_COLS.find((c) => c.key === key)?.higherIsBetter ?? false;
   // The arrow shows which way the values run down the list.
   const sortArrow = () => (higherIsBetter(sortKey()) !== sortReversed() ? " ↓" : " ↑");
@@ -144,7 +143,7 @@ export default function LayoutsView(props: Props) {
             >
               all
             </button>
-            <For each={BOARD_TYPES}>
+            <For each={boardTypes()}>
               {(bt) => (
                 <button
                   class="border font-mono text-xs px-2 py-1 hover:bg-neutral-700"

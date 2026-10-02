@@ -241,7 +241,7 @@ fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
     LayoutDto {
         name: layout.name.clone(),
         keys: fast.layout_str(),
-        board: get_board_str(layout),
+        board: board_name(layout),
         fingering_name: layout
             .metadata
             .fingering_name
@@ -257,11 +257,15 @@ fn layout_to_dto(engine: &Oxeylyzer, layout: &Layout) -> LayoutDto {
     }
 }
 
-fn get_board_str(layout: &Layout) -> String {
-    serde_json::to_value(layout)
+/// The named board (ortho, ansi, …), or "custom" for layouts with explicit key geometry.
+fn board_name(layout: &Layout) -> String {
+    match serde_json::to_value(layout)
         .ok()
-        .and_then(|v| v.get("board")?.as_str().map(str::to_string))
-        .unwrap_or_default()
+        .and_then(|v| v.get("board").cloned())
+    {
+        Some(serde_json::Value::String(s)) => s,
+        _ => "custom".to_string(),
+    }
 }
 
 fn load_all_layouts(config: &Config, base_path: &Path) -> HashMap<String, Layout> {
@@ -612,7 +616,7 @@ fn swap_keys(
     Ok(LayoutDto {
         name: format!("{name}*"),
         keys: fl.layout_str(),
-        board: get_board_str(layout),
+        board: board_name(layout),
         fingering_name: layout
             .metadata
             .fingering_name
@@ -661,7 +665,7 @@ fn analyze_custom(
     Ok(LayoutDto {
         name: format!("{name}*"),
         keys,
-        board: get_board_str(layout),
+        board: board_name(layout),
         fingering_name: layout
             .metadata
             .fingering_name
@@ -702,7 +706,7 @@ fn analyze_with_disabled(
     Ok(LayoutDto {
         name: format!("{name}*"),
         keys: original_keys,
-        board: get_board_str(layout),
+        board: board_name(layout),
         fingering_name: layout
             .metadata
             .fingering_name
