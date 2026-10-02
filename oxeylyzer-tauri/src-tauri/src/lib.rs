@@ -305,11 +305,20 @@ fn board_name(layout: &Layout) -> String {
     }
 }
 
-fn load_all_layouts(config: &Config, base_path: &Path) -> HashMap<String, LoadedLayout> {
+/// Loads every layout matched by the config's globs, plus the managed directory
+/// for the current language — that's where the app saves layouts, so saved
+/// layouts are always found again whatever the globs say.
+fn load_all_layouts(
+    config: &Config,
+    dirs: &OxeylyzerDirs,
+    language: &str,
+) -> HashMap<String, LoadedLayout> {
+    let managed = dirs.layouts_dir().join(language).join("*.dof");
     config
         .layouts
         .iter()
-        .map(|p| base_path.join(p))
+        .map(|p| dirs.data_dir().join(p))
+        .chain(std::iter::once(managed))
         .flat_map(|pattern| {
             glob::glob(&pattern.to_string_lossy())
                 .into_iter()
@@ -486,7 +495,7 @@ fn load_with(dirs: &OxeylyzerDirs, config: Config) -> Result<Loaded, String> {
     let data = Data::load(&corpus)
         .map_err(|e| format!("Failed to load corpus '{}': {e}", corpus.display()))?;
     let engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-    let layouts = load_all_layouts(&config, dirs.data_dir());
+    let layouts = load_all_layouts(&config, dirs, &engine.language);
     Ok(Loaded {
         config,
         engine,
@@ -566,7 +575,7 @@ fn initial_load(dirs: &OxeylyzerDirs) -> (Loaded, Vec<String>) {
 
     errors.push("No corpus could be loaded.".to_string());
     let engine = Arc::new(Oxeylyzer::new(Data::default(), config.clone()));
-    let layouts = load_all_layouts(&config, dirs.data_dir());
+    let layouts = load_all_layouts(&config, dirs, &engine.language);
     let loaded = Loaded {
         config,
         engine,
@@ -1512,7 +1521,8 @@ fn spawn_watcher(app: tauri::AppHandle, config_file: PathBuf, layouts_dir: PathB
                 }
             } else if paths.iter().any(|p| p.extension().is_some_and(|e| e == "dof")) {
                 let config = state.config.lock().unwrap().clone();
-                *state.layouts.lock().unwrap() = load_all_layouts(&config, state.dirs.data_dir());
+                let language = state.engine.lock().unwrap().language.clone();
+                *state.layouts.lock().unwrap() = load_all_layouts(&config, &state.dirs, &language);
                 let _ = app.emit("layouts-reloaded", ());
             }
         }
@@ -1626,6 +1636,21 @@ mod tests {
         assert_eq!(loaded.config.corpus, corpus_path_for(&dirs, "english"));
         assert!(loaded.engine.data.char_total > 0);
 
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn saved_layouts_load_even_when_the_globs_point_elsewhere() {
+        let (dirs, root) = temp_dirs("globs");
+        let config = Config {
+            layouts: vec![dirs.layouts_dir().join("dutch").join("*.dof")],
+            ..seed_config(&dirs)
+        };
+        let layouts = load_all_layouts(&config, &dirs, "english");
+        assert_eq!(
+            layouts["gust"].path,
+            dirs.layouts_dir().join("english/gust.dof")
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 
