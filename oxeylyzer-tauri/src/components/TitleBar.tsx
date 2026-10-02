@@ -32,14 +32,13 @@ export default function TitleBar() {
   const win = getCurrentWindow();
   const [maximized, setMaximized] = createSignal(false);
 
-  onMount(async () => {
-    setMaximized(await win.isMaximized());
-
-    const unlisten = await win.onResized(async () => {
+  onMount(() => {
+    win.isMaximized().then(setMaximized);
+    // onCleanup must be registered synchronously; after an await it never runs.
+    const unlisten = win.onResized(async () => {
       setMaximized(await win.isMaximized());
     });
-
-    onCleanup(unlisten);
+    onCleanup(() => unlisten.then((u) => u()));
   });
 
   return (
