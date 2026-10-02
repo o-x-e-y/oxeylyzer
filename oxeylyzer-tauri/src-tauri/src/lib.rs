@@ -166,12 +166,19 @@ pub struct ConfigDto {
 
 // ─── App State ────────────────────────────────────────────────────────────────
 
+/// A layout together with the file it was loaded from, so edits and deletes
+/// act on that file instead of a path guessed from the layout's name.
+pub struct LoadedLayout {
+    pub layout: Layout,
+    pub path: PathBuf,
+}
+
 pub struct AppState {
     /// The active analyzer engine, wrapped in Arc so it can be cheaply cloned for
     /// background generation without holding the lock.
     pub engine: Mutex<Arc<Oxeylyzer>>,
     /// All loaded layouts, keyed by lowercase name.
-    pub layouts: Mutex<HashMap<String, Layout>>,
+    pub layouts: Mutex<HashMap<String, LoadedLayout>>,
     /// Managed resource paths (XDG/AppData config dir in release, override in dev).
     pub dirs: OxeylyzerDirs,
     /// Cached config for reload and language switching.
@@ -281,23 +288,23 @@ fn board_name(layout: &Layout) -> String {
     }
 }
 
-fn load_all_layouts(config: &Config, base_path: &Path) -> HashMap<String, Layout> {
+fn load_all_layouts(config: &Config, base_path: &Path) -> HashMap<String, LoadedLayout> {
     config
         .layouts
         .iter()
-        .flat_map(|p| {
-            let full = base_path.join(p);
-            let pattern = full.to_string_lossy().into_owned();
-            glob::glob(&pattern)
+        .map(|p| base_path.join(p))
+        .flat_map(|pattern| {
+            glob::glob(&pattern.to_string_lossy())
                 .into_iter()
                 .flatten()
                 .flatten()
-                .flat_map(|path| {
-                    Layout::load(&path).inspect_err(|e| {
-                        eprintln!("Error loading layout '{}': {e}", path.display())
-                    })
-                })
-                .map(|l| (l.name.to_lowercase(), l))
+        })
+        .filter_map(|path| match Layout::load(&path) {
+            Ok(layout) => Some((layout.name.to_lowercase(), LoadedLayout { layout, path })),
+            Err(e) => {
+                eprintln!("Error loading layout '{}': {e}", path.display());
+                None
+            }
         })
         .collect()
 }
@@ -308,8 +315,60 @@ fn get_layout(state: &AppState, name: &str) -> Result<Layout, String> {
         .lock()
         .unwrap()
         .get(&name.to_lowercase())
-        .cloned()
+        .map(|l| l.layout.clone())
         .ok_or_else(|| format!("Layout '{name}' not found"))
+}
+
+/// Turns a layout or preset name into a file stem without path separators or
+/// other characters filesystems reject.
+fn file_stem(name: &str) -> String {
+    name.trim()
+        .chars()
+        .map(|c| match c {
+            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            c if c.is_whitespace() || c.is_control() => '_',
+            c => c,
+        })
+        .collect()
+}
+
+/// Path for a new layout file in the managed directory, refusing names that are
+/// empty or already taken (on disk or by any loaded layout).
+fn new_layout_path(
+    dirs: &OxeylyzerDirs,
+    layouts: &HashMap<String, LoadedLayout>,
+    language: &str,
+    name: &str,
+) -> Result<PathBuf, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("A name is required.".to_string());
+    }
+    let dir = dirs.layouts_dir().join(language);
+    let path = dir.join(format!("{}.dof", file_stem(name).to_lowercase()));
+    if layouts.contains_key(&name.to_lowercase()) || path.exists() {
+        return Err(format!("A layout named '{name}' already exists."));
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
+/// Writes `json` to `path` and loads it back as the layout stored under its name.
+fn write_layout(
+    layouts: &mut HashMap<String, LoadedLayout>,
+    path: PathBuf,
+    json: &str,
+) -> Result<Layout, String> {
+    std::fs::write(&path, json).map_err(|e| format!("Write failed: {e}"))?;
+    let layout = Layout::load(&path).map_err(|e| e.to_string())?;
+    layouts.insert(
+        layout.name.to_lowercase(),
+        LoadedLayout {
+            layout: layout.clone(),
+            path,
+        },
+    );
+    Ok(layout)
 }
 
 /// Builds a [`FastLayout`] from a base layout with an optional custom key
@@ -402,7 +461,13 @@ fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
 #[tauri::command(async)]
 fn list_layouts(state: tauri::State<'_, AppState>) -> Result<Vec<LayoutDto>, String> {
     let engine = state.engine.lock().unwrap().clone();
-    let layouts: Vec<Layout> = state.layouts.lock().unwrap().values().cloned().collect();
+    let layouts: Vec<Layout> = state
+        .layouts
+        .lock()
+        .unwrap()
+        .values()
+        .map(|l| l.layout.clone())
+        .collect();
     let mut dtos: Vec<LayoutDto> = layouts
         .par_iter()
         .map(|l| layout_to_dto(&engine, l))
@@ -930,25 +995,24 @@ fn cancel_generate(state: tauri::State<'_, AppState>) {
     state.cancel_flag.store(true, Ordering::Relaxed);
 }
 
+/// Deletes a layout's file. Only files inside the managed layouts directory are
+/// deleted; layouts loaded from other config globs belong to the user.
 #[tauri::command(async)]
 fn delete_layout(name: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let lang = state.engine.lock().unwrap().language.clone();
-    let file_name = name.replace(' ', "_").to_lowercase();
-    let path = state
-        .dirs
-        .layouts_dir()
-        .join(&lang)
-        .join(&file_name)
-        .with_extension("dof");
-
-    if !path.exists() {
+    let mut layouts = state.layouts.lock().unwrap();
+    let key = name.to_lowercase();
+    let path = &layouts
+        .get(&key)
+        .ok_or_else(|| format!("Layout '{name}' not found"))?
+        .path;
+    if !path.starts_with(state.dirs.layouts_dir()) {
         return Err(format!(
-            "Layout file '{}' not found — it may live outside the managed layouts directory.",
+            "'{}' lives outside the managed layouts directory; delete it manually.",
             path.display()
         ));
     }
-    std::fs::remove_file(&path).map_err(|e| format!("Delete failed: {e}"))?;
-    state.layouts.lock().unwrap().remove(&name.to_lowercase());
+    std::fs::remove_file(path).map_err(|e| format!("Delete failed: {e}"))?;
+    layouts.remove(&key);
     Ok(())
 }
 
@@ -961,20 +1025,10 @@ fn save_custom_layout(
     new_name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<LayoutDto, String> {
-    let new_name = new_name.trim().to_string();
-    if new_name.is_empty() {
-        return Err("A name is required.".to_string());
-    }
-
     let engine = state.engine.lock().unwrap().clone();
-    let mut fl = {
-        let layouts = state.layouts.lock().unwrap();
-        let base = layouts
-            .get(&base_name.to_lowercase())
-            .ok_or_else(|| format!("Layout '{base_name}' not found"))?;
-        custom_fast_layout(&engine, base, Some(&keys), &[])?
-    };
-    fl.name = Some(new_name.clone());
+    let base = get_layout(&state, &base_name)?;
+    let mut fl = custom_fast_layout(&engine, &base, Some(&keys), &[])?;
+    fl.name = Some(new_name.trim().to_string());
 
     // Serialize to .dof JSON, clearing provenance fields from the base layout.
     let layout: Layout = fl.into();
@@ -990,113 +1044,62 @@ fn save_custom_layout(
     let json =
         serde_json::to_string_pretty(&layout).map_err(|e| format!("Serialization failed: {e}"))?;
 
-    let lang = engine.language.clone();
-    let file_name = new_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .dirs
-        .layouts_dir()
-        .join(&lang)
-        .join(&file_name)
-        .with_extension("dof");
-
-    if path.exists() {
-        return Err(format!("A layout named '{new_name}' already exists."));
-    }
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
-
-    let layout_loaded = Layout::load(&path).map_err(|e| e.to_string())?;
-    let dto = layout_to_dto(&engine, &layout_loaded);
-    state
-        .layouts
-        .lock()
-        .unwrap()
-        .insert(new_name.to_lowercase(), layout_loaded);
-
-    Ok(dto)
+    let mut layouts = state.layouts.lock().unwrap();
+    let path = new_layout_path(&state.dirs, &layouts, &engine.language, &new_name)?;
+    let saved = write_layout(&mut layouts, path, &json)?;
+    Ok(layout_to_dto(&engine, &saved))
 }
 
+/// Returns the layout's .dof file as written, so fields the core doesn't model
+/// (extra layers, magic, combos, description) survive an edit.
 #[tauri::command(async)]
 fn get_layout_detail(
     name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    let layout = get_layout(&state, &name)?;
-    serde_json::to_value(layout).map_err(|e| e.to_string())
+    let (path, layout) = {
+        let layouts = state.layouts.lock().unwrap();
+        let loaded = layouts
+            .get(&name.to_lowercase())
+            .ok_or_else(|| format!("Layout '{name}' not found"))?;
+        (loaded.path.clone(), loaded.layout.clone())
+    };
+    match std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+    {
+        Some(json) => Ok(json),
+        None => serde_json::to_value(&layout).map_err(|e| e.to_string()),
+    }
 }
 
+/// Saves an edited .dof. Keeping the name (ignoring case) overwrites the file the
+/// layout was loaded from; a different name creates a new layout instead.
 #[tauri::command(async)]
 fn save_layout_edit(
     dof_json: serde_json::Value,
     original_name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let layout: Layout = serde_json::from_value(dof_json.clone())
-        .map_err(|e| format!("Invalid layout JSON: {e}"))?;
-    let new_name = layout.name.clone();
-
-    // Find the original file path.
-    let lang = state.engine.lock().unwrap().language.clone();
-    let file_name = original_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .dirs
-        .layouts_dir()
-        .join(&lang)
-        .join(&file_name)
-        .with_extension("dof");
-
+    let layout: Layout =
+        serde_json::from_value(dof_json.clone()).map_err(|e| format!("Invalid layout: {e}"))?;
     let json = serde_json::to_string_pretty(&dof_json).map_err(|e| e.to_string())?;
-    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
+    let language = state.engine.lock().unwrap().language.clone();
 
-    // Reload into state.
-    let layout_loaded = Layout::load(&path).map_err(|e| e.to_string())?;
     let mut layouts = state.layouts.lock().unwrap();
-    layouts.remove(&original_name.to_lowercase());
-    layouts.insert(new_name.to_lowercase(), layout_loaded);
+    let original_key = original_name.to_lowercase();
+    if layout.name.trim().to_lowercase() == original_key {
+        let path = layouts
+            .get(&original_key)
+            .ok_or_else(|| format!("Layout '{original_name}' not found"))?
+            .path
+            .clone();
+        write_layout(&mut layouts, path, &json)?;
+    } else {
+        let path = new_layout_path(&state.dirs, &layouts, &language, &layout.name)?;
+        write_layout(&mut layouts, path, &json)?;
+    }
     Ok(())
-}
-
-#[tauri::command(async)]
-fn fork_layout(
-    name: String,
-    new_name: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<LayoutDto, String> {
-    let engine = state.engine.lock().unwrap().clone();
-    let lang = engine.language.clone();
-
-    let mut layouts = state.layouts.lock().unwrap();
-    let original = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?
-        .clone();
-
-    let mut forked = original.clone();
-    forked.name = new_name.clone();
-
-    let file_name = new_name.replace(' ', "_").to_lowercase();
-    let path = state
-        .dirs
-        .layouts_dir()
-        .join(&lang)
-        .join(&file_name)
-        .with_extension("dof");
-
-    if path.exists() {
-        return Err(format!("A layout named '{new_name}' already exists."));
-    }
-
-    let json = serde_json::to_string_pretty(&forked).map_err(|e| e.to_string())?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&path, &json).map_err(|e| format!("Write failed: {e}"))?;
-
-    let dto = layout_to_dto(&engine, &forked);
-    layouts.insert(new_name.to_lowercase(), forked);
-    Ok(dto)
 }
 
 #[tauri::command]
@@ -1233,13 +1236,17 @@ fn get_defaults() -> Result<ConfigDto, String> {
 
 // ─── Weight Presets ───────────────────────────────────────────────────────────
 
-fn preset_dir(dirs: &OxeylyzerDirs) -> PathBuf {
-    dirs.weight_presets_dir()
+fn preset_path(dirs: &OxeylyzerDirs, name: &str) -> Result<PathBuf, String> {
+    let stem = file_stem(name);
+    if stem.is_empty() {
+        return Err("A preset name is required.".to_string());
+    }
+    Ok(dirs.weight_presets_dir().join(format!("{stem}.toml")))
 }
 
 #[tauri::command]
 fn list_weight_presets(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
-    let dir = preset_dir(&state.dirs);
+    let dir = state.dirs.weight_presets_dir();
     if !dir.exists() {
         return Ok(vec![]);
     }
@@ -1248,8 +1255,7 @@ fn list_weight_presets(state: tauri::State<'_, AppState>) -> Result<Vec<String>,
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().into_owned();
-            name.ends_with(".toml")
-                .then(|| name.trim_end_matches(".toml").to_string())
+            name.strip_suffix(".toml").map(str::to_string)
         })
         .collect();
     names.sort();
@@ -1262,9 +1268,8 @@ fn save_weight_preset(
     weights: WeightsDto,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let dir = preset_dir(&state.dirs);
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(&name).with_extension("toml");
+    let path = preset_path(&state.dirs, &name)?;
+    std::fs::create_dir_all(state.dirs.weight_presets_dir()).map_err(|e| e.to_string())?;
     let toml = toml::to_string_pretty(&weights).map_err(|e| e.to_string())?;
     std::fs::write(&path, toml).map_err(|e| e.to_string())
 }
@@ -1274,7 +1279,7 @@ fn load_weight_preset(
     name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<WeightsDto, String> {
-    let path = preset_dir(&state.dirs).join(&name).with_extension("toml");
+    let path = preset_path(&state.dirs, &name)?;
     let s = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     toml::from_str::<WeightsDto>(&s).map_err(|e| format!("Failed to parse preset '{name}': {e}"))
 }
@@ -1431,7 +1436,6 @@ pub fn run() {
             cancel_generate,
             get_layout_detail,
             save_layout_edit,
-            fork_layout,
             delete_layout,
             save_custom_layout,
             get_session,
@@ -1450,6 +1454,38 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_stem_strips_path_separators_and_keeps_dots() {
+        assert_eq!(file_stem("../etc/passwd"), ".._etc_passwd");
+        assert_eq!(file_stem(" my layout v1.5 "), "my_layout_v1.5");
+        assert_eq!(file_stem("a:b*c?d"), "a_b_c_d");
+    }
+
+    #[test]
+    fn new_layout_path_keeps_dotted_names_and_rejects_taken_ones() {
+        let root = std::env::temp_dir().join(format!("oxeylyzer-test-{}", std::process::id()));
+        let dirs = OxeylyzerDirs::with_override(root.clone());
+        let mut layouts = HashMap::new();
+
+        let path = new_layout_path(&dirs, &layouts, "english", "Gen v1.5").unwrap();
+        assert_eq!(path.file_name().unwrap(), "gen_v1.5.dof");
+        assert!(new_layout_path(&dirs, &layouts, "english", "  ").is_err());
+
+        std::fs::write(&path, "{}").unwrap();
+        assert!(new_layout_path(&dirs, &layouts, "english", "gen v1.5").is_err());
+
+        layouts.insert(
+            "qwerty".to_string(),
+            LoadedLayout {
+                layout: Layout::load("../../oxeylyzer-core/static/layouts/gust.dof").unwrap(),
+                path: PathBuf::from("/elsewhere/qwerty.dof"),
+            },
+        );
+        assert!(new_layout_path(&dirs, &layouts, "english", "QWERTY").is_err());
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn config_round_trips_through_toml() {

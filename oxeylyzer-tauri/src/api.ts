@@ -70,16 +70,12 @@ export async function cancelGenerate(): Promise<void> {
   return invoke("cancel_generate");
 }
 
-export async function getLayoutDetail(name: string): Promise<unknown> {
+export async function getLayoutDetail(name: string): Promise<Record<string, unknown>> {
   return invoke("get_layout_detail", { name });
 }
 
 export async function saveLayoutEdit(dofJson: unknown, originalName: string): Promise<void> {
   return invoke("save_layout_edit", { dofJson, originalName });
-}
-
-export async function forkLayout(name: string, newName: string): Promise<Layout> {
-  return invoke("fork_layout", { name, newName });
 }
 
 export async function deleteLayout(name: string): Promise<void> {
