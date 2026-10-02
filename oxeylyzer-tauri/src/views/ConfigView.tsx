@@ -1,4 +1,4 @@
-import { createSignal, For, Index, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, Index, on, Show } from "solid-js";
 import Dropdown from "../components/Dropdown";
 import {
   getConfig,
@@ -10,7 +10,7 @@ import {
   type ConfigDto,
   type WeightsDto,
 } from "../api";
-import { refreshStore } from "../store";
+import { dataVersion, refreshStore } from "../store";
 
 function NumInput(props: {
   label: string;
@@ -19,15 +19,22 @@ function NumInput(props: {
   step?: number;
   tooltip?: string;
 }) {
+  let input!: HTMLInputElement;
+  // Only write the field when the value changes from outside (reset, preset,
+  // reload). Writing it back on every keystroke eats a typed "-" or "0.".
+  createEffect(() => {
+    const v = props.value;
+    if (parseFloat(input.value) !== v) input.value = String(v);
+  });
   return (
     <div class="flex items-center gap-2">
       <label class="text-xs text-neutral-400 font-mono w-44 shrink-0" title={props.tooltip}>
         {props.label}
       </label>
       <input
+        ref={(el) => (input = el)}
         type="number"
         class="bg-neutral-800 border border-neutral-600 text-neutral-100 font-mono text-sm px-2 py-0.5 w-28 text-right"
-        value={props.value}
         step={props.step ?? 0.1}
         onInput={(e) => {
           const v = parseFloat(e.currentTarget.value);
@@ -40,20 +47,38 @@ function NumInput(props: {
 
 export default function ConfigView() {
   const [config, setConfigState] = createSignal<ConfigDto | null>(null);
+  // The config as last loaded or saved; the form is dirty when it differs.
+  const [loaded, setLoaded] = createSignal<ConfigDto | null>(null);
+  const [stale, setStale] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
   const [msg, setMsg] = createSignal<{ text: string; ok: boolean } | null>(null);
   const [presetName, setPresetName] = createSignal("");
   const [presets, setPresets] = createSignal<string[]>([]);
+  const [presetChoice, setPresetChoice] = createSignal("");
 
-  onMount(async () => {
+  const dirty = () => JSON.stringify(config()) !== JSON.stringify(loaded());
+
+  async function load() {
     try {
       const [cfg, ps] = await Promise.all([getConfig(), listWeightPresets()]);
       setConfigState(cfg);
+      setLoaded(cfg);
       setPresets(ps);
+      setStale(false);
     } catch (e) {
       setMsg({ text: String(e), ok: false });
     }
-  });
+  }
+
+  // The config also changes through language switches and edits to config.toml.
+  // Reload with it unless that would throw away unsaved edits — then say so.
+  createEffect(
+    on(dataVersion, async () => {
+      if (!dirty()) return load();
+      const current = await getConfig();
+      if (JSON.stringify(current) !== JSON.stringify(loaded())) setStale(true);
+    }),
+  );
 
   function updateWeight(key: keyof WeightsDto, value: number) {
     const c = config();
@@ -92,6 +117,8 @@ export default function ConfigView() {
     setMsg(null);
     try {
       await setConfig(c);
+      setLoaded(c);
+      setStale(false);
       await refreshStore();
       setMsg({ text: "Config saved and engine reloaded.", ok: true });
     } catch (e) {
@@ -125,12 +152,14 @@ export default function ConfigView() {
     }
   }
 
-  async function handleLoadPreset(name: string) {
+  async function handleLoadPreset() {
     const c = config();
+    const name = presetChoice();
     if (!c || !name) return;
     try {
       const weights = await loadWeightPreset(name);
       setConfigState({ ...c, weights });
+      setMsg({ text: `Loaded preset "${name}" — Save & Apply to use it.`, ok: true });
     } catch (e) {
       setMsg({ text: String(e), ok: false });
     }
@@ -139,35 +168,18 @@ export default function ConfigView() {
   function exportWeights() {
     const c = config();
     if (!c) return;
-    const w = c.weights;
-    const fw = w.finger_weights;
-    const mfu = w.max_finger_use;
-    const text = `[weights]
-lateral_penalty = ${w.lateral_penalty}
-sfbs = ${w.sfbs}
-sfs = ${w.sfs}
-stretches = ${w.stretches}
-pinky_ring_bigrams = ${w.pinky_ring_bigrams}
-inrolls = ${w.inrolls}
-outrolls = ${w.outrolls}
-onehands = ${w.onehands}
-alternates = ${w.alternates}
-alternates_sfs = ${w.alternates_sfs}
-redirects = ${w.redirects}
-redirects_sfs = ${w.redirects_sfs}
-bad_redirects = ${w.bad_redirects}
-bad_redirects_sfs = ${w.bad_redirects_sfs}
-
-[weights.finger_weights]
-lp=${fw.lp} lr=${fw.lr} lm=${fw.lm} li=${fw.li} lt=${fw.lt}
-rt=${fw.rt} ri=${fw.ri} rm=${fw.rm} rr=${fw.rr} rp=${fw.rp}
-
-[weights.max_finger_use]
-penalty=${mfu.penalty} pinky=${mfu.pinky} ring=${mfu.ring}
-middle=${mfu.middle} index=${mfu.index} thumb=${mfu.thumb}`;
+    const { finger_weights, max_finger_use, ...flat } = c.weights;
+    const section = (name: string, values: Record<string, number>) =>
+      [`[${name}]`, ...Object.entries(values).map(([k, v]) => `${k} = ${v}`)].join("\n");
+    const text = [
+      section("weights", flat),
+      section("weights.finger_weights", finger_weights),
+      section("weights.max_finger_use", max_finger_use),
+    ].join("\n\n");
     navigator.clipboard
       .writeText(text)
-      .then(() => setMsg({ text: "Weights copied to clipboard.", ok: true }));
+      .then(() => setMsg({ text: "Weights copied to clipboard.", ok: true }))
+      .catch((e) => setMsg({ text: `Copying failed: ${e}`, ok: false }));
   }
 
   return (
@@ -177,6 +189,17 @@ middle=${mfu.middle} index=${mfu.index} thumb=${mfu.thumb}`;
       <Show when={config()}>
         {(cfg) => (
           <div class="flex flex-col gap-4">
+            <Show when={stale()}>
+              <div class="flex items-center gap-3 border border-yellow-800 px-2 py-1 text-xs font-mono text-yellow-400">
+                <span class="flex-1">
+                  The config changed since you started editing (language switch or config.toml
+                  edit). Saving overwrites those changes.
+                </span>
+                <button class="border border-yellow-800 px-2 py-0.5 hover:bg-yellow-900/30" onClick={load}>
+                  discard my edits
+                </button>
+              </div>
+            </Show>
             {/* Paths & limits */}
             <section class="border border-neutral-700 p-4 flex flex-col gap-3">
               <div class="text-xs text-neutral-500 uppercase tracking-widest">Paths & Limits</div>
@@ -396,11 +419,17 @@ middle=${mfu.middle} index=${mfu.index} thumb=${mfu.thumb}`;
               <div class="text-xs text-neutral-500 uppercase tracking-widest">Weight Presets</div>
               <Show when={presets().length > 0}>
                 <div class="flex gap-2 items-center">
-                  <label class="text-xs text-neutral-400 font-mono shrink-0">Load</label>
-                  <Dropdown class="flex-1" onChange={handleLoadPreset}>
+                  <Dropdown class="flex-1" value={presetChoice()} onChange={setPresetChoice}>
                     <option value="">— select preset —</option>
                     <For each={presets()}>{(name) => <option value={name}>{name}</option>}</For>
                   </Dropdown>
+                  <button
+                    class="border border-neutral-600 font-mono text-sm px-3 py-1 hover:bg-neutral-700 disabled:opacity-40"
+                    disabled={!presetChoice()}
+                    onClick={handleLoadPreset}
+                  >
+                    Load
+                  </button>
                 </div>
               </Show>
               <div class="flex gap-2">
