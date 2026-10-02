@@ -19,7 +19,7 @@ import {
   setHeatScheme,
 } from "./store";
 import type { HeatScheme } from "./store";
-import { getSession, setSession } from "./api";
+import { backendStatus, getSession, setSession } from "./api";
 
 type View = "layouts" | "analyze" | "compare" | "generate" | "language" | "edit" | "config";
 
@@ -33,18 +33,40 @@ const NAV_ITEMS: { id: View; label: string }[] = [
   { id: "config", label: "Config" },
 ];
 
+type Download = { status: string; bytesDone?: number; bytesTotal?: number };
+
+function downloadText(d: Download): string {
+  const mb = (bytes = 0) => (bytes / 1e6).toFixed(1);
+  switch (d.status) {
+    case "connecting":
+      return "Connecting to download the data files…";
+    case "downloading":
+      return `Downloading data files… ${mb(d.bytesDone)} / ${mb(d.bytesTotal)} MB`;
+    case "extracting":
+      return "Extracting data files…";
+    default:
+      return "Loading…";
+  }
+}
+
 function App() {
   const [view, setView] = createSignal<View>("layouts");
   const [phase, setPhase] = createSignal<"starting" | "ready" | "failed">("starting");
   const [startError, setStartError] = createSignal("");
+  const [download, setDownload] = createSignal<Download | null>(null);
   // Navigation requests are fresh objects, so asking for the layout a view
   // already shows still reloads it.
   const [analyzeRequest, setAnalyzeRequest] = createSignal<{ name: string }>();
   const [editRequest, setEditRequest] = createSignal<{ name: string }>();
   const [lastLayout, setLastLayout] = createSignal<string | null>(null);
 
+  let started = false;
   async function start() {
+    if (started) return;
+    started = true;
     try {
+      const status = await backendStatus();
+      if (status.error) setBackendError(status.error);
       await fetchStore();
     } catch (e) {
       setStartError(String(e));
@@ -76,9 +98,21 @@ function App() {
     const unlisteners: Promise<UnlistenFn>[] = [
       listen("config-reloaded", () => refreshStore()),
       listen("layouts-reloaded", () => refreshStore()),
+      listen<string>("load-error", (e) => setBackendError(e.payload)),
+      listen<Download>("download-progress", (e) => setDownload(e.payload)),
+      listen("backend-ready", () => start()),
     ];
     onCleanup(() => unlisteners.forEach((u) => u.then((unlisten) => unlisten())));
-    start();
+    // The backend may have become ready before the listener was registered.
+    Promise.all(unlisteners)
+      .then(() => backendStatus())
+      .then((s) => {
+        if (s.ready) start();
+      })
+      .catch((e) => {
+        setStartError(String(e));
+        setPhase("failed");
+      });
   });
 
   createEffect(() => {
@@ -137,8 +171,18 @@ function App() {
         <main class="flex-1 overflow-hidden flex flex-col p-4">
           <Switch>
             <Match when={phase() === "starting"}>
-              <div class="flex-1 flex items-center justify-center text-neutral-500 text-sm">
-                Loading…
+              <div class="flex-1 flex flex-col items-center justify-center gap-3 text-neutral-500 text-sm">
+                <span>{download() ? downloadText(download()!) : "Loading…"}</span>
+                <Show when={download()?.bytesTotal}>
+                  {(total) => (
+                    <div class="h-1 w-64 bg-neutral-700">
+                      <div
+                        class="h-1 bg-neutral-400"
+                        style={{ width: `${Math.min(100, ((download()?.bytesDone ?? 0) / total()) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </Show>
               </div>
             </Match>
             <Match when={phase() === "failed"}>

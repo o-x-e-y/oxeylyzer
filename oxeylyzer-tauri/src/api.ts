@@ -1,6 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Layout, BigramEntry, TrigramEntry, NgramResult } from "./types";
 
+export async function backendStatus(): Promise<{ ready: boolean; error: string | null }> {
+  return invoke("backend_status");
+}
+
 export async function listLayouts(): Promise<Layout[]> {
   return invoke("list_layouts");
 }

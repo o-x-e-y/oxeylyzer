@@ -123,6 +123,12 @@ pub struct SessionDto {
     pub heat_scheme: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct BackendStatusDto {
+    pub ready: bool,
+    pub error: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MaxFingerUseDto {
     pub penalty: f64,
@@ -180,12 +186,22 @@ pub struct AppState {
     pub layouts: Mutex<HashMap<String, LoadedLayout>>,
     /// Managed resource paths (XDG/AppData config dir in release, override in dev).
     pub dirs: OxeylyzerDirs,
-    /// Cached config for reload and language switching.
+    /// The config the engine and layouts were built from.
     pub config: Mutex<Config>,
     /// Set to true to request cancellation of an in-progress generation.
     pub cancel_flag: Arc<AtomicBool>,
     /// True while a generation run is in progress; prevents overlapping runs.
     pub generating: Arc<AtomicBool>,
+    /// The config.toml contents this app last wrote, so the file watcher can
+    /// tell its own writes apart from external edits.
+    pub last_config_write: Mutex<Option<String>>,
+}
+
+/// Managed before [`AppState`], which only exists once data is downloaded and loaded.
+#[derive(Default)]
+pub struct Startup {
+    ready: AtomicBool,
+    error: Mutex<Option<String>>,
 }
 
 /// Clears the generating flag when dropped, including when generation panics.
@@ -221,29 +237,31 @@ fn finger_usage_pct(engine: &Oxeylyzer, fl: &FastLayout) -> [f64; 10] {
 }
 
 fn stats_to_dto(stats: &LayoutStats, char_total: i64, finger_usage: [f64; 10]) -> LayoutStatsDto {
+    // An empty corpus divides by zero; NaN would serialize as null and break the frontend.
+    let f = |v: f64| if v.is_finite() { v } else { 0.0 };
     let t = &stats.trigram_stats;
     LayoutStatsDto {
-        sfb: stats.sfb,
-        dsfb: stats.dsfb,
-        fspeed: stats.fspeed,
-        finger_speed: stats.finger_speed,
-        finger_usage,
-        stretches: stats.stretches,
-        scissors: stats.scissors,
-        lsbs: stats.lsbs,
-        pinky_ring: stats.pinky_ring,
+        sfb: f(stats.sfb),
+        dsfb: f(stats.dsfb),
+        fspeed: f(stats.fspeed),
+        finger_speed: stats.finger_speed.map(f),
+        finger_usage: finger_usage.map(f),
+        stretches: f(stats.stretches),
+        scissors: f(stats.scissors),
+        lsbs: f(stats.lsbs),
+        pinky_ring: f(stats.pinky_ring),
         score: normalize_score(stats.score, char_total),
-        inrolls: t.inrolls,
-        outrolls: t.outrolls,
-        onehands: t.onehands,
-        alternates: t.alternates,
-        alternates_sfs: t.alternates_sfs,
-        redirects: t.redirects,
-        redirects_sfs: t.redirects_sfs,
-        bad_redirects: t.bad_redirects,
-        bad_redirects_sfs: t.bad_redirects_sfs,
-        bad_sfbs: t.bad_sfbs,
-        sfts: t.sfts,
+        inrolls: f(t.inrolls),
+        outrolls: f(t.outrolls),
+        onehands: f(t.onehands),
+        alternates: f(t.alternates),
+        alternates_sfs: f(t.alternates_sfs),
+        redirects: f(t.redirects),
+        redirects_sfs: f(t.redirects_sfs),
+        bad_redirects: f(t.bad_redirects),
+        bad_redirects_sfs: f(t.bad_redirects_sfs),
+        bad_sfbs: f(t.bad_sfbs),
+        sfts: f(t.sfts),
     }
 }
 
@@ -428,23 +446,21 @@ fn bigram_str(engine: &Oxeylyzer, fl: &FastLayout, pair: &BigramPair) -> Option<
 }
 
 fn list_languages_from_dir(dir: &Path) -> Vec<String> {
-    std::fs::read_dir(dir)
+    let mut languages: Vec<String> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
         .filter_map(|entry| {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.ends_with(".json") {
-                Some(name.trim_end_matches(".json").to_string())
-            } else {
-                None
-            }
+            name.strip_suffix(".json").map(str::to_string)
         })
-        .collect()
+        .collect();
+    languages.sort();
+    languages
 }
 
-fn corpus_path_for(language_data_dir: &Path, language: &str) -> PathBuf {
-    language_data_dir.join(language).with_extension("json")
+fn corpus_path_for(dirs: &OxeylyzerDirs, language: &str) -> PathBuf {
+    dirs.language_data_dir().join(format!("{language}.json"))
 }
 
 fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
@@ -455,7 +471,119 @@ fn panic_message(panic: &(dyn std::any::Any + Send)) -> String {
         .unwrap_or_else(|| "unknown error".to_string())
 }
 
+// ─── Engine Loading ───────────────────────────────────────────────────────────
+
+struct Loaded {
+    config: Config,
+    engine: Arc<Oxeylyzer>,
+    layouts: HashMap<String, LoadedLayout>,
+}
+
+/// Builds the engine and layout map for `config` without touching app state,
+/// so a config that doesn't load is rejected before anything is replaced.
+fn load_with(dirs: &OxeylyzerDirs, config: Config) -> Result<Loaded, String> {
+    let corpus = dirs.data_dir().join(&config.corpus);
+    let data = Data::load(&corpus)
+        .map_err(|e| format!("Failed to load corpus '{}': {e}", corpus.display()))?;
+    let engine = Arc::new(Oxeylyzer::new(data, config.clone()));
+    let layouts = load_all_layouts(&config, dirs.data_dir());
+    Ok(Loaded {
+        config,
+        engine,
+        layouts,
+    })
+}
+
+fn install(state: &AppState, loaded: Loaded) {
+    *state.config.lock().unwrap() = loaded.config;
+    *state.engine.lock().unwrap() = loaded.engine;
+    *state.layouts.lock().unwrap() = loaded.layouts;
+}
+
+fn write_config(state: &AppState, config: &Config) -> Result<(), String> {
+    let toml = toml::to_string_pretty(config)
+        .map_err(|e| format!("Failed to serialize config: {e}"))?;
+    // Recorded before writing so the watcher can never see the new file first.
+    *state.last_config_write.lock().unwrap() = Some(toml.clone());
+    std::fs::write(state.dirs.config_file(), toml)
+        .map_err(|e| format!("Failed to write config.toml: {e}"))
+}
+
+/// Reloads config.toml from disk. Returns `false` without reloading when the
+/// file holds what this app last wrote itself.
+fn reload_from_disk(state: &AppState) -> Result<bool, String> {
+    let content = std::fs::read_to_string(state.dirs.config_file())
+        .map_err(|e| format!("Failed to read config.toml: {e}"))?;
+    if state.last_config_write.lock().unwrap().as_deref() == Some(content.as_str()) {
+        return Ok(false);
+    }
+    let config: Config =
+        toml::from_str(&content).map_err(|e| format!("Failed to parse config.toml: {e}"))?;
+    install(state, load_with(&state.dirs, config)?);
+    Ok(true)
+}
+
+/// The config a fresh install starts with.
+fn seed_config(dirs: &OxeylyzerDirs) -> Config {
+    Config {
+        corpus: corpus_path_for(dirs, "english"),
+        layouts: vec![dirs.layouts_dir().join("english").join("*.dof")],
+        corpus_configs: dirs.corpus_configs_dir().join("**").join("*.toml"),
+        ..Default::default()
+    }
+}
+
+/// Loads the configured engine, falling back to defaults and then to any
+/// corpus that loads, so a broken config.toml can still be fixed from the
+/// Config view instead of the app refusing to start.
+fn initial_load(dirs: &OxeylyzerDirs) -> (Loaded, Vec<String>) {
+    let mut errors = Vec::new();
+    let config = Config::with_loaded_weights(dirs.config_file()).unwrap_or_else(|e| {
+        errors.push(format!(
+            "Couldn't read config.toml ({e}); using the default config until it's saved from the Config view."
+        ));
+        seed_config(dirs)
+    });
+
+    match load_with(dirs, config.clone()) {
+        Ok(loaded) => return (loaded, errors),
+        Err(e) => errors.push(e),
+    }
+
+    let fallbacks = std::iter::once("english".to_string())
+        .chain(list_languages_from_dir(&dirs.language_data_dir()))
+        .map(|language| corpus_path_for(dirs, &language));
+    for corpus in fallbacks {
+        let fallback = Config {
+            corpus: corpus.clone(),
+            ..config.clone()
+        };
+        if let Ok(loaded) = load_with(dirs, fallback) {
+            errors.push(format!("Loaded '{}' instead.", corpus.display()));
+            return (loaded, errors);
+        }
+    }
+
+    errors.push("No corpus could be loaded.".to_string());
+    let engine = Arc::new(Oxeylyzer::new(Data::default(), config.clone()));
+    let layouts = load_all_layouts(&config, dirs.data_dir());
+    let loaded = Loaded {
+        config,
+        engine,
+        layouts,
+    };
+    (loaded, errors)
+}
+
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn backend_status(startup: tauri::State<'_, Startup>) -> BackendStatusDto {
+    BackendStatusDto {
+        ready: startup.ready.load(Ordering::SeqCst),
+        error: startup.error.lock().unwrap().clone(),
+    }
+}
 
 #[tauri::command(async)]
 fn list_layouts(state: tauri::State<'_, AppState>) -> Result<Vec<LayoutDto>, String> {
@@ -679,17 +807,17 @@ fn get_char_frequencies(state: tauri::State<'_, AppState>) -> Result<Vec<CharFre
     Ok(freqs)
 }
 
+/// Switches the corpus and persists it to config.toml, so the choice survives
+/// restarts and later config saves.
 #[tauri::command(async)]
 fn set_language(language: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let config = state.config.lock().unwrap().clone();
-    let corpus_path = corpus_path_for(&state.dirs.language_data_dir(), &language);
-    let data = Data::load(&corpus_path)
-        .map_err(|e| format!("Failed to load corpus for '{language}': {e}"))?;
-    let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-    let new_layouts = load_all_layouts(&config, state.dirs.data_dir());
-
-    *state.engine.lock().unwrap() = new_engine;
-    *state.layouts.lock().unwrap() = new_layouts;
+    let config = Config {
+        corpus: corpus_path_for(&state.dirs, &language),
+        ..state.config.lock().unwrap().clone()
+    };
+    let loaded = load_with(&state.dirs, config)?;
+    write_config(&state, &loaded.config)?;
+    install(&state, loaded);
     Ok(())
 }
 
@@ -1198,32 +1326,21 @@ fn get_config(state: tauri::State<'_, AppState>) -> Result<ConfigDto, String> {
     Ok(config_to_dto(&config))
 }
 
+/// Applies a config only after it loads, so a bad corpus path is rejected
+/// instead of being written to config.toml.
 #[tauri::command(async)]
 fn set_config(config_dto: ConfigDto, state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let new_weights = dto_to_weights(&config_dto.weights);
-    let new_config = Config {
+    let config = Config {
         corpus: PathBuf::from(&config_dto.corpus),
         layouts: config_dto.layouts.iter().map(PathBuf::from).collect(),
         corpus_configs: PathBuf::from(&config_dto.corpus_configs),
         trigram_precision: config_dto.trigram_precision,
         max_cores: config_dto.max_cores,
-        weights: new_weights,
+        weights: dto_to_weights(&config_dto.weights),
     };
-
-    let config_path = state.dirs.config_file();
-    let toml = toml::to_string_pretty(&new_config)
-        .map_err(|e| format!("Failed to serialize config: {e}"))?;
-    std::fs::write(&config_path, toml).map_err(|e| format!("Write failed: {e}"))?;
-
-    // Rebuild engine with new config
-    let corpus_path = state.dirs.data_dir().join(&new_config.corpus);
-    let data = Data::load(&corpus_path).map_err(|e| format!("Failed to load corpus: {e}"))?;
-    let new_engine = Arc::new(Oxeylyzer::new(data, new_config.clone()));
-    let new_layouts = load_all_layouts(&new_config, state.dirs.data_dir());
-
-    *state.config.lock().unwrap() = new_config;
-    *state.engine.lock().unwrap() = new_engine;
-    *state.layouts.lock().unwrap() = new_layouts;
+    let loaded = load_with(&state.dirs, config)?;
+    write_config(&state, &loaded.config)?;
+    install(&state, loaded);
     Ok(())
 }
 
@@ -1282,19 +1399,124 @@ fn load_weight_preset(
     toml::from_str::<WeightsDto>(&s).map_err(|e| format!("Failed to parse preset '{name}': {e}"))
 }
 
-// ─── Reload Helper ────────────────────────────────────────────────────────────
+// ─── Startup & File Watching ─────────────────────────────────────────────────
 
-fn reload_state(state: &AppState) -> Result<(), String> {
-    let config = Config::with_loaded_weights(state.dirs.config_file())
-        .map_err(|e| format!("Failed to reload config: {e}"))?;
-    let corpus_path = state.dirs.data_dir().join(&config.corpus);
-    let data = Data::load(&corpus_path).map_err(|e| format!("Failed to load corpus: {e}"))?;
-    let new_engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-    let new_layouts = load_all_layouts(&config, state.dirs.data_dir());
-    *state.config.lock().unwrap() = config;
-    *state.engine.lock().unwrap() = new_engine;
-    *state.layouts.lock().unwrap() = new_layouts;
-    Ok(())
+/// Downloads data on first run and builds [`AppState`] off the main thread, so
+/// the window can show download progress instead of freezing.
+fn init_backend(app: tauri::AppHandle, dirs: OxeylyzerDirs) {
+    let mut errors = Vec::new();
+
+    if dirs.is_first_run() {
+        use oxeylyzer_resources::DownloadProgress;
+        let emitter = app.clone();
+        let downloaded = dirs.ensure_data(move |p| {
+            let payload = match &p {
+                DownloadProgress::Connecting => serde_json::json!({"status": "connecting"}),
+                DownloadProgress::Downloading {
+                    bytes_done,
+                    bytes_total,
+                } => serde_json::json!({
+                    "status": "downloading",
+                    "bytesDone": bytes_done,
+                    "bytesTotal": bytes_total,
+                }),
+                DownloadProgress::Extracting => serde_json::json!({"status": "extracting"}),
+                DownloadProgress::Done => serde_json::json!({"status": "done"}),
+            };
+            let _ = emitter.emit("download-progress", payload);
+        });
+        if let Err(e) = downloaded {
+            errors.push(format!("Failed to download the data files: {e}."));
+        }
+    }
+
+    // ensure_config is idempotent; ensure_data already calls it on first run,
+    // but call it here too so a missing config is always recovered.
+    if let Err(e) = dirs.ensure_config() {
+        errors.push(format!("Failed to write the default config: {e}."));
+    }
+
+    let (loaded, load_errors) = initial_load(&dirs);
+    errors.extend(load_errors);
+
+    let config_file = dirs.config_file();
+    let layouts_dir = dirs.layouts_dir();
+    app.manage(AppState {
+        engine: Mutex::new(loaded.engine),
+        layouts: Mutex::new(loaded.layouts),
+        dirs,
+        config: Mutex::new(loaded.config),
+        cancel_flag: Arc::new(AtomicBool::new(false)),
+        generating: Arc::new(AtomicBool::new(false)),
+        last_config_write: Mutex::new(None),
+    });
+    spawn_watcher(app.clone(), config_file, layouts_dir);
+
+    let startup = app.state::<Startup>();
+    if !errors.is_empty() {
+        *startup.error.lock().unwrap() = Some(errors.join(" "));
+    }
+    startup.ready.store(true, Ordering::SeqCst);
+    let _ = app.emit("backend-ready", ());
+}
+
+/// Reloads when config.toml or layout files change on disk.
+fn spawn_watcher(app: tauri::AppHandle, config_file: PathBuf, layouts_dir: PathBuf) {
+    use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
+
+    std::thread::spawn(move || {
+        let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
+        let mut watcher = match recommended_watcher(tx) {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("File watcher init failed: {e}");
+                return;
+            }
+        };
+        // Watching the directory rather than config.toml itself keeps working
+        // after editors replace the file by renaming over it.
+        if let Some(config_dir) = config_file.parent() {
+            let _ = watcher.watch(config_dir, RecursiveMode::NonRecursive);
+        }
+        let _ = watcher.watch(&layouts_dir, RecursiveMode::Recursive);
+
+        while let Ok(first) = rx.recv() {
+            // Wait for the writes to settle: the first event fires as soon as a
+            // file is created or truncated, before its contents are written.
+            let mut events = vec![first];
+            while let Ok(event) = rx.recv_timeout(Duration::from_millis(300)) {
+                events.push(event);
+            }
+            let paths: Vec<PathBuf> = events
+                .into_iter()
+                .flatten()
+                .filter(|e| {
+                    matches!(
+                        e.kind,
+                        EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+                    )
+                })
+                .flat_map(|e| e.paths)
+                .collect();
+
+            let state = app.state::<AppState>();
+            if paths.iter().any(|p| p.file_name() == config_file.file_name()) {
+                match reload_from_disk(&state) {
+                    Ok(true) => {
+                        let _ = app.emit("config-reloaded", ());
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        let _ = app.emit("load-error", format!("Auto-reload failed: {e}"));
+                    }
+                }
+            } else if paths.iter().any(|p| p.extension().is_some_and(|e| e == "dof")) {
+                let config = state.config.lock().unwrap().clone();
+                *state.layouts.lock().unwrap() = load_all_layouts(&config, state.dirs.data_dir());
+                let _ = app.emit("layouts-reloaded", ());
+            }
+        }
+    });
 }
 
 // ─── Entry Point ──────────────────────────────────────────────────────────────
@@ -1309,115 +1531,13 @@ pub fn run() {
             } else {
                 OxeylyzerDirs::resolve().expect("failed to resolve data directory")
             };
-
-            // On first run, download data files synchronously before initialising the
-            // engine — corpus and layout files must exist before we try to load them.
-            // Progress events are emitted so a frontend loading screen can react.
-            if dirs.is_first_run() {
-                use oxeylyzer_resources::DownloadProgress;
-                let app_handle = app.handle().clone();
-                dirs.ensure_data(move |p| {
-                    let payload = match &p {
-                        DownloadProgress::Connecting => {
-                            serde_json::json!({"status": "connecting"})
-                        }
-                        DownloadProgress::Downloading {
-                            bytes_done,
-                            bytes_total,
-                        } => {
-                            serde_json::json!({
-                                "status": "downloading",
-                                "bytesDone": bytes_done,
-                                "bytesTotal": bytes_total,
-                            })
-                        }
-                        DownloadProgress::Extracting => {
-                            serde_json::json!({"status": "extracting"})
-                        }
-                        DownloadProgress::Done => serde_json::json!({"status": "done"}),
-                    };
-                    let _ = app_handle.emit("download-progress", payload);
-                })
-                .expect("failed to download resources");
-            }
-
-            // ensure_config is idempotent; ensure_data already calls it on first run,
-            // but call it here too so a missing config is always recovered.
-            dirs.ensure_config()
-                .expect("failed to write default config");
-
-            let config = Config::with_loaded_weights(dirs.config_file())
-                .expect("failed to load config.toml");
-
-            let corpus_path = dirs.data_dir().join(&config.corpus);
-            let data = Data::load(&corpus_path).expect("failed to load corpus");
-
-            let engine = Arc::new(Oxeylyzer::new(data, config.clone()));
-            let layouts = load_all_layouts(&config, dirs.data_dir());
-
-            let watch_config = dirs.config_file();
-            let watch_layouts = dirs.layouts_dir();
-
-            app.manage(AppState {
-                engine: Mutex::new(engine),
-                layouts: Mutex::new(layouts),
-                dirs,
-                config: Mutex::new(config),
-                cancel_flag: Arc::new(AtomicBool::new(false)),
-                generating: Arc::new(AtomicBool::new(false)),
-            });
-
-            // File watcher: auto-reload when config.toml or layout files change.
-            {
-                use notify::{EventKind, RecursiveMode, Watcher, recommended_watcher};
-                let app_handle = app.handle().clone();
-                std::thread::spawn(move || {
-                    let (tx, rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
-                    let mut watcher = match recommended_watcher(tx) {
-                        Ok(w) => w,
-                        Err(e) => {
-                            eprintln!("File watcher init failed: {e}");
-                            return;
-                        }
-                    };
-                    let _ = watcher.watch(&watch_config, RecursiveMode::NonRecursive);
-                    let _ = watcher.watch(&watch_layouts, RecursiveMode::Recursive);
-                    let mut last_reload = std::time::Instant::now()
-                        .checked_sub(std::time::Duration::from_secs(5))
-                        .unwrap_or_else(std::time::Instant::now);
-                    for event in rx.into_iter().flatten() {
-                        if !matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
-                            continue;
-                        }
-                        if last_reload.elapsed() < std::time::Duration::from_secs(2) {
-                            continue;
-                        }
-                        last_reload = std::time::Instant::now();
-                        let state = app_handle.state::<AppState>();
-
-                        // Only a config.toml change requires rebuilding the engine.
-                        // Layout file changes — including the app's own saves — just
-                        // refresh the layout map.
-                        let config_changed = event.paths.iter().any(|p| p.ends_with("config.toml"));
-                        if config_changed {
-                            if let Err(e) = reload_state(&state) {
-                                eprintln!("Auto-reload failed: {e}");
-                            } else {
-                                let _ = app_handle.emit("config-reloaded", ());
-                            }
-                        } else {
-                            let config = state.config.lock().unwrap().clone();
-                            *state.layouts.lock().unwrap() =
-                                load_all_layouts(&config, state.dirs.data_dir());
-                            let _ = app_handle.emit("layouts-reloaded", ());
-                        }
-                    }
-                });
-            }
-
+            app.manage(Startup::default());
+            let handle = app.handle().clone();
+            std::thread::spawn(move || init_backend(handle, dirs));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            backend_status,
             list_layouts,
             list_languages,
             current_language,
@@ -1452,6 +1572,80 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A throwaway data root holding the core crate's english corpus and gust layout.
+    fn temp_dirs(tag: &str) -> (OxeylyzerDirs, PathBuf) {
+        let core = Path::new("../../oxeylyzer-core/static");
+        let root = std::env::temp_dir().join(format!("oxeylyzer-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dirs = OxeylyzerDirs::with_override(root.clone());
+        std::fs::create_dir_all(dirs.language_data_dir()).unwrap();
+        std::fs::copy(
+            core.join("language_data/english.json"),
+            corpus_path_for(&dirs, "english"),
+        )
+        .unwrap();
+        std::fs::create_dir_all(dirs.layouts_dir().join("english")).unwrap();
+        std::fs::copy(
+            core.join("layouts/gust.dof"),
+            dirs.layouts_dir().join("english/gust.dof"),
+        )
+        .unwrap();
+        (dirs, root)
+    }
+
+    fn app_state(dirs: OxeylyzerDirs) -> AppState {
+        let (loaded, _) = initial_load(&dirs);
+        AppState {
+            engine: Mutex::new(loaded.engine),
+            layouts: Mutex::new(loaded.layouts),
+            dirs,
+            config: Mutex::new(loaded.config),
+            cancel_flag: Arc::new(AtomicBool::new(false)),
+            generating: Arc::new(AtomicBool::new(false)),
+            last_config_write: Mutex::new(None),
+        }
+    }
+
+    #[test]
+    fn startup_survives_a_broken_config_and_a_missing_corpus() {
+        let (dirs, root) = temp_dirs("startup");
+
+        std::fs::write(dirs.config_file(), "this is not toml [").unwrap();
+        let (loaded, errors) = initial_load(&dirs);
+        assert!(errors[0].contains("Couldn't read config.toml"), "{errors:?}");
+        assert!(loaded.layouts.contains_key("gust"));
+
+        let broken = Config {
+            corpus: dirs.language_data_dir().join("klingon.json"),
+            ..seed_config(&dirs)
+        };
+        std::fs::write(dirs.config_file(), toml::to_string(&broken).unwrap()).unwrap();
+        let (loaded, errors) = initial_load(&dirs);
+        assert!(errors.iter().any(|e| e.contains("klingon.json")), "{errors:?}");
+        assert_eq!(loaded.config.corpus, corpus_path_for(&dirs, "english"));
+        assert!(loaded.engine.data.char_total > 0);
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn watcher_reload_skips_the_apps_own_config_writes() {
+        let (dirs, root) = temp_dirs("watch");
+        let state = app_state(dirs);
+
+        let mut config = state.config.lock().unwrap().clone();
+        config.weights.sfbs = -9.0;
+        write_config(&state, &config).unwrap();
+        assert!(!reload_from_disk(&state).unwrap());
+
+        config.weights.sfbs = -3.0;
+        std::fs::write(state.dirs.config_file(), toml::to_string(&config).unwrap()).unwrap();
+        assert!(reload_from_disk(&state).unwrap());
+        assert_eq!(state.config.lock().unwrap().weights.sfbs, -3.0);
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn file_stem_strips_path_separators_and_keeps_dots() {
