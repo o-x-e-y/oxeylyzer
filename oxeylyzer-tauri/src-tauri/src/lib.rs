@@ -510,8 +510,8 @@ fn install(state: &AppState, loaded: Loaded) {
 }
 
 fn write_config(state: &AppState, config: &Config) -> Result<(), String> {
-    let toml = toml::to_string_pretty(config)
-        .map_err(|e| format!("Failed to serialize config: {e}"))?;
+    let toml =
+        toml::to_string_pretty(config).map_err(|e| format!("Failed to serialize config: {e}"))?;
     // Recorded before writing so the watcher can never see the new file first.
     *state.last_config_write.lock().unwrap() = Some(toml.clone());
     std::fs::write(state.dirs.config_file(), toml)
@@ -1032,7 +1032,13 @@ fn run_generation(
 
         while results.len() < run.count && !run.cancel.load(Ordering::Relaxed) {
             let n = batch.min(run.count - results.len());
-            results.extend(generate_batch(&run.engine, &run.algorithm, n, &run.base, &run.pins));
+            results.extend(generate_batch(
+                &run.engine,
+                &run.algorithm,
+                n,
+                &run.base,
+                &run.pins,
+            ));
 
             if last_emit.elapsed() >= Duration::from_millis(200) {
                 last_emit = std::time::Instant::now();
@@ -1509,7 +1515,10 @@ fn spawn_watcher(app: tauri::AppHandle, config_file: PathBuf, layouts_dir: PathB
                 .collect();
 
             let state = app.state::<AppState>();
-            if paths.iter().any(|p| p.file_name() == config_file.file_name()) {
+            if paths
+                .iter()
+                .any(|p| p.file_name() == config_file.file_name())
+            {
                 match reload_from_disk(&state) {
                     Ok(true) => {
                         let _ = app.emit("config-reloaded", ());
@@ -1519,7 +1528,10 @@ fn spawn_watcher(app: tauri::AppHandle, config_file: PathBuf, layouts_dir: PathB
                         let _ = app.emit("load-error", format!("Auto-reload failed: {e}"));
                     }
                 }
-            } else if paths.iter().any(|p| p.extension().is_some_and(|e| e == "dof")) {
+            } else if paths
+                .iter()
+                .any(|p| p.extension().is_some_and(|e| e == "dof"))
+            {
                 let config = state.config.lock().unwrap().clone();
                 let language = state.engine.lock().unwrap().language.clone();
                 *state.layouts.lock().unwrap() = load_all_layouts(&config, &state.dirs, &language);
@@ -1621,7 +1633,9 @@ mod tests {
     fn cancel_stops_generation_promptly() {
         let (dirs, root) = temp_dirs("cancel");
         let (loaded, _) = initial_load(&dirs);
-        let base = loaded.engine.fast_layout(&loaded.layouts["gust"].layout, &[]);
+        let base = loaded
+            .engine
+            .fast_layout(&loaded.layouts["gust"].layout, &[]);
 
         for algorithm in ["hill", "ils", "sa", "lahc"] {
             let run = GenerateRun {
@@ -1642,9 +1656,15 @@ mod tests {
             let (results, cancelled) = run_generation(&run, &|_| {}).unwrap();
             let stopped = std::time::Instant::now();
             let latency = stopped - canceller.join().unwrap();
-            eprintln!("{algorithm}: stopped {latency:?} after cancel, {} results", results.len());
+            eprintln!(
+                "{algorithm}: stopped {latency:?} after cancel, {} results",
+                results.len()
+            );
             assert!(cancelled);
-            assert!(latency < Duration::from_secs(10), "{algorithm} took {latency:?}");
+            assert!(
+                latency < Duration::from_secs(10),
+                "{algorithm} took {latency:?}"
+            );
         }
 
         std::fs::remove_dir_all(root).unwrap();
@@ -1656,7 +1676,10 @@ mod tests {
 
         std::fs::write(dirs.config_file(), "this is not toml [").unwrap();
         let (loaded, errors) = initial_load(&dirs);
-        assert!(errors[0].contains("Couldn't read config.toml"), "{errors:?}");
+        assert!(
+            errors[0].contains("Couldn't read config.toml"),
+            "{errors:?}"
+        );
         assert!(loaded.layouts.contains_key("gust"));
 
         let broken = Config {
@@ -1665,7 +1688,10 @@ mod tests {
         };
         std::fs::write(dirs.config_file(), toml::to_string(&broken).unwrap()).unwrap();
         let (loaded, errors) = initial_load(&dirs);
-        assert!(errors.iter().any(|e| e.contains("klingon.json")), "{errors:?}");
+        assert!(
+            errors.iter().any(|e| e.contains("klingon.json")),
+            "{errors:?}"
+        );
         assert_eq!(loaded.config.corpus, corpus_path_for(&dirs, "english"));
         assert!(loaded.engine.data.char_total > 0);
 
