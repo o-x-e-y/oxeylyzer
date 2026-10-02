@@ -577,61 +577,6 @@ fn get_trigrams(
     Ok(entries)
 }
 
-#[tauri::command]
-fn swap_keys(
-    name: String,
-    swaps: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<LayoutDto, String> {
-    let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    let mut fl = engine.fast_layout(layout, &[]);
-
-    // Parse swap string: space-separated tokens, each token is 2+ chars.
-    // "ab" = swap a and b; "abc" = cycle a→b→c.
-    for token in swaps.split_whitespace() {
-        let chars: Vec<char> = token.chars().collect();
-        if chars.len() < 2 {
-            continue;
-        }
-        for window in chars.windows(2) {
-            let (c1, c2) = (window[0], window[1]);
-            let p1 = fl.keys.iter().position(|&k| k == engine.mapping.get_u(c1));
-            let p2 = fl.keys.iter().position(|&k| k == engine.mapping.get_u(c2));
-            if let (Some(p1), Some(p2)) = (p1, p2) {
-                fl.swap(p1 as u8, p2 as u8);
-            }
-        }
-    }
-
-    let stats = engine.get_layout_stats(&fl);
-    let stats_dto = stats_to_dto(
-        &stats,
-        engine.data.char_total,
-        finger_usage_pct(&engine, &fl),
-    );
-    Ok(LayoutDto {
-        name: format!("{name}*"),
-        keys: fl.layout_str(),
-        board: board_name(layout),
-        fingering_name: layout
-            .metadata
-            .fingering_name
-            .as_ref()
-            .map(|n| n.to_string()),
-        stats: stats_dto,
-        keyboard: fl
-            .keyboard
-            .iter()
-            .map(|k| [k.x(), k.y(), k.width(), k.height()])
-            .collect(),
-        shape: fl.shape.inner().to_vec(),
-    })
-}
-
 /// Analyze an arbitrary key arrangement (swaps + disabled keys) derived from a named base layout.
 /// `keys` is the full 30-char current arrangement; `disabled_indices` are zeroed out before scoring.
 /// Returns `keys` unchanged so the frontend always has the clean arrangement available.
@@ -665,47 +610,6 @@ fn analyze_custom(
     Ok(LayoutDto {
         name: format!("{name}*"),
         keys,
-        board: board_name(layout),
-        fingering_name: layout
-            .metadata
-            .fingering_name
-            .as_ref()
-            .map(|n| n.to_string()),
-        stats: stats_dto,
-        keyboard,
-        shape,
-    })
-}
-
-#[tauri::command]
-fn analyze_with_disabled(
-    name: String,
-    disabled_indices: Vec<usize>,
-    state: tauri::State<'_, AppState>,
-) -> Result<LayoutDto, String> {
-    let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    let original_keys = engine.fast_layout(layout, &[]).layout_str();
-    let fl = custom_fast_layout(&engine, layout, None, &disabled_indices)?;
-    let keyboard = fl
-        .keyboard
-        .iter()
-        .map(|k| [k.x(), k.y(), k.width(), k.height()])
-        .collect();
-    let shape = fl.shape.inner().to_vec();
-
-    let stats = engine.get_layout_stats(&fl);
-    let stats_dto = stats_to_dto(
-        &stats,
-        engine.data.char_total,
-        finger_usage_pct(&engine, &fl),
-    );
-    Ok(LayoutDto {
-        name: format!("{name}*"),
-        keys: original_keys,
         board: board_name(layout),
         fingering_name: layout
             .metadata
@@ -758,11 +662,6 @@ fn set_language(language: String, state: tauri::State<'_, AppState>) -> Result<(
     *state.layouts.lock().unwrap() = new_layouts;
     state.generated.lock().unwrap().clear();
     Ok(())
-}
-
-#[tauri::command]
-fn reload_config(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    reload_state(&state)
 }
 
 #[tauri::command]
@@ -1721,13 +1620,10 @@ pub fn run() {
             current_language,
             analyze_layout,
             analyze_custom,
-            analyze_with_disabled,
             get_bigrams,
             get_trigrams,
-            swap_keys,
             get_char_frequencies,
             set_language,
-            reload_config,
             lookup_ngram,
             load_corpus,
             start_generate,

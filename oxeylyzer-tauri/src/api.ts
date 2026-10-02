@@ -37,20 +37,12 @@ export async function getTrigrams(
   return invoke("get_trigrams", { name, category, count, keys, disabledIndices });
 }
 
-export async function swapKeys(name: string, swaps: string): Promise<Layout> {
-  return invoke("swap_keys", { name, swaps });
-}
-
 export async function getCharFrequencies(): Promise<{ char: string; percent: number }[]> {
   return invoke("get_char_frequencies");
 }
 
 export async function setLanguage(language: string): Promise<void> {
   return invoke("set_language", { language });
-}
-
-export async function reloadConfig(): Promise<void> {
-  return invoke("reload_config");
 }
 
 export async function lookupNgram(ngram: string): Promise<NgramResult> {
@@ -158,13 +150,6 @@ export async function setConfig(configDto: ConfigDto): Promise<void> {
 
 export async function getDefaults(): Promise<ConfigDto> {
   return invoke("get_defaults");
-}
-
-export async function analyzeWithDisabled(
-  name: string,
-  disabledIndices: number[],
-): Promise<Layout> {
-  return invoke("analyze_with_disabled", { name, disabledIndices });
 }
 
 export async function analyzeCustom(
