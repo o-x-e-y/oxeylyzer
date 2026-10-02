@@ -289,6 +289,16 @@ fn load_all_layouts(config: &Config, base_path: &Path) -> HashMap<String, Layout
         .collect()
 }
 
+fn get_layout(state: &AppState, name: &str) -> Result<Layout, String> {
+    state
+        .layouts
+        .lock()
+        .unwrap()
+        .get(&name.to_lowercase())
+        .cloned()
+        .ok_or_else(|| format!("Layout '{name}' not found"))
+}
+
 /// Builds a [`FastLayout`] from a base layout with an optional custom key
 /// arrangement and disabled positions applied, rebuilding `char_to_finger`
 /// so trigram classification matches the final arrangement.
@@ -368,12 +378,12 @@ fn corpus_path_for(language_data_dir: &Path, language: &str) -> PathBuf {
 
 // ─── Tauri Commands ───────────────────────────────────────────────────────────
 
-#[tauri::command]
+#[tauri::command(async)]
 fn list_layouts(state: tauri::State<'_, AppState>) -> Result<Vec<LayoutDto>, String> {
     let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
+    let layouts: Vec<Layout> = state.layouts.lock().unwrap().values().cloned().collect();
     let mut dtos: Vec<LayoutDto> = layouts
-        .values()
+        .par_iter()
         .map(|l| layout_to_dto(&engine, l))
         .collect();
     dtos.sort_by(|a, b| b.stats.score.total_cmp(&a.stats.score));
@@ -390,17 +400,14 @@ fn current_language(state: tauri::State<'_, AppState>) -> Result<String, String>
     Ok(state.engine.lock().unwrap().language.clone())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn analyze_layout(name: String, state: tauri::State<'_, AppState>) -> Result<LayoutDto, String> {
     let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    Ok(layout_to_dto(&engine, layout))
+    let layout = get_layout(&state, &name)?;
+    Ok(layout_to_dto(&engine, &layout))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_bigrams(
     name: String,
     category: String,
@@ -410,13 +417,10 @@ fn get_bigrams(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<BigramEntryDto>, String> {
     let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    let layout = get_layout(&state, &name)?;
     let fl = custom_fast_layout(
         &engine,
-        layout,
+        &layout,
         keys.as_deref(),
         &disabled_indices.unwrap_or_default(),
     )?;
@@ -521,7 +525,7 @@ fn get_bigrams(
     Ok(entries)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_trigrams(
     name: String,
     category: String,
@@ -533,13 +537,10 @@ fn get_trigrams(
     use oxeylyzer_core::trigram_patterns::TrigramPattern;
 
     let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    let layout = get_layout(&state, &name)?;
     let fl = custom_fast_layout(
         &engine,
-        layout,
+        &layout,
         keys.as_deref(),
         &disabled_indices.unwrap_or_default(),
     )?;
@@ -580,7 +581,7 @@ fn get_trigrams(
 /// Analyze an arbitrary key arrangement (swaps + disabled keys) derived from a named base layout.
 /// `keys` is the full 30-char current arrangement; `disabled_indices` are zeroed out before scoring.
 /// Returns `keys` unchanged so the frontend always has the clean arrangement available.
-#[tauri::command]
+#[tauri::command(async)]
 fn analyze_custom(
     name: String,
     keys: String,
@@ -588,11 +589,8 @@ fn analyze_custom(
     state: tauri::State<'_, AppState>,
 ) -> Result<LayoutDto, String> {
     let engine = state.engine.lock().unwrap().clone();
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
-    let fl = custom_fast_layout(&engine, layout, Some(&keys), &disabled_indices)?;
+    let layout = get_layout(&state, &name)?;
+    let fl = custom_fast_layout(&engine, &layout, Some(&keys), &disabled_indices)?;
 
     let keyboard = fl
         .keyboard
@@ -610,7 +608,7 @@ fn analyze_custom(
     Ok(LayoutDto {
         name: format!("{name}*"),
         keys,
-        board: board_name(layout),
+        board: board_name(&layout),
         fingering_name: layout
             .metadata
             .fingering_name
@@ -649,7 +647,7 @@ fn get_char_frequencies(state: tauri::State<'_, AppState>) -> Result<Vec<CharFre
     Ok(freqs)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn set_language(language: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let config = state.config.lock().unwrap().clone();
     let corpus_path = corpus_path_for(&state.dirs.language_data_dir(), &language);
@@ -664,7 +662,7 @@ fn set_language(language: String, state: tauri::State<'_, AppState>) -> Result<(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn lookup_ngram(
     ngram: String,
     state: tauri::State<'_, AppState>,
@@ -945,7 +943,7 @@ async fn start_generate(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_generated(
     index: usize,
     name: Option<String>,
@@ -1016,7 +1014,7 @@ fn cancel_generate(state: tauri::State<'_, AppState>) {
     state.cancel_flag.store(true, Ordering::Relaxed);
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn delete_layout(name: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let lang = state.engine.lock().unwrap().language.clone();
     let file_name = name.replace(' ', "_").to_lowercase();
@@ -1040,7 +1038,7 @@ fn delete_layout(name: String, state: tauri::State<'_, AppState>) -> Result<(), 
 
 /// Saves a modified key arrangement (e.g. from drag-swaps in the Analyze view)
 /// as a new layout derived from `base_name`.
-#[tauri::command]
+#[tauri::command(async)]
 fn save_custom_layout(
     base_name: String,
     keys: String,
@@ -1104,19 +1102,16 @@ fn save_custom_layout(
     Ok(dto)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_layout_detail(
     name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
-    let layouts = state.layouts.lock().unwrap();
-    let layout = layouts
-        .get(&name.to_lowercase())
-        .ok_or_else(|| format!("Layout '{name}' not found"))?;
+    let layout = get_layout(&state, &name)?;
     serde_json::to_value(layout).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn save_layout_edit(
     dof_json: serde_json::Value,
     original_name: String,
@@ -1147,7 +1142,7 @@ fn save_layout_edit(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn fork_layout(
     name: String,
     new_name: String,
@@ -1347,7 +1342,7 @@ fn get_config(state: tauri::State<'_, AppState>) -> Result<ConfigDto, String> {
     Ok(config_to_dto(&config))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn set_config(config_dto: ConfigDto, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let new_weights = dto_to_weights(&config_dto.weights);
     let new_config = Config {
