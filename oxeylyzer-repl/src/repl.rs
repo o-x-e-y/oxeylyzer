@@ -787,7 +787,7 @@ impl Repl {
         match self.reset_with_language(&language) {
             Ok(_) => println!(
                 "Set language to {}. Sfr: {:.2}%",
-                &language,
+                language,
                 self.sfr_freq() * 100.0
             ),
             Err(e) => println!("Failed to set language: {}", e),
