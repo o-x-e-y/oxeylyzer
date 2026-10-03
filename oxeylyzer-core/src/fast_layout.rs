@@ -1276,9 +1276,9 @@ mod tests {
     fn char() {
         let qwerty = QWERTY.clone();
 
-        assert_eq!(qwerty.char(4 + (1 * 10)), Some(GEN.mapping.get_u('g')));
+        assert_eq!(qwerty.char(4 + 10), Some(GEN.mapping.get_u('g')));
         assert_eq!(qwerty.char(9 + (2 * 10)), Some(GEN.mapping.get_u('/')));
-        assert_eq!(qwerty.char(8 + (1 * 10)), Some(GEN.mapping.get_u('l')));
+        assert_eq!(qwerty.char(8 + 10), Some(GEN.mapping.get_u('l')));
     }
 
     #[test]

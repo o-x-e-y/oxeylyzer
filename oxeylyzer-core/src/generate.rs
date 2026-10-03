@@ -1255,15 +1255,13 @@ mod tests {
 
         if let (Some(best_swap_normal), best_score_normal) =
             GEN.best_swap(&mut qwerty, None, &QWERTY.possible_swaps)
-        {
-            if let (Some(best_swap_cached), best_score_cached) =
+            && let (Some(best_swap_cached), best_score_cached) =
                 GEN.best_swap_cached(&mut qwerty, &cache, &QWERTY.possible_swaps, None)
-            {
-                if best_score_normal == best_score_cached {
-                    assert_eq!(best_swap_normal, best_swap_cached);
-                } else {
-                    println!("scores not the same")
-                }
+        {
+            if best_score_normal == best_score_cached {
+                assert_eq!(best_swap_normal, best_swap_cached);
+            } else {
+                println!("scores not the same")
             }
         }
     }
