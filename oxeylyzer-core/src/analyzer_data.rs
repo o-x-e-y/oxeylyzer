@@ -48,6 +48,7 @@ impl AnalyzerData {
     /// ```
     pub fn new(data: Data, weights: &Weights) -> Self {
         let convert_f = |f| f / 100.0;
+        let to_count = |f: f64, total: i64| (convert_f(f) * total as f64).round() as i64;
 
         let char_total = data.char_total;
         let bigram_total = data.bigram_total;
@@ -63,7 +64,7 @@ impl AnalyzerData {
             mapping.push(c);
 
             let i = mapping.get_u(c) as usize;
-            chars[i] = (convert_f(f) * data.char_total as f64) as i64;
+            chars[i] = to_count(f, data.char_total);
         }
 
         debug_assert!(chars.len() >= mapping.len());
@@ -80,7 +81,7 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(bigrams[i], 0);
-            bigrams[i] = (convert_f(f) * bigram_total as f64) as i64;
+            bigrams[i] = to_count(f, bigram_total);
         }
 
         let mut skipgrams = vec![0; len.pow(2)];
@@ -91,7 +92,7 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(skipgrams[i], 0);
-            skipgrams[i] = (convert_f(f) * skipgram_total as f64) as i64;
+            skipgrams[i] = to_count(f, skipgram_total);
         }
 
         let mut skipgrams2 = vec![0; len.pow(2)];
@@ -102,7 +103,7 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(skipgrams2[i], 0);
-            skipgrams2[i] = (convert_f(f) * skipgram2_total as f64) as i64;
+            skipgrams2[i] = to_count(f, skipgram2_total);
         }
 
         let mut skipgrams3 = vec![0; len.pow(2)];
@@ -113,7 +114,7 @@ impl AnalyzerData {
 
             let i = u1 * len + u2;
             debug_assert_eq!(skipgrams3[i], 0);
-            skipgrams3[i] = (convert_f(f) * skipgram3_total as f64) as i64;
+            skipgrams3[i] = to_count(f, skipgram3_total);
         }
 
         let mut trigrams = vec![0; len.pow(3)];
@@ -125,7 +126,7 @@ impl AnalyzerData {
 
             let i = u1 * len.pow(2) + u2 * len + u3;
             debug_assert_eq!(trigrams[i], 0);
-            trigrams[i] = (convert_f(f) * trigram_total as f64) as i64;
+            trigrams[i] = to_count(f, trigram_total);
         }
 
         let gen_trigrams = data
@@ -135,7 +136,7 @@ impl AnalyzerData {
                 let u1 = mapping.get_u(c1);
                 let u2 = mapping.get_u(c2);
                 let u3 = mapping.get_u(c3);
-                ([u1, u2, u3], (convert_f(f) * trigram_total as f64) as i64)
+                ([u1, u2, u3], to_count(f, trigram_total))
             })
             .collect::<Box<_>>();
 
@@ -555,5 +556,45 @@ impl AnalyzerData {
         } else {
             0
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn percentage_frequencies_round_to_integer_counts() {
+        // Create a dummy corpus so the numbers are easy to follow
+        let mut data = Data::new();
+        data.name = "rounding".into();
+
+        // 33.33...% of 3 -> 0.99... gets truncated to 0
+        // Rounding should store 1 instead.
+        let third = 33.33333333333333;
+
+        // Give all three characters the same percentage.
+        // Each one should end up with exactly one count, not zero.
+        data.chars.insert('a', third);
+        data.chars.insert('b', third);
+        data.chars.insert('c', third);
+        data.char_total = 3;
+
+        // Do the same for a bigram and a trigram,
+        // since the previous way truncated those too.
+        data.bigrams.insert(['a', 'b'], third);
+        data.bigram_total = 3;
+        data.trigrams.insert(['a', 'b', 'c'], third);
+        data.trigram_total = 3;
+
+        let analyzer = AnalyzerData::new(data, &Weights::default());
+
+        // Every n-gram should keep its single count.
+        // With the previous way, these would all be truncated to 0.
+        assert_eq!(analyzer.get_char('a'), 1);
+        assert_eq!(analyzer.get_char('b'), 1);
+        assert_eq!(analyzer.get_char('c'), 1);
+        assert_eq!(analyzer.get_bigram(['a', 'b']), 1);
+        assert_eq!(analyzer.get_trigram(['a', 'b', 'c']), 1);
     }
 }
